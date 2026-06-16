@@ -5,7 +5,9 @@
 > **Maintenance rule:** Claude (acting as CTO in Cowork) updates this file at the end of any meaningful exchange — new decisions, completed work, changed direction, new blockers. Append to the Changelog at the bottom every time. Keep it elaborate. When in doubt, over-document.
 
 **Last updated:** 2026-06-16
-**Current phase:** Phase 1 — Frontend design in Lovable (in progress)
+**Current phase:** Phase 2 — Monorepo consolidation. Frontend imported into `app/` on branch `chore/import-frontend` (builds + boots; not yet pushed/merged).
+
+**⚠️ Stack correction:** The Lovable frontend is a **TanStack Start** app (full-stack React with TanStack Router + a built-in server layer), NOT a plain Vite SPA as the docs originally assumed. Docs updated. Implication: backend/server logic could live in TanStack Start server functions OR Supabase Edge Functions — decision deferred to backend phase (leaning TanStack server functions for market data, Supabase for DB/auth/RLS).
 
 ---
 
@@ -125,5 +127,6 @@ Plus global shell: left sidebar nav, top bar with global search + avatar. Dark m
 
 ## 8. Changelog
 
+- **2026-06-16 (latest)** — Frontend import DONE by Claude Code. Connected the local `Paper Trading - Venk` folder to GitHub remote `venk-cc-first-project` (it was previously a plain folder, not a git repo — chose "git init + add remote"). Imported Lovable frontend into `app/`; it builds cleanly and boots on :8080. Committed on branch `chore/import-frontend`, NOT pushed (awaiting Venky's review). **Discovery: frontend is TanStack Start, not a plain Vite SPA** — updated ARCHITECTURE.md, CLAUDE.md, and this file. Next: review → merge branch to main → push → then Phase 3 (Supabase auth).
 - **2026-06-16 (later)** — **Repo strategy decided: MONOREPO.** Single repo `venk-cc-first-project` (https://github.com/Venkat100/venk-cc-first-project) is the source of truth. Lovable frontend lives at `https://github.com/Venkat100/virtual-stratosphere-lab.git` and is being imported into the monorepo under `app/` (copy files in, not git-subtree — scaffold history has little value). **Important consequence:** once imported, the Lovable→virtual-stratosphere-lab sync is effectively dead; all further edits happen via Claude Code, which is now the source of truth. Venky accepted this trade (design considered essentially done in Lovable). Gave Venky a Claude Code prompt to do the import into `app/`, verify the build, commit (no push until reviewed). Backend (`supabase/`) and root planning docs stay at root.
 - **2026-06-16** — Project kicked off. Clarified scope (comprehensive, live+historical, web app, agent-does-coding). Chose stack (React/Vite/Tailwind/shadcn via Lovable + Supabase + Finnhub). Wrote the full Lovable design prompt covering all 8 screens; Venky ran it in Lovable. Created planning docs (README, ARCHITECTURE, ROADMAP, CLAUDE.md). Created this HANDOFF.md and committed to maintaining it every session. Open items: Simulator sequencing decision; Phase 2 prompt to be drafted.

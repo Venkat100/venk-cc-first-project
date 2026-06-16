@@ -8,7 +8,7 @@ This is the technical blueprint for PaperTrader. It's written to be read by both
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| **Frontend** | React + Vite + TypeScript, Tailwind CSS, shadcn/ui, Recharts | This is exactly what Lovable generates, so the design hand-off is seamless. TypeScript keeps a data-heavy app safe. |
+| **Frontend** | React + **TanStack Start** + TypeScript, Tailwind CSS, shadcn/ui, Recharts | What Lovable actually generated. TanStack Start is a full-stack React framework (TanStack Router + Vite + a built-in server layer with server functions), NOT a plain Vite SPA as originally assumed. It can run server-side logic itself. TypeScript keeps a data-heavy app safe. Lives in `app/`. |
 | **Backend / DB / Auth** | Supabase (Postgres + Auth + Edge Functions) | One-click integration from Lovable. Gives us auth, a real SQL database with row-level security, and serverless functions for calling the market API — no separate server to host. |
 | **Market data** | Finnhub (primary) — live quotes + historical candles. Twelve Data as fallback. | Both have free tiers with live *and* historical data. We isolate this behind one module so we can swap providers without touching the app. |
 | **Background jobs** | Supabase scheduled functions (pg_cron) | For refreshing prices and snapshotting portfolio value over time. |
@@ -137,3 +137,4 @@ All tables protected by Row-Level Security so a user can only ever see their own
 - Whether to support crypto/ETFs in v1 or stocks only (lean: US stocks + a few major ETFs).
 - Limit-order handling — fill instantly at limit price if market crosses it, vs. a simple "fill at current if it qualifies." Start simple.
 - Real-time push (websockets) vs. polling for live prices. Start with polling on an interval; upgrade later.
+- **Where server-side logic lives — TanStack Start server functions vs. Supabase Edge Functions.** Because the frontend is TanStack Start (it has its own server layer), we have two valid homes for market-data fetching and trade execution: (a) TanStack Start server functions, same codebase and shared TS types, or (b) Supabase Edge Functions as originally planned. Either honors the hard rules (API key hidden server-side, trades validated server-side). Supabase remains the database + auth + RLS layer regardless. **Decision deferred to the backend phase (Phase 5/6); leaning toward TanStack server functions for the market-data adapter to keep types shared, with Supabase for DB/auth.**

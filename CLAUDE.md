@@ -6,7 +6,7 @@ You are the implementation agent for **PaperTrader**, a full-stack paper-trading
 A paper-trading platform: users trade real tickers at live prices with $100,000 of virtual money, track a live portfolio, and run "what-if I had invested back then" simulations. No real money, no real brokerage — it's a simulation/education tool.
 
 ## Stack
-- **Frontend:** React + Vite + TypeScript, Tailwind CSS, shadcn/ui, Recharts. (Generated in Lovable; lives in `app/`.)
+- **Frontend:** React + **TanStack Start** + TypeScript, Tailwind CSS, shadcn/ui, Recharts. (Generated in Lovable; lives in `app/`.) NOTE: it's TanStack Start (full-stack React w/ a server layer), NOT a plain Vite SPA. It has its own server functions, which may host backend logic instead of/alongside Supabase Edge Functions — TBD at backend phase.
 - **Backend:** Supabase — Postgres, Auth, Edge Functions. Migrations in `supabase/migrations/`, functions in `supabase/functions/`.
 - **Market data:** Finnhub (primary), Twelve Data (fallback), accessed ONLY through `app/src/lib/marketData/`.
 
