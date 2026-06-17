@@ -5,7 +5,24 @@ import { STOCKS, fmtUSD, fmtPct } from "@/lib/mockData";
 import { applyTheme, getTheme, type Theme } from "@/lib/theme";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/lib/auth/auth-context";
 import { cn } from "@/lib/utils";
+
+function initialsFrom(name: string | null | undefined, email: string | null | undefined): string {
+  const source = (name && name.trim()) || (email ? email.split("@")[0] : "");
+  if (!source) return "PT";
+  const parts = source.trim().split(/[\s._-]+/).filter(Boolean);
+  const letters = parts.length >= 2 ? parts[0][0] + parts[1][0] : source.slice(0, 2);
+  return letters.toUpperCase();
+}
 
 export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const [theme, setTheme] = useState<Theme>("dark");
@@ -13,6 +30,15 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
+
+  const displayName = profile?.display_name || user?.email || "Account";
+  const email = user?.email ?? "";
+
+  async function handleSignOut() {
+    await signOut();
+    navigate({ to: "/auth", replace: true });
+  }
 
   useEffect(() => { setTheme(getTheme()); }, []);
   useEffect(() => {
@@ -87,11 +113,28 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
       <Button variant="ghost" size="icon" aria-label="Notifications" className="hidden sm:inline-flex">
         <Bell className="h-4 w-4" />
       </Button>
-      <Link to="/app/settings" className="flex items-center gap-2 rounded-full p-1 hover:bg-accent">
-        <Avatar className="h-8 w-8">
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">PT</AvatarFallback>
-        </Avatar>
-      </Link>
+      <DropdownMenu>
+        <DropdownMenuTrigger className="flex items-center gap-2 rounded-full p-1 hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
+              {initialsFrom(profile?.display_name, email)}
+            </AvatarFallback>
+          </Avatar>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuLabel className="flex flex-col gap-0.5">
+            <span className="truncate text-sm font-medium">{displayName}</span>
+            {email && <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => navigate({ to: "/app/settings" })}>
+            Settings
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void handleSignOut()}>
+            Log out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   );
 }
