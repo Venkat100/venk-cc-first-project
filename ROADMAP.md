@@ -59,7 +59,8 @@ The loop for every step: **CTO (Cowork) writes a precise prompt → Venky runs i
 ---
 
 ## Backlog (post-v1 ideas)
-Leaderboards, achievements, multiple watchlists, dividends, options, crypto, social/sharing of simulations, news feed per stock, CSV export, mobile app.
+- **Public simulator preview (conversion play):** let visitors use the What-If Simulator WITHOUT logging in — feel the magic first, then prompt sign-up to save it. The simulator is our best hook; gating it entirely behind login hurts conversion. (Currently the landing "Try the simulator / Explore demo" buttons redirect to login since `/app/*` is gated — revisit when we polish the simulator, ~Phase 7.)
+- Other: leaderboards, achievements, multiple watchlists, dividends, options, crypto, social/sharing of simulations, news feed per stock, CSV export, mobile app.
 
 ---
 

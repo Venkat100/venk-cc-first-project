@@ -14,6 +14,37 @@ export type Profile = {
   created_at: string; // timestamptz (ISO string)
 };
 
+export type Holding = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  quantity: number;
+  avg_cost: number;
+  updated_at: string;
+};
+
+export type TransactionSide = "buy" | "sell";
+
+export type Transaction = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  side: TransactionSide;
+  quantity: number;
+  price: number;
+  total: number;
+  order_type: string; // 'market' | 'limit'
+  status: string; // 'filled' | ...
+  created_at: string;
+};
+
+export type WatchlistItem = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -28,6 +59,54 @@ export type Database = {
         Update: {
           display_name?: string | null;
           cash_balance?: number;
+        };
+        Relationships: [];
+      };
+      holdings: {
+        Row: Holding;
+        Insert: {
+          id?: string;
+          user_id: string;
+          symbol: string;
+          quantity: number;
+          avg_cost: number;
+          updated_at?: string;
+        };
+        Update: {
+          symbol?: string;
+          quantity?: number;
+          avg_cost?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      transactions: {
+        Row: Transaction;
+        Insert: {
+          id?: string;
+          user_id: string;
+          symbol: string;
+          side: TransactionSide;
+          quantity: number;
+          price: number;
+          total: number;
+          order_type?: string;
+          status?: string;
+          created_at?: string;
+        };
+        Update: { [_ in never]: never }; // append-only: no client updates
+        Relationships: [];
+      };
+      watchlist: {
+        Row: WatchlistItem;
+        Insert: {
+          id?: string;
+          user_id: string;
+          symbol: string;
+          created_at?: string;
+        };
+        Update: {
+          symbol?: string;
         };
         Relationships: [];
       };
