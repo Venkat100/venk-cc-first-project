@@ -1,63 +1,80 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PriceChart } from "@/components/PriceChart";
-import { getStock, HOLDINGS, TRANSACTIONS, CASH, fmtUSD, fmtPct, fmtCompact } from "@/lib/mockData";
+import { LivePriceChart } from "@/components/LivePriceChart";
+import { LoadingState } from "@/components/DataStates";
+import { getQuote } from "@/lib/marketData";
+import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
+import { useAuth } from "@/lib/auth/auth-context";
+import { fmtUSD, fmtPct, fmtCompact } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/stock/$symbol")({
-  loader: ({ params }) => {
-    const stock = getStock(params.symbol);
-    if (!stock) throw notFound();
-    return { stock };
-  },
+  loader: ({ params }) => ({ symbol: params.symbol.toUpperCase() }),
   head: ({ loaderData }) => ({
-    meta: loaderData
-      ? [{ title: `${loaderData.stock.symbol} · ${loaderData.stock.name} — PaperTrader` }, { name: "description", content: `${loaderData.stock.name} (${loaderData.stock.symbol}) — price, stats, and paper trading.` }]
-      : [{ title: "Stock · PaperTrader" }],
+    meta: [{ title: `${loaderData?.symbol ?? "Stock"} · PaperTrader` }],
   }),
-  notFoundComponent: () => (
-    <div className="rounded-lg border border-border bg-card p-8 text-center">
-      <h2 className="text-lg font-semibold">Ticker not found</h2>
-      <p className="mt-1 text-sm text-muted-foreground">We don't have data for that symbol in the demo.</p>
-      <Link to="/app/markets"><Button className="mt-4">Back to markets</Button></Link>
-    </div>
-  ),
-  errorComponent: () => <div className="text-sm text-muted-foreground">Failed to load stock.</div>,
   component: StockDetail,
 });
 
 function StockDetail() {
-  const { stock } = Route.useLoaderData();
-  const up = stock.dayChangePct >= 0;
-  const position = HOLDINGS.find((h) => h.symbol === stock.symbol);
-  const recent = useMemo(() => TRANSACTIONS.filter((t) => t.symbol === stock.symbol).slice(0, 8), [stock.symbol]);
+  const { symbol } = Route.useLoaderData();
+  const quoteQ = useQuery({ queryKey: ["quote", symbol], queryFn: () => getQuote(symbol), staleTime: 15_000, refetchInterval: 30_000, retry: 1 });
+  const holdingsQ = useQuery({ queryKey: ["holdings"], queryFn: getHoldings });
+  const txQ = useQuery({ queryKey: ["transactions"], queryFn: getTransactions });
+  const { profile } = useAuth();
+
+  const quote = quoteQ.data;
+  const position = (holdingsQ.data ?? []).find((h) => h.symbol === symbol);
+  const recent = useMemo(() => (txQ.data ?? []).filter((t) => t.symbol === symbol).slice(0, 8), [txQ.data, symbol]);
+
+  // Invalid ticker or provider failure → friendly card, never a crash.
+  if (quoteQ.isError) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-8 text-center">
+        <h2 className="text-lg font-semibold">Couldn't load {symbol}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">That ticker may be invalid, or the market data provider is temporarily unavailable.</p>
+        <Link to="/app/markets"><Button className="mt-4">Back to markets</Button></Link>
+      </div>
+    );
+  }
+
+  const up = (quote?.dayChangePct ?? 0) >= 0;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:flex-wrap sm:justify-between">
         <div className="flex min-w-0 items-center gap-4">
-          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-surface-2 text-sm font-bold">{stock.symbol.slice(0, 2)}</div>
+          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-surface-2 text-sm font-bold">{symbol.slice(0, 2)}</div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="truncate text-2xl font-semibold tracking-tight">{stock.symbol}</h1>
-              <span className="rounded-md border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{stock.sector}</span>
+              <h1 className="truncate text-2xl font-semibold tracking-tight">{symbol}</h1>
+              {quote?.sector && quote.sector !== "—" && (
+                <span className="rounded-md border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{quote.sector}</span>
+              )}
             </div>
-            <p className="truncate text-sm text-muted-foreground">{stock.name}</p>
+            <p className="truncate text-sm text-muted-foreground">{quote?.name ?? "Loading…"}</p>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-semibold tabular">{fmtUSD(stock.price)}</p>
-          <p className={cn("text-sm tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
-            {up ? "+" : "−"}{fmtUSD(Math.abs(stock.dayChange))} ({fmtPct(stock.dayChangePct)}) today
-          </p>
+          {quote ? (
+            <>
+              <p className="text-3xl font-semibold tabular">{fmtUSD(quote.price)}</p>
+              <p className={cn("text-sm tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
+                {up ? "+" : "−"}{fmtUSD(Math.abs(quote.dayChange))} ({fmtPct(quote.dayChangePct)}) today
+              </p>
+            </>
+          ) : (
+            <div className="h-10 w-32 animate-pulse rounded bg-surface-2" />
+          )}
         </div>
       </div>
 
@@ -65,43 +82,46 @@ function StockDetail() {
         <div className="space-y-6">
           <Card>
             <CardContent className="p-5">
-              <PriceChart symbol={stock.symbol} endPrice={stock.price} height={340} defaultRange="3M" />
+              <LivePriceChart symbol={symbol} height={340} defaultRange="3M" />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">Key stats</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Stat label="Open" value={fmtUSD(stock.open)} />
-              <Stat label="Day high" value={fmtUSD(stock.high)} />
-              <Stat label="Day low" value={fmtUSD(stock.low)} />
-              <Stat label="Volume" value={fmtCompact(stock.volume)} />
-              <Stat label="Market cap" value={`$${fmtCompact(stock.marketCap)}`} />
-              <Stat label="52-wk range" value={`${fmtUSD(stock.week52Low)} – ${fmtUSD(stock.week52High)}`} />
+              {quote ? (
+                <>
+                  <Stat label="Open" value={quote.open != null ? fmtUSD(quote.open) : "—"} />
+                  <Stat label="Day high" value={quote.high != null ? fmtUSD(quote.high) : "—"} />
+                  <Stat label="Day low" value={quote.low != null ? fmtUSD(quote.low) : "—"} />
+                  <Stat label="Prev close" value={quote.previousClose != null ? fmtUSD(quote.previousClose) : "—"} />
+                  <Stat label="Volume" value={quote.volume != null ? fmtCompact(quote.volume) : "—"} />
+                  <Stat label="52-wk range" value={quote.week52Low != null && quote.week52High != null ? `${fmtUSD(quote.week52Low)} – ${fmtUSD(quote.week52High)}` : "—"} />
+                </>
+              ) : (
+                <div className="col-span-full"><LoadingState label="Loading stats…" /></div>
+              )}
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="p-5">
-              <Tabs defaultValue="about">
+              <Tabs defaultValue="position">
                 <TabsList>
-                  <TabsTrigger value="about">About</TabsTrigger>
                   <TabsTrigger value="position">Your position</TabsTrigger>
                   <TabsTrigger value="trades">Recent trades</TabsTrigger>
+                  <TabsTrigger value="about">About</TabsTrigger>
                 </TabsList>
-                <TabsContent value="about" className="mt-4">
-                  <p className="text-sm leading-relaxed text-muted-foreground">{stock.about}</p>
-                </TabsContent>
                 <TabsContent value="position" className="mt-4">
-                  {position ? (
+                  {position && quote ? (
                     <div className="grid gap-4 sm:grid-cols-4">
-                      <Stat label="Shares" value={String(position.shares)} />
-                      <Stat label="Avg cost" value={fmtUSD(position.avgCost)} />
-                      <Stat label="Market value" value={fmtUSD(stock.price * position.shares)} />
-                      <Stat label="Unrealized P&L" value={`${(stock.price - position.avgCost) * position.shares >= 0 ? "+" : "−"}${fmtUSD(Math.abs((stock.price - position.avgCost) * position.shares))}`} />
+                      <Stat label="Shares" value={String(position.quantity)} />
+                      <Stat label="Avg cost" value={fmtUSD(position.avg_cost)} />
+                      <Stat label="Market value" value={fmtUSD(quote.price * position.quantity)} />
+                      <Stat label="Unrealized P&L" value={`${(quote.price - position.avg_cost) * position.quantity >= 0 ? "+" : "−"}${fmtUSD(Math.abs((quote.price - position.avg_cost) * position.quantity))}`} />
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">You don't own any {stock.symbol} yet. Place a paper order from the panel on the right.</p>
+                    <p className="text-sm text-muted-foreground">You don't own any {symbol} yet. Place a paper order from the panel on the right.</p>
                   )}
                 </TabsContent>
                 <TabsContent value="trades" className="mt-4">
@@ -111,22 +131,27 @@ function StockDetail() {
                       <tbody>
                         {recent.map((t) => (
                           <tr key={t.id} className="border-b border-border/60 last:border-0">
-                            <td className="py-2 text-muted-foreground">{new Date(t.date).toLocaleDateString()}</td>
-                            <td className="py-2 uppercase">{t.type}</td>
-                            <td className="py-2 text-right tabular">{t.qty}</td>
+                            <td className="py-2 text-muted-foreground">{new Date(t.created_at).toLocaleDateString()}</td>
+                            <td className="py-2 uppercase">{t.side}</td>
+                            <td className="py-2 text-right tabular">{t.quantity}</td>
                             <td className="py-2 text-right tabular">{fmtUSD(t.price)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  ) : <p className="text-sm text-muted-foreground">No trades for {stock.symbol} yet.</p>}
+                  ) : <p className="text-sm text-muted-foreground">No trades for {symbol} yet.</p>}
+                </TabsContent>
+                <TabsContent value="about" className="mt-4">
+                  {/* TODO(Phase 5+): company profile/description needs a provider
+                      profile endpoint; not wired this phase. */}
+                  <p className="text-sm leading-relaxed text-muted-foreground">{quote?.name ?? symbol} ({symbol}). Live price and historical chart powered by real market data. A full company profile is coming in a later phase.</p>
                 </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
         </div>
 
-        <OrderPanel price={stock.price} symbol={stock.symbol} />
+        <OrderPanel price={quote?.price ?? 0} symbol={symbol} buyingPower={profile?.cash_balance ?? 0} ready={!!quote} />
       </div>
     </div>
   );
@@ -141,7 +166,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function OrderPanel({ price, symbol }: { price: number; symbol: string }) {
+function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symbol: string; buyingPower: number; ready: boolean }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [type, setType] = useState<"market" | "limit">("market");
   const [qty, setQty] = useState(1);
@@ -183,12 +208,13 @@ function OrderPanel({ price, symbol }: { price: number; symbol: string }) {
 
         <div className="rounded-md border border-border bg-surface p-3 text-sm">
           <div className="flex justify-between"><span className="text-muted-foreground">Estimated {side === "buy" ? "cost" : "credit"}</span><span className="tabular font-medium">{fmtUSD(est)}</span></div>
-          <div className="mt-1 flex justify-between text-xs text-muted-foreground"><span>Buying power</span><span className="tabular">{fmtUSD(CASH)}</span></div>
+          <div className="mt-1 flex justify-between text-xs text-muted-foreground"><span>Buying power</span><span className="tabular">{fmtUSD(buyingPower)}</span></div>
         </div>
 
         <Button
+          disabled={!ready}
           className={cn("w-full", side === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)] hover:opacity-90" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)] hover:opacity-90")}
-          onClick={() => toast.success(`${side === "buy" ? "Bought" : "Sold"} ${qty} ${symbol} @ ${fmtUSD(type === "market" ? price : limit)}`, { description: "Paper order filled (simulated)" })}
+          onClick={() => toast.success(`${side === "buy" ? "Bought" : "Sold"} ${qty} ${symbol} @ ${fmtUSD(type === "market" ? price : limit)}`, { description: "Paper order filled (simulated — real execution lands in Phase 6)" })}
         >
           Confirm {side} · {qty} {symbol}
         </Button>

@@ -1,10 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PriceChart, Sparkline } from "@/components/PriceChart";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { getHoldings, getWatchlist } from "@/lib/portfolio/queries";
-import { getQuote } from "@/lib/marketData";
+import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useAuth } from "@/lib/auth/auth-context";
 import { topMovers, fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
@@ -25,14 +26,24 @@ function Dashboard() {
   const watchlistQ = useQuery({ queryKey: ["watchlist"], queryFn: getWatchlist });
 
   const holdings = holdingsQ.data ?? [];
+  const watchItems = watchlistQ.data ?? [];
 
-  // Prices come from the marketData stub (Phase 5 swap point) — never directly.
+  // One live-quote fetch covers both the holdings table and the watchlist.
+  // Real prices flow in through the server function (server-only API key).
+  const symbols = useMemo(
+    () => Array.from(new Set([...holdings.map((h) => h.symbol), ...watchItems.map((w) => w.symbol)])),
+    [holdings, watchItems],
+  );
+  const quotesQ = useQuotes(symbols);
+  const quotes = quotesQ.data;
+  const pricesReady = holdings.length === 0 || quotesQ.isSuccess;
+
   let holdingsValue = 0;
   let dayAbs = 0;
   let dayBaseline = 0;
   let costBasis = 0;
   for (const h of holdings) {
-    const q = getQuote(h.symbol);
+    const q = quoteOf(quotes, h.symbol);
     holdingsValue += q.price * h.quantity;
     dayAbs += q.dayChange * h.quantity;
     dayBaseline += (q.price - q.dayChange) * h.quantity;
@@ -42,6 +53,7 @@ function Dashboard() {
   const dayPct = dayBaseline > 0 ? (dayAbs / dayBaseline) * 100 : 0;
   const retAbs = holdingsValue - costBasis;
   const retPct = costBasis > 0 ? (retAbs / costBasis) * 100 : 0;
+  const dash = "—";
 
   return (
     <div className="space-y-6">
@@ -52,10 +64,10 @@ function Dashboard() {
 
       {/* Stat row */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Portfolio value" value={fmtUSD(total)} sub={`${holdings.length} holding${holdings.length === 1 ? "" : "s"}`} />
+        <Stat label="Portfolio value" value={pricesReady ? fmtUSD(total) : dash} sub={`${holdings.length} holding${holdings.length === 1 ? "" : "s"}`} />
         <Stat label="Buying power" value={fmtUSD(cash)} sub="Virtual cash available" />
-        <Stat label="Today's change" value={`${dayAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(dayAbs))}`} sub={fmtPct(dayPct)} tone={dayAbs >= 0 ? "gain" : "loss"} />
-        <Stat label="Total return" value={`${retAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(retAbs))}`} sub={fmtPct(retPct)} tone={retAbs >= 0 ? "gain" : "loss"} />
+        <Stat label="Today's change" value={pricesReady ? `${dayAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(dayAbs))}` : dash} sub={pricesReady ? fmtPct(dayPct) : ""} tone={dayAbs >= 0 ? "gain" : "loss"} />
+        <Stat label="Total return" value={pricesReady ? `${retAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(retAbs))}` : dash} sub={pricesReady ? fmtPct(retPct) : ""} tone={retAbs >= 0 ? "gain" : "loss"} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -111,6 +123,10 @@ function Dashboard() {
                     </Link>
                   }
                 />
+              ) : quotesQ.isError ? (
+                <ErrorState message="Couldn't load live prices. Please try again in a moment." />
+              ) : !pricesReady ? (
+                <LoadingState label="Loading live prices…" />
               ) : (
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
@@ -125,7 +141,7 @@ function Dashboard() {
                   </thead>
                   <tbody>
                     {holdings.map((h) => {
-                      const q = getQuote(h.symbol);
+                      const q = quoteOf(quotes, h.symbol);
                       const mv = q.price * h.quantity;
                       const pl = (q.price - h.avg_cost) * h.quantity;
                       const plPct = h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0;
@@ -172,7 +188,7 @@ function Dashboard() {
                 <LoadingState label="Loading…" />
               ) : watchlistQ.isError ? (
                 <ErrorState message={(watchlistQ.error as Error)?.message} />
-              ) : (watchlistQ.data ?? []).length === 0 ? (
+              ) : watchItems.length === 0 ? (
                 <EmptyState
                   icon={Star}
                   title="Nothing tracked yet"
@@ -180,8 +196,8 @@ function Dashboard() {
                   className="py-8"
                 />
               ) : (
-                (watchlistQ.data ?? []).map((item) => {
-                  const q = getQuote(item.symbol);
+                watchItems.map((item) => {
+                  const q = quoteOf(quotes, item.symbol);
                   const up = q.dayChangePct >= 0;
                   return (
                     <Link key={item.symbol} to="/app/stock/$symbol" params={{ symbol: item.symbol }} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-accent">

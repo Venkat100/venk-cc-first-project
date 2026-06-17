@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/PriceChart";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/portfolio/queries";
-import { getQuote } from "@/lib/marketData";
+import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { STOCKS, fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { Star, Plus, X } from "lucide-react";
@@ -20,6 +20,8 @@ function Watchlist() {
   const qc = useQueryClient();
   const watchlistQ = useQuery({ queryKey: ["watchlist"], queryFn: getWatchlist });
   const symbols = (watchlistQ.data ?? []).map((w) => w.symbol);
+  const quotesQ = useQuotes(symbols);
+  const quotes = quotesQ.data;
 
   const addMut = useMutation({
     mutationFn: (symbol: string) => addToWatchlist(symbol),
@@ -80,7 +82,7 @@ function Watchlist() {
               </thead>
               <tbody>
                 {symbols.map((sym) => {
-                  const q = getQuote(sym);
+                  const q = quoteOf(quotes, sym);
                   const up = q.dayChangePct >= 0;
                   return (
                     <tr key={sym} className="border-b border-border/60 last:border-0 hover:bg-accent/40">

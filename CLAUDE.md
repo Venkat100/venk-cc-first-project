@@ -11,7 +11,7 @@ A paper-trading platform: users trade real tickers at live prices with $100,000 
 - **Market data:** Finnhub (primary), Twelve Data (fallback), accessed ONLY through `app/src/lib/marketData/`.
 
 ## Non-negotiable rules
-1. **Never call the market API from the browser.** All market data goes through Supabase Edge Functions. The API key lives in Supabase secrets only.
+1. **Never call the market API from the browser.** All market data goes through a SERVER-SIDE layer — **TanStack Start server functions** (decided 2026-06-16; chosen over Supabase Edge Functions for simplicity since the frontend is TanStack Start with its own server). The market-data API key lives in a server-only env var (NOT a `VITE_`-prefixed/public var), never in the repo, never shipped to the client.
 2. **Never trust client-supplied prices or balances.** Trades execute server-side against a server-fetched price. The server recomputes portfolio value.
 3. **Row-Level Security on every user table** — users see only their own rows.
 4. **Isolate the data provider.** Nothing outside `lib/marketData/` may import Finnhub/Twelve Data directly.

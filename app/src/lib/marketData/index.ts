@@ -1,73 +1,61 @@
 // ════════════════════════════════════════════════════════════════════════
-//  marketData — CURRENT-PRICE LOOKUP  ⚠️  PHASE 5 SWAP POINT  ⚠️
-// ════════════════════════════════════════════════════════════════════════
+//  marketData — CLIENT-FACING API  (was the Phase 4 stub; now REAL data)
 //
-//  This is the ONLY place the rest of the app asks "what is X worth right
-//  now?". Today it returns PLACEHOLDER prices sourced from the static mock
-//  table. In Phase 5 this file is replaced so the same functions instead call
-//  Supabase Edge Functions (getQuote / getCandles) backed by Finnhub /
-//  Twelve Data — WITHOUT changing a single call site.
+//  These functions are how the whole app gets prices/charts. They call
+//  TanStack Start server functions (functions.ts), so the actual provider
+//  request + API key run SERVER-SIDE ONLY. This module imports NO provider
+//  code and NO secret — safe to ship to the browser.
 //
-//  Architectural rules this enforces (see CLAUDE.md / ARCHITECTURE.md):
-//    • Nothing outside lib/marketData/ may look up a price directly.
-//    • No market-data provider (Finnhub etc.) is imported anywhere yet.
-//    • When real prices land, only THIS module changes.
-//
-//  The functions are intentionally synchronous for now (mock data is local).
-//  Phase 5 will make them async; call sites already treat the data as
-//  "fetched", so the async migration will be mechanical.
+//  Note vs Phase 4: these are now ASYNC (live data is inherently async).
+//  Call sites fetch via react-query and render loading/empty/error states.
 // ════════════════════════════════════════════════════════════════════════
 
-import { STOCKS } from "@/lib/mockData";
+import { getQuotesFn, getCandlesFn, searchSymbolsFn } from "./functions";
+import { getStock } from "@/lib/mockData";
+import type { Candle, Quote, Range, SymbolMatch } from "./types";
 
-export type Quote = {
-  symbol: string;
-  /** Display name, e.g. "Apple Inc." Falls back to the symbol if unknown. */
-  name: string;
-  /** Sector, e.g. "Technology". "—" if unknown. */
-  sector: string;
-  /** Latest price (placeholder until Phase 5). */
-  price: number;
-  /** Absolute change on the day. */
-  dayChange: number;
-  /** Percent change on the day. */
-  dayChangePct: number;
-};
+export type { Candle, Quote, Range, SymbolMatch } from "./types";
 
-function placeholderQuote(symbol: string): Quote {
-  const sym = symbol.toUpperCase();
-  const s = STOCKS.find((x) => x.symbol === sym);
-  if (!s) {
-    // Unknown symbol (e.g. a holding for a ticker not in the mock universe).
-    // Return a safe zeroed quote so the UI never crashes.
-    return { symbol: sym, name: sym, sector: "—", price: 0, dayChange: 0, dayChangePct: 0 };
-  }
+// Curated universe shown on the Markets page. Kept small to respect the
+// Twelve Data free tier (≈8 credits/min). Names/sectors come from curated
+// metadata since /quote doesn't return sector. (A provider profile endpoint
+// for the full universe is a later enhancement.)
+export const MARKET_UNIVERSE = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AMD"] as const;
+
+// Best-effort sector/name from the curated mock reference table. Market
+// reference metadata (names, sectors) is not user data and not a secret.
+function enrich(q: Quote): Quote {
+  const meta = getStock(q.symbol);
   return {
-    symbol: s.symbol,
-    name: s.name,
-    sector: s.sector,
-    price: s.price,
-    dayChange: s.dayChange,
-    dayChangePct: s.dayChangePct,
+    ...q,
+    name: q.name && q.name !== q.symbol ? q.name : (meta?.name ?? q.name),
+    sector: q.sector && q.sector !== "—" ? q.sector : (meta?.sector ?? "—"),
   };
 }
 
-/** Current quote for one symbol. */
-export function getQuote(symbol: string): Quote {
-  return placeholderQuote(symbol);
-}
-
-/** Current quotes for many symbols, keyed by uppercase symbol. */
-export function getQuotes(symbols: string[]): Map<string, Quote> {
+/** Live quotes for many symbols, keyed by uppercase symbol. */
+export async function getQuotes(symbols: string[]): Promise<Map<string, Quote>> {
+  const list = Array.from(new Set(symbols.map((s) => s.toUpperCase())));
   const out = new Map<string, Quote>();
-  for (const sym of symbols) {
-    const q = getQuote(sym);
-    out.set(q.symbol, q);
-  }
+  if (list.length === 0) return out;
+  const quotes = await getQuotesFn({ data: { symbols: list } });
+  for (const q of quotes) out.set(q.symbol, enrich(q));
   return out;
 }
 
-/** Convenience: just the latest price for a symbol. */
-export function getCurrentPrice(symbol: string): number {
-  return getQuote(symbol).price;
+/** Live quote for one symbol. */
+export async function getQuote(symbol: string): Promise<Quote> {
+  const quotes = await getQuotesFn({ data: { symbols: [symbol.toUpperCase()] } });
+  return enrich(quotes[0]);
+}
+
+/** Historical OHLC candles for a chart range. */
+export async function getCandles(symbol: string, range: Range): Promise<Candle[]> {
+  return getCandlesFn({ data: { symbol: symbol.toUpperCase(), range } });
+}
+
+/** Symbol search (typeahead). */
+export async function searchSymbols(query: string): Promise<SymbolMatch[]> {
+  if (!query.trim()) return [];
+  return searchSymbolsFn({ data: { query } });
 }

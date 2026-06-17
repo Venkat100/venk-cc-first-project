@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
-import { getQuote } from "@/lib/marketData";
+import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { fmtUSD, fmtPct } from "@/lib/mockData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
@@ -24,26 +24,36 @@ function Portfolio() {
   const holdings = holdingsQ.data ?? [];
   const transactions = txQ.data ?? [];
 
+  const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
+  const quotesQ = useQuotes(symbols);
+  const quotes = quotesQ.data;
+  const pricesReady = holdings.length === 0 || quotesQ.isSuccess;
+
   const byStock = useMemo(
-    () => holdings.map((h) => ({ name: h.symbol, value: +(getQuote(h.symbol).price * h.quantity).toFixed(2) })),
-    [holdings],
+    () => holdings.map((h) => ({ name: h.symbol, value: +(quoteOf(quotes, h.symbol).price * h.quantity).toFixed(2) })),
+    [holdings, quotes],
   );
 
   const bySector = useMemo(() => {
     const map = new Map<string, number>();
     for (const h of holdings) {
-      const q = getQuote(h.symbol);
+      const q = quoteOf(quotes, h.symbol);
       map.set(q.sector, (map.get(q.sector) ?? 0) + q.price * h.quantity);
     }
     return Array.from(map, ([name, value]) => ({ name, value: +value.toFixed(2) }));
-  }, [holdings]);
+  }, [holdings, quotes]);
 
   const [page, setPage] = useState(1);
   const pageSize = 8;
   const totalPages = Math.max(1, Math.ceil(transactions.length / pageSize));
   const txPage = transactions.slice((page - 1) * pageSize, page * pageSize);
 
-  const allocationsReady = !holdingsQ.isLoading && !holdingsQ.isError && holdings.length > 0;
+  const allocationsReady = !holdingsQ.isLoading && !holdingsQ.isError && holdings.length > 0 && pricesReady;
+  const allocState = {
+    isLoading: holdingsQ.isLoading || (holdings.length > 0 && quotesQ.isLoading),
+    isError: holdingsQ.isError || quotesQ.isError,
+    error: holdingsQ.error ?? quotesQ.error,
+  };
 
   return (
     <div className="space-y-6">
@@ -53,8 +63,8 @@ function Portfolio() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <DonutCard title="Allocation by stock" data={byStock} state={holdingsQ} ready={allocationsReady} />
-        <DonutCard title="Allocation by sector" data={bySector} state={holdingsQ} ready={allocationsReady} />
+        <DonutCard title="Allocation by stock" data={byStock} state={allocState} ready={allocationsReady} />
+        <DonutCard title="Allocation by sector" data={bySector} state={allocState} ready={allocationsReady} />
       </div>
 
       <Card>
@@ -77,6 +87,10 @@ function Portfolio() {
                 </Link>
               }
             />
+          ) : quotesQ.isError ? (
+            <ErrorState message="Couldn't load live prices. Please try again in a moment." />
+          ) : !pricesReady ? (
+            <LoadingState label="Loading live prices…" />
           ) : (
             <table className="w-full min-w-[640px] text-sm">
               <thead>
@@ -92,7 +106,7 @@ function Portfolio() {
               </thead>
               <tbody>
                 {holdings.map((h) => {
-                  const q = getQuote(h.symbol);
+                  const q = quoteOf(quotes, h.symbol);
                   const mv = q.price * h.quantity;
                   const pl = (q.price - h.avg_cost) * h.quantity;
                   const up = pl >= 0;
