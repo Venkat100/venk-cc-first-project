@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { LivePriceChart } from "@/components/LivePriceChart";
 import { LoadingState } from "@/components/DataStates";
 import { getQuote } from "@/lib/marketData";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
+import { executeTrade } from "@/lib/trading/execute";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct, fmtCompact } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
@@ -173,6 +174,42 @@ function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symb
   const [limit, setLimit] = useState(price);
   const est = (type === "market" ? price : limit) * qty;
 
+  const qc = useQueryClient();
+  const { refreshProfile } = useAuth();
+
+  const trade = useMutation({
+    mutationFn: () => executeTrade({ symbol, side, quantity: qty }),
+    onSuccess: async (r) => {
+      // Refresh everything the trade affects so Dashboard/Portfolio/position update.
+      await Promise.all([
+        refreshProfile(),
+        qc.invalidateQueries({ queryKey: ["holdings"] }),
+        qc.invalidateQueries({ queryKey: ["transactions"] }),
+      ]);
+      toast.success(
+        `${r.side === "buy" ? "Bought" : "Sold"} ${r.quantity} ${r.symbol} @ ${fmtUSD(r.price)}`,
+        { description: `${r.side === "buy" ? "Cost" : "Proceeds"} ${fmtUSD(r.total)} · Buying power now ${fmtUSD(r.cashBalance)}` },
+      );
+    },
+    onError: (e: Error) => toast.error(e.message || "That order couldn't be completed."),
+  });
+
+  function onConfirm() {
+    if (type === "limit") {
+      // TODO(Phase 6+): real limit-order handling (rest the order until the
+      // market crosses the limit). For now only market orders execute.
+      toast.info("Limit orders are coming soon — switch to a Market order to trade now.");
+      return;
+    }
+    if (qty <= 0) {
+      toast.error("Enter a quantity greater than zero.");
+      return;
+    }
+    trade.mutate();
+  }
+
+  const pending = trade.isPending;
+
   return (
     <Card className="h-fit">
       <CardHeader className="pb-2"><CardTitle className="text-base">Place paper order</CardTitle></CardHeader>
@@ -189,20 +226,21 @@ function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symb
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="market">Market</SelectItem>
-              <SelectItem value="limit">Limit</SelectItem>
+              <SelectItem value="limit">Limit (soon)</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="qty">Quantity</Label>
-          <Input id="qty" type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value)))} className="tabular" />
+          <Input id="qty" type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 0)))} className="tabular" />
         </div>
 
         {type === "limit" && (
           <div className="space-y-1.5">
             <Label htmlFor="limit">Limit price</Label>
             <Input id="limit" type="number" step="0.01" value={limit} onChange={(e) => setLimit(Number(e.target.value))} className="tabular" />
+            <p className="text-[11px] text-muted-foreground">Limit orders aren't executed yet — use Market to trade now.</p>
           </div>
         )}
 
@@ -212,13 +250,13 @@ function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symb
         </div>
 
         <Button
-          disabled={!ready}
+          disabled={!ready || pending}
           className={cn("w-full", side === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)] hover:opacity-90" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)] hover:opacity-90")}
-          onClick={() => toast.success(`${side === "buy" ? "Bought" : "Sold"} ${qty} ${symbol} @ ${fmtUSD(type === "market" ? price : limit)}`, { description: "Paper order filled (simulated — real execution lands in Phase 6)" })}
+          onClick={onConfirm}
         >
-          Confirm {side} · {qty} {symbol}
+          {pending ? "Placing…" : `Confirm ${side} · ${qty} ${symbol}`}
         </Button>
-        <p className="text-[11px] text-muted-foreground">All orders are simulated. No real money is used.</p>
+        <p className="text-[11px] text-muted-foreground">All orders are simulated paper trades. No real money is used.</p>
       </CardContent>
     </Card>
   );

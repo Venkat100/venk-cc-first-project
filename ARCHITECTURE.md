@@ -10,7 +10,7 @@ This is the technical blueprint for PaperTrader. It's written to be read by both
 |-------|--------|-----|
 | **Frontend** | React + **TanStack Start** + TypeScript, Tailwind CSS, shadcn/ui, Recharts | What Lovable actually generated. TanStack Start is a full-stack React framework (TanStack Router + Vite + a built-in server layer with server functions), NOT a plain Vite SPA as originally assumed. It can run server-side logic itself. TypeScript keeps a data-heavy app safe. Lives in `app/`. |
 | **Backend / DB / Auth** | Supabase (Postgres + Auth + Edge Functions) | One-click integration from Lovable. Gives us auth, a real SQL database with row-level security, and serverless functions for calling the market API — no separate server to host. |
-| **Market data** | Finnhub (primary) — live quotes + historical candles. Twelve Data as fallback. | Both have free tiers with live *and* historical data. We isolate this behind one module so we can swap providers without touching the app. |
+| **Market data** | **Twelve Data (primary — key in use)** — live quotes + historical candles. Finnhub as fallback (thin hook). | Both have free tiers with live *and* historical data. Isolated behind `lib/marketData/` so we can swap providers without touching the app. Twelve Data free tier ≈ 8 credits/min, so the live universe is kept small and TTL-cached (quotes 30s, candles 5m, search 1h). |
 | **Background jobs** | Supabase scheduled functions (pg_cron) | For refreshing prices and snapshotting portfolio value over time. |
 | **Hosting** | Lovable's built-in deploy for early demos; Vercel for production frontend; Supabase cloud for backend. | Cheap/free to start, scales fine. |
 | **Source control** | GitHub | The repo of record. Lovable can sync directly to GitHub. |
