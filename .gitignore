@@ -35,6 +35,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# ── Claude Code local settings ────────────────────────────────
+.claude/settings.local.json
+
 # ── Editor / OS ───────────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
