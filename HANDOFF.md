@@ -5,9 +5,11 @@
 > **Maintenance rule:** Claude (acting as CTO in Cowork) updates this file at the end of any meaningful exchange — new decisions, completed work, changed direction, new blockers. Append to the Changelog at the bottom every time. Keep it elaborate. When in doubt, over-document.
 
 **Last updated:** 2026-06-16
-**Current phase:** Phase 6 SHIPPED to `origin/main` (`8fe74dd`). **Now starting Phase 7 — the What-If Simulator (flagship).** Then Phase 8 (snapshots/polish), Phase 9 (launch).
+**Current phase:** Phase 7 (What-If Simulator, flagship) IMPLEMENTED + verified end-to-end, committed locally (`84b3e15`, 1 ahead of `origin/main`), **pending push** (CTO approved). Public `/simulator` route works logged-out; logged-in "Buy {symbol} now" CTA loops into the real buy flow. Verified: $5k NVDA Jun 2019 → $315,077 (+6,201%, beat SPY ~6,029%); $1k AAPL Jan 2022 → $1,635 (+63.5%). **Next: the Finnhub HYBRID provider switch (small step), then Phase 8 (snapshots/polish), then Phase 9 (launch).**
 
-**Phases done:** 0 (planning) ✅ · 1 (Lovable frontend) ✅ · 2 (monorepo on GitHub) ✅ · 3 (auth, $100k seed) ✅ · 4 (portfolio tables + RLS) ✅ · 5 (live market data) ✅ · 6 (trading engine, server-side buy/sell) ✅ shipped.
+**Phases done:** 0 (planning) ✅ · 1 (Lovable frontend) ✅ · 2 (monorepo) ✅ · 3 (auth, $100k) ✅ · 4 (portfolio tables + RLS) ✅ · 5 (live market data) ✅ · 6 (trading engine) ✅ shipped · 7 (What-If Simulator) ✅ implemented, pending push.
+
+**Loose end (cosmetic, low priority):** simulator headline START DATE can render one day early in timezones behind UTC (`toLocaleDateString` on a UTC-midnight ISO) — dollar figures unaffected. Quick fix later.
 
 **⚙️ Market-data decision (2026-06-16): HYBRID providers.** Venky got a Finnhub key. Finnhub free = 60 req/min + live quotes + company profiles + symbol search, but NO historical candles (premium-only, 403 on free). Twelve Data free = historical time_series but tight ~8 credits/min. So: **Finnhub for live quotes (+ profile/market-cap, which were stubbed) and symbol search; Twelve Data stays for historical candles** (charts + simulator depend on it). Both keys server-only. This kills the rate-limit errors on the Markets/quote path and unlocks free market-cap/About data. Doing this as a small standalone step BEFORE Phase 7. `FINNHUB_API_KEY` added server-only.
 
