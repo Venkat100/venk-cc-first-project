@@ -2,14 +2,16 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PriceChart, Sparkline } from "@/components/PriceChart";
+import { Sparkline } from "@/components/PriceChart";
+import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { getHoldings, getWatchlist } from "@/lib/portfolio/queries";
+import { getSnapshots } from "@/lib/snapshots/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useAuth } from "@/lib/auth/auth-context";
-import { topMovers, fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
+import { topMovers, fmtUSD, fmtPct, sparkline, STARTING_CASH } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, ArrowDownRight, Star, Wallet, LineChart } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Star, Wallet } from "lucide-react";
 
 export const Route = createFileRoute("/app/dashboard")({
   head: () => ({
@@ -38,21 +40,26 @@ function Dashboard() {
   const quotes = quotesQ.data;
   const pricesReady = holdings.length === 0 || quotesQ.isSuccess;
 
+  const snapshotsQ = useQuery({ queryKey: ["snapshots"], queryFn: getSnapshots });
+
   let holdingsValue = 0;
-  let dayAbs = 0;
-  let dayBaseline = 0;
-  let costBasis = 0;
+  let dayAbs = 0; // Σ(qty × today's change-vs-prior-close), from live quotes
   for (const h of holdings) {
     const q = quoteOf(quotes, h.symbol);
     holdingsValue += q.price * h.quantity;
     dayAbs += q.dayChange * h.quantity;
-    dayBaseline += (q.price - q.dayChange) * h.quantity;
-    costBasis += h.avg_cost * h.quantity;
   }
+  // ── Portfolio math (single source of truth) ──────────────────────────
+  // total_value      = cash + Σ(qty × live price)
+  // Today's change $ = Σ(qty × dayChange)         (vs prior close; cash is flat intraday)
+  // Today's change % = todayChange$ / (total_value − todayChange$)   (vs prior-close value)
+  // Total return $   = total_value − $100,000 starting capital
+  // Total return %   = (total_value − 100,000) / 100,000 × 100
   const total = cash + holdingsValue;
-  const dayPct = dayBaseline > 0 ? (dayAbs / dayBaseline) * 100 : 0;
-  const retAbs = holdingsValue - costBasis;
-  const retPct = costBasis > 0 ? (retAbs / costBasis) * 100 : 0;
+  const priorCloseValue = total - dayAbs;
+  const dayPct = priorCloseValue > 0 ? (dayAbs / priorCloseValue) * 100 : 0;
+  const retAbs = total - STARTING_CASH;
+  const retPct = (retAbs / STARTING_CASH) * 100;
   const dash = "—";
 
   return (
@@ -86,17 +93,13 @@ function Dashboard() {
               </div>
             </CardHeader>
             <CardContent>
-              {holdings.length > 0 ? (
-                // NOTE: series is still placeholder — real portfolio history
-                // arrives with portfolio_snapshots in Phase 8.
-                <PriceChart symbol="AAPL" endPrice={total} height={300} defaultRange="3M" />
-              ) : (
-                <EmptyState
-                  icon={LineChart}
-                  title="Your portfolio chart will appear here"
-                  description="Once you hold positions, your portfolio value over time shows up in this space."
-                />
-              )}
+              <PortfolioValueChart
+                snapshots={snapshotsQ.data ?? []}
+                liveTotal={total}
+                loading={snapshotsQ.isLoading}
+                error={snapshotsQ.isError ? (snapshotsQ.error as Error)?.message : undefined}
+                height={300}
+              />
             </CardContent>
           </Card>
 

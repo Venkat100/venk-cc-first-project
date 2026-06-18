@@ -40,6 +40,14 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      // Token-protected snapshot trigger (Vercel Cron in Phase 9). Handled here
+      // so it's a stable HTTP path independent of the app router. Dynamic import
+      // keeps the server-only writer out of the SSR/client path.
+      if (new URL(request.url).pathname === "/api/cron/snapshot") {
+        const { handleSnapshotRequest } = await import("./lib/snapshots/endpoint.server");
+        return await handleSnapshotRequest(request);
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

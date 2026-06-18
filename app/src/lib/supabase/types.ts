@@ -45,6 +45,15 @@ export type WatchlistItem = {
   created_at: string;
 };
 
+export type PortfolioSnapshot = {
+  id: string;
+  user_id: string;
+  total_value: number;
+  cash: number;
+  holdings_value: number;
+  captured_at: string; // date (YYYY-MM-DD)
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -107,6 +116,23 @@ export type Database = {
         };
         Update: {
           symbol?: string;
+        };
+        Relationships: [];
+      };
+      portfolio_snapshots: {
+        Row: PortfolioSnapshot;
+        Insert: {
+          id?: string;
+          user_id: string;
+          total_value: number;
+          cash: number;
+          holdings_value: number;
+          captured_at?: string;
+        };
+        Update: {
+          total_value?: number;
+          cash?: number;
+          holdings_value?: number;
         };
         Relationships: [];
       };
