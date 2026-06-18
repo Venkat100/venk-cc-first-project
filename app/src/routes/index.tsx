@@ -67,7 +67,7 @@ function Landing() {
                     Create free account <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
-                <Link to="/app/simulator">
+                <Link to="/simulator">
                   <Button size="lg" variant="outline" className="gap-2">
                     <FlaskConical className="h-4 w-4" /> Try the simulator
                   </Button>
@@ -152,7 +152,7 @@ function Landing() {
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <Link to="/auth"><Button size="lg" className="gap-2">Open paper account <ArrowRight className="h-4 w-4" /></Button></Link>
-            <Link to="/app/dashboard"><Button size="lg" variant="outline">Explore demo</Button></Link>
+            <Link to="/simulator"><Button size="lg" variant="outline">Try the simulator</Button></Link>
           </div>
         </div>
       </section>

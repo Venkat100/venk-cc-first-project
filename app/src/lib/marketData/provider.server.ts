@@ -111,6 +111,28 @@ async function tdCandles(symbol: string, range: Range): Promise<Candle[]> {
     .reverse();
 }
 
+// Daily candles from a start date up to today, ascending. Used by the
+// What-If Simulator (arbitrary historical windows). If start_date predates the
+// symbol's listing, Twelve Data returns from the earliest available day — the
+// caller treats that first day as "earliest available".
+async function tdSeriesSince(symbol: string, startDate: string): Promise<Candle[]> {
+  const apikey = requireServerEnv("TWELVEDATA_API_KEY");
+  const url = `${TD_BASE}/time_series?symbol=${encodeURIComponent(symbol.toUpperCase())}&interval=1day&start_date=${startDate}&order=ASC&outputsize=5000&apikey=${apikey}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new ProviderError(`Provider HTTP ${res.status}`, res.status);
+  const json: any = await res.json();
+  assertOk(json);
+  const values: any[] = Array.isArray(json.values) ? json.values : [];
+  return values.map((v) => ({
+    t: new Date(v.datetime).toISOString(),
+    open: num(v.open),
+    high: num(v.high),
+    low: num(v.low),
+    close: num(v.close),
+    volume: num(v.volume),
+  }));
+}
+
 async function tdSearch(query: string): Promise<SymbolMatch[]> {
   const apikey = requireServerEnv("TWELVEDATA_API_KEY");
   const url = `${TD_BASE}/symbol_search?symbol=${encodeURIComponent(query)}&outputsize=12&apikey=${apikey}`;
@@ -140,6 +162,11 @@ export async function providerCandles(symbol: string, range: Range): Promise<Can
 
 export async function providerSearch(query: string): Promise<SymbolMatch[]> {
   return tdSearch(query);
+}
+
+/** Daily candles from `startDate` (YYYY-MM-DD) to today, ascending. */
+export async function providerSeries(symbol: string, startDate: string): Promise<Candle[]> {
+  return tdSeriesSince(symbol, startDate);
 }
 
 /** Which provider is primary — handy for diagnostics/logging. */
