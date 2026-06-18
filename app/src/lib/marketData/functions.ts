@@ -8,7 +8,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { providerQuotes, providerCandles, providerSearch } from "./provider.server";
+import { providerCandles } from "./provider.server";
+import { providerQuotes, providerSearch } from "./finnhub.server";
 import { cached, cachePeek, cachePut, TTL } from "./cache.server";
 import type { Candle, Quote, SymbolMatch } from "./types";
 

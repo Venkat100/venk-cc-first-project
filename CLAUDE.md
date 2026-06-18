@@ -8,7 +8,7 @@ A paper-trading platform: users trade real tickers at live prices with $100,000 
 ## Stack
 - **Frontend:** React + **TanStack Start** + TypeScript, Tailwind CSS, shadcn/ui, Recharts. (Generated in Lovable; lives in `app/`.) NOTE: it's TanStack Start (full-stack React w/ a server layer), NOT a plain Vite SPA. It has its own server functions, which may host backend logic instead of/alongside Supabase Edge Functions — TBD at backend phase.
 - **Backend:** Supabase — Postgres, Auth, Edge Functions. Migrations in `supabase/migrations/`, functions in `supabase/functions/`.
-- **Market data:** **Twelve Data (primary — current key in use)**, Finnhub (fallback, hook present but thin), accessed ONLY through `app/src/lib/marketData/`. Free tier ~8 credits/min → keep the live universe small + TTL-cached.
+- **Market data:** **HYBRID, accessed ONLY through `app/src/lib/marketData/`.** **Finnhub** = live quotes + symbol search + company profile (market cap / logo / sector); free tier 60 req/min but **no historical stock candles** (premium-only). **Twelve Data** = historical candles & series (Stock Detail chart + What-If Simulator); free tier ~8 credits/min. Both keys server-only (`FINNHUB_API_KEY`, `TWELVEDATA_API_KEY`). In-memory TTL cache spans both providers.
 
 ## Non-negotiable rules
 1. **Never call the market API from the browser.** All market data goes through a SERVER-SIDE layer — **TanStack Start server functions** (decided 2026-06-16; chosen over Supabase Edge Functions for simplicity since the frontend is TanStack Start with its own server). The market-data API key lives in a server-only env var (NOT a `VITE_`-prefixed/public var), never in the repo, never shipped to the client.

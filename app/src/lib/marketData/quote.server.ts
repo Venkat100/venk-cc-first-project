@@ -2,7 +2,7 @@
 // engine. Uses the same per-symbol cache keys as functions.ts so a fresh
 // quote fetched for a trade also benefits the UI (and vice-versa).
 
-import { providerQuotes } from "./provider.server";
+import { providerQuotes } from "./finnhub.server";
 import { cachePeek, cachePut, TTL } from "./cache.server";
 import type { Quote } from "./types";
 

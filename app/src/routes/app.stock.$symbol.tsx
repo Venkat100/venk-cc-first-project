@@ -54,7 +54,11 @@ function StockDetail() {
       {/* Header */}
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:flex-wrap sm:justify-between">
         <div className="flex min-w-0 items-center gap-4">
-          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-surface-2 text-sm font-bold">{symbol.slice(0, 2)}</div>
+          {quote?.logo ? (
+            <img src={quote.logo} alt={symbol} className="h-14 w-14 shrink-0 rounded-2xl bg-white object-contain p-1.5" />
+          ) : (
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-surface-2 text-sm font-bold">{symbol.slice(0, 2)}</div>
+          )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h1 className="truncate text-2xl font-semibold tracking-tight">{symbol}</h1>
@@ -96,7 +100,7 @@ function StockDetail() {
                   <Stat label="Day high" value={quote.high != null ? fmtUSD(quote.high) : "—"} />
                   <Stat label="Day low" value={quote.low != null ? fmtUSD(quote.low) : "—"} />
                   <Stat label="Prev close" value={quote.previousClose != null ? fmtUSD(quote.previousClose) : "—"} />
-                  <Stat label="Volume" value={quote.volume != null ? fmtCompact(quote.volume) : "—"} />
+                  <Stat label="Market cap" value={quote.marketCap != null ? `$${fmtCompact(quote.marketCap)}` : "—"} />
                   <Stat label="52-wk range" value={quote.week52Low != null && quote.week52High != null ? `${fmtUSD(quote.week52Low)} – ${fmtUSD(quote.week52High)}` : "—"} />
                 </>
               ) : (
@@ -143,9 +147,17 @@ function StockDetail() {
                   ) : <p className="text-sm text-muted-foreground">No trades for {symbol} yet.</p>}
                 </TabsContent>
                 <TabsContent value="about" className="mt-4">
-                  {/* TODO(Phase 5+): company profile/description needs a provider
-                      profile endpoint; not wired this phase. */}
-                  <p className="text-sm leading-relaxed text-muted-foreground">{quote?.name ?? symbol} ({symbol}). Live price and historical chart powered by real market data. A full company profile is coming in a later phase.</p>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p className="leading-relaxed">
+                      <span className="font-medium text-foreground">{quote?.name ?? symbol}</span> ({symbol})
+                      {quote?.sector && quote.sector !== "—" ? ` · ${quote.sector}` : ""}
+                      {quote?.exchange ? ` · ${quote.exchange}` : ""}.
+                    </p>
+                    {quote?.marketCap != null && (
+                      <p>Market capitalization: <span className="tabular text-foreground">${fmtCompact(quote.marketCap)}</span>.</p>
+                    )}
+                    <p>Live quote &amp; company profile from Finnhub; historical price chart from Twelve Data.</p>
+                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>

@@ -20,6 +20,10 @@ export type Quote = {
   volume?: number;
   week52High?: number;
   week52Low?: number;
+  // Company profile (from Finnhub /stock/profile2 + /stock/metric).
+  marketCap?: number; // absolute USD
+  logo?: string;
+  exchange?: string;
 };
 
 export type Candle = {

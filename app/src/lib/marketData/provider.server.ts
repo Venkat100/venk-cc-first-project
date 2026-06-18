@@ -1,26 +1,29 @@
 // ════════════════════════════════════════════════════════════════════════
-//  Market-data PROVIDER ADAPTER (server-only)
-//  The ONLY file in the app that knows about Twelve Data / Finnhub.
+//  Twelve Data PROVIDER ADAPTER (server-only) — HISTORICAL data.
 //
-//  Primary provider: Twelve Data (Venky's key). Finnhub is wired as an
-//  optional fallback hook but intentionally kept thin for now.
+//  HYBRID setup (see HANDOFF.md): Twelve Data serves HISTORICAL candles /
+//  series (charts + the What-If Simulator). Live quotes, symbol search, and
+//  company profiles come from Finnhub (finnhub.server.ts) — Finnhub's free
+//  tier has no historical stock candles (premium-only → 403), so history
+//  stays here.
 //
 //  `.server.ts` + use only inside server functions ⇒ the API key and these
-//  requests never reach the browser.
+//  requests never reach the browser. Shared `num`/`ProviderError` are exported
+//  for the sibling Finnhub module.
 // ════════════════════════════════════════════════════════════════════════
 
 import { requireServerEnv, serverEnv } from "./env.server";
-import type { Candle, Quote, Range, SymbolMatch } from "./types";
+import type { Candle, Range } from "./types";
 
 const TD_BASE = "https://api.twelvedata.com";
 
-function num(v: unknown): number {
+export function num(v: unknown): number {
   const n = typeof v === "string" ? parseFloat(v) : typeof v === "number" ? v : NaN;
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Twelve Data signals errors with `{ status: "error", code, message }`. */
-class ProviderError extends Error {
+/** Normalized provider error (used by both Twelve Data and Finnhub adapters). */
+export class ProviderError extends Error {
   code?: number;
   constructor(message: string, code?: number) {
     super(message);
@@ -29,6 +32,7 @@ class ProviderError extends Error {
   }
 }
 
+// Twelve Data signals errors with `{ status: "error", code, message }`.
 function assertOk(json: any) {
   if (json && json.status === "error") {
     throw new ProviderError(json.message || "Market data provider error", json.code);
@@ -44,50 +48,6 @@ const RANGE_CFG: Record<Range, { interval: string; outputsize: number }> = {
   "1Y": { interval: "1day", outputsize: 252 },
   ALL: { interval: "1week", outputsize: 260 },
 };
-
-function mapTwelveQuote(raw: any): Quote {
-  const price = num(raw.close ?? raw.price);
-  const prev = num(raw.previous_close);
-  const change = raw.change != null ? num(raw.change) : price - prev;
-  const pct = raw.percent_change != null ? num(raw.percent_change) : prev ? (change / prev) * 100 : 0;
-  const fwLow = raw.fifty_two_week?.low;
-  const fwHigh = raw.fifty_two_week?.high;
-  return {
-    symbol: String(raw.symbol ?? "").toUpperCase(),
-    name: raw.name || String(raw.symbol ?? "").toUpperCase(),
-    sector: "—", // not provided by /quote; filled in from curated metadata upstream
-    price,
-    dayChange: change,
-    dayChangePct: pct,
-    open: raw.open != null ? num(raw.open) : undefined,
-    high: raw.high != null ? num(raw.high) : undefined,
-    low: raw.low != null ? num(raw.low) : undefined,
-    previousClose: raw.previous_close != null ? prev : undefined,
-    volume: raw.volume != null ? num(raw.volume) : undefined,
-    week52Low: fwLow != null ? num(fwLow) : undefined,
-    week52High: fwHigh != null ? num(fwHigh) : undefined,
-  };
-}
-
-// ── Twelve Data calls ───────────────────────────────────────────────────
-async function tdQuotes(symbols: string[]): Promise<Quote[]> {
-  const apikey = requireServerEnv("TWELVEDATA_API_KEY");
-  const joined = symbols.map((s) => s.toUpperCase()).join(",");
-  const url = `${TD_BASE}/quote?symbol=${encodeURIComponent(joined)}&apikey=${apikey}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new ProviderError(`Provider HTTP ${res.status}`, res.status);
-  const json: any = await res.json();
-  assertOk(json);
-  // One symbol → a single object; many → an object keyed by symbol.
-  if (symbols.length === 1) return [mapTwelveQuote(json)];
-  return symbols.map((s) => {
-    const raw = json[s.toUpperCase()];
-    if (!raw || raw.status === "error") {
-      return { symbol: s.toUpperCase(), name: s.toUpperCase(), sector: "—", price: 0, dayChange: 0, dayChangePct: 0 };
-    }
-    return mapTwelveQuote(raw);
-  });
-}
 
 async function tdCandles(symbol: string, range: Range): Promise<Candle[]> {
   const apikey = requireServerEnv("TWELVEDATA_API_KEY");
@@ -133,43 +93,20 @@ async function tdSeriesSince(symbol: string, startDate: string): Promise<Candle[
   }));
 }
 
-async function tdSearch(query: string): Promise<SymbolMatch[]> {
-  const apikey = requireServerEnv("TWELVEDATA_API_KEY");
-  const url = `${TD_BASE}/symbol_search?symbol=${encodeURIComponent(query)}&outputsize=12&apikey=${apikey}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new ProviderError(`Provider HTTP ${res.status}`, res.status);
-  const json: any = await res.json();
-  assertOk(json);
-  const data: any[] = Array.isArray(json.data) ? json.data : [];
-  return data.map((d) => ({
-    symbol: String(d.symbol ?? "").toUpperCase(),
-    name: d.instrument_name || d.symbol,
-    exchange: d.exchange,
-    type: d.instrument_type,
-  }));
-}
-
-// ── Public adapter (primary → fallback). Keep the fallback thin for now. ──
-export async function providerQuotes(symbols: string[]): Promise<Quote[]> {
-  return tdQuotes(symbols);
-  // Future: if Twelve Data throws a rate-limit/HTTP error and FINNHUB_API_KEY
-  // exists, retry via a finnhubQuotes() adapter. Left thin deliberately.
-}
-
+/** Historical OHLC candles for a chart range (Twelve Data). */
 export async function providerCandles(symbol: string, range: Range): Promise<Candle[]> {
   return tdCandles(symbol, range);
 }
 
-export async function providerSearch(query: string): Promise<SymbolMatch[]> {
-  return tdSearch(query);
-}
-
-/** Daily candles from `startDate` (YYYY-MM-DD) to today, ascending. */
+/** Daily candles from `startDate` (YYYY-MM-DD) to today, ascending (Twelve Data). */
 export async function providerSeries(symbol: string, startDate: string): Promise<Candle[]> {
   return tdSeriesSince(symbol, startDate);
 }
 
-/** Which provider is primary — handy for diagnostics/logging. */
-export function primaryProvider(): string {
-  return serverEnv("TWELVEDATA_API_KEY") ? "twelvedata" : serverEnv("FINNHUB_API_KEY") ? "finnhub" : "none";
+/** Diagnostics: which provider serves what. */
+export function providerInfo() {
+  return {
+    quotes: serverEnv("FINNHUB_API_KEY") ? "finnhub" : "twelvedata",
+    history: "twelvedata",
+  };
 }

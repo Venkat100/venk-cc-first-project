@@ -10,7 +10,7 @@ This is the technical blueprint for PaperTrader. It's written to be read by both
 |-------|--------|-----|
 | **Frontend** | React + **TanStack Start** + TypeScript, Tailwind CSS, shadcn/ui, Recharts | What Lovable actually generated. TanStack Start is a full-stack React framework (TanStack Router + Vite + a built-in server layer with server functions), NOT a plain Vite SPA as originally assumed. It can run server-side logic itself. TypeScript keeps a data-heavy app safe. Lives in `app/`. |
 | **Backend / DB / Auth** | Supabase (Postgres + Auth + Edge Functions) | One-click integration from Lovable. Gives us auth, a real SQL database with row-level security, and serverless functions for calling the market API — no separate server to host. |
-| **Market data** | **Twelve Data (primary — key in use)** — live quotes + historical candles. Finnhub as fallback (thin hook). | Both have free tiers with live *and* historical data. Isolated behind `lib/marketData/` so we can swap providers without touching the app. Twelve Data free tier ≈ 8 credits/min, so the live universe is kept small and TTL-cached (quotes 30s, candles 5m, search 1h). |
+| **Market data** | **HYBRID (key in use): Finnhub = live quotes + symbol search + company profile (market cap/logo/sector); Twelve Data = historical candles & series.** | Split by free-tier strength: Finnhub free = 60 req/min for quotes/search/profile but **no historical stock candles** (premium-only → 403). Twelve Data free serves `time_series` history (charts + simulator) at ≈ 8 credits/min. Both isolated behind `lib/marketData/` (`finnhub.server.ts` for live, `provider.server.ts` for Twelve Data history) and normalized to shared types, so the rest of the app calls the same `getQuote`/`getCandles`. In-memory TTL cache spans both (quotes 30s, candles 5m, series 30m, profile 24h). |
 | **Background jobs** | Supabase scheduled functions (pg_cron) | For refreshing prices and snapshotting portfolio value over time. |
 | **Hosting** | Lovable's built-in deploy for early demos; Vercel for production frontend; Supabase cloud for backend. | Cheap/free to start, scales fine. |
 | **Source control** | GitHub | The repo of record. Lovable can sync directly to GitHub. |
@@ -133,7 +133,7 @@ All tables protected by Row-Level Security so a user can only ever see their own
 
 ## 7. Open decisions (we'll resolve as we go)
 
-- Finnhub vs. Twelve Data as primary (start Finnhub, validate free-tier limits).
+- ~~Finnhub vs. Twelve Data as primary~~ — RESOLVED: **hybrid** (Finnhub for live quotes/search/profile, Twelve Data for historical candles), since Finnhub free has no history.
 - Whether to support crypto/ETFs in v1 or stocks only (lean: US stocks + a few major ETFs).
 - Limit-order handling — fill instantly at limit price if market crosses it, vs. a simple "fill at current if it qualifies." Start simple.
 - Real-time push (websockets) vs. polling for live prices. Start with polling on an interval; upgrade later.
