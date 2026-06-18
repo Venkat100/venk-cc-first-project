@@ -5,11 +5,13 @@
 > **Maintenance rule:** Claude (acting as CTO in Cowork) updates this file at the end of any meaningful exchange — new decisions, completed work, changed direction, new blockers. Append to the Changelog at the bottom every time. Keep it elaborate. When in doubt, over-document.
 
 **Last updated:** 2026-06-16
-**Current phase:** Hybrid market-data layer SHIPPED to `origin/main` (`92b329b`). **Now starting Phase 8 — live tracking & polish.** Then Phase 9 (launch).
+**Current phase:** Phase 8 (live tracking & polish) IMPLEMENTED + verified end-to-end, committed locally (`418cd66`, 1 ahead of `origin/main`), **pending push** (CTO approved). Daily `portfolio_snapshots` writer (token-protected `/api/cron/snapshot`, secret `CRON_SECRET`) + real dashboard value chart + corrected day-change/total-return math, all verified (snapshot math exact: cash 100170 + holdings 297.54 = 100467.54). **App is functionally COMPLETE through Phase 8. Only Phase 9 (launch/deploy) remains.**
+
+**Money formulas (single source of truth, in dashboard code):** total_value = cash + Σ(qty×live price); today's Δ$ = Σ(qty×dayChange) [Finnhub change-vs-prior-close]; today's Δ% = todayΔ$/(total_value−todayΔ$); total return $ = total_value − 100000; total return % = (total_value−100000)/100000×100.
 
 **Phase 8 scheduling decision (CTO, 2026-06-16):** daily `portfolio_snapshots` writer runs as a server function triggered by **Vercel Cron** (built-in once deployed in Phase 9) — fits the "server functions + server-only keys" pattern, zero extra infra. In Phase 8 we build the writer + migration + a token-protected manual trigger and test it by hand; the automatic daily schedule gets wired at deploy (Phase 9). Initial baseline seeded so the dashboard value chart isn't empty; reconstructing historical value from the transaction ledger + historical prices noted as an optional later enhancement.
 
-**Phases done:** 0 (planning) ✅ · 1 (Lovable frontend) ✅ · 2 (monorepo) ✅ · 3 (auth, $100k) ✅ · 4 (portfolio tables + RLS) ✅ · 5 (live market data) ✅ · 6 (trading engine) ✅ · 7 (What-If Simulator) ✅ · hybrid data layer ✅ — all on `origin/main`. Phase 8 (snapshots/polish) ⬅️ next.
+**Phases done:** 0 (planning) ✅ · 1 (Lovable frontend) ✅ · 2 (monorepo) ✅ · 3 (auth, $100k) ✅ · 4 (portfolio tables + RLS) ✅ · 5 (live market data) ✅ · 6 (trading engine) ✅ · 7 (What-If Simulator) ✅ · hybrid data layer ✅ — all on `origin/main`. Phase 8 (snapshots/value chart/day-change) ✅ implemented + verified, pending push. **Phase 9 (launch) is the only one left.**
 
 **Loose end (cosmetic, low priority):** simulator headline START DATE can render one day early in timezones behind UTC (`toLocaleDateString` on a UTC-midnight ISO) — dollar figures unaffected. Quick fix later.
 
