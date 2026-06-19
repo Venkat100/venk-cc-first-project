@@ -12,6 +12,7 @@ build/
 .nitro/
 .tanstack/
 .wrangler/
+.vercel/
 
 # ── Environment / secrets ─────────────────────────────────────
 .env
