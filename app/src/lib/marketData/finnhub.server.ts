@@ -78,6 +78,27 @@ async function fh52Week(symbol: string): Promise<{ high?: number; low?: number }
   return out;
 }
 
+// Finnhub's /stock/profile2 is empty for ETFs (no name). Fall back to the
+// description from /search for the EXACT symbol so funds show their real name
+// (e.g. "Vanguard S&P 500 ETF" instead of "VOO"). Cached so we don't re-search.
+async function resolveSymbolName(symbol: string): Promise<string | undefined> {
+  const sym = symbol.toUpperCase();
+  const key = `fh:name:${sym}`;
+  const hit = cachePeek<string>(key);
+  if (hit !== undefined) return hit || undefined; // "" cached = searched, no name
+  let name: string | undefined;
+  try {
+    const json = await fhGet(`/search?q=${encodeURIComponent(sym)}`);
+    const result: any[] = Array.isArray(json?.result) ? json.result : [];
+    const exact = result.find((d) => String(d.symbol).toUpperCase() === sym);
+    name = (exact?.description as string) || undefined;
+  } catch {
+    // best-effort; fall through to symbol
+  }
+  cachePut(key, name ?? "", PROFILE_TTL);
+  return name;
+}
+
 async function fhQuote(symbol: string): Promise<Quote> {
   const sym = symbol.toUpperCase();
   // Live quote (cheap) + cached profile/metric enrichment, in parallel.
@@ -89,9 +110,12 @@ async function fhQuote(symbol: string): Promise<Quote> {
   const price = num(q?.c);
   const change = num(q?.d);
   const pct = num(q?.dp);
+  // Profile name first (stocks); for ETFs/others with no profile name, resolve
+  // from symbol search; finally fall back to the bare ticker.
+  const resolvedName = profile.name || (await resolveSymbolName(sym)) || sym;
   return {
     symbol: sym,
-    name: profile.name || sym,
+    name: resolvedName,
     sector: profile.sector || "—",
     price,
     dayChange: change,
