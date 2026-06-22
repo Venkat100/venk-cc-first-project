@@ -20,6 +20,7 @@ import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
 import { Route as AppMarketsRouteImport } from './routes/app.markets'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
+import { Route as AppAgentRouteImport } from './routes/app.agent'
 import { Route as AppStockSymbolRouteImport } from './routes/app.stock.$symbol'
 
 const SimulatorRoute = SimulatorRouteImport.update({
@@ -77,6 +78,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAgentRoute = AppAgentRouteImport.update({
+  id: '/agent',
+  path: '/agent',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppStockSymbolRoute = AppStockSymbolRouteImport.update({
   id: '/stock/$symbol',
   path: '/stock/$symbol',
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/simulator': typeof SimulatorRoute
+  '/app/agent': typeof AppAgentRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/markets': typeof AppMarketsRoute
   '/app/portfolio': typeof AppPortfolioRoute
@@ -101,6 +108,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/simulator': typeof SimulatorRoute
+  '/app/agent': typeof AppAgentRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/markets': typeof AppMarketsRoute
   '/app/portfolio': typeof AppPortfolioRoute
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/simulator': typeof SimulatorRoute
+  '/app/agent': typeof AppAgentRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/markets': typeof AppMarketsRoute
   '/app/portfolio': typeof AppPortfolioRoute
@@ -132,6 +141,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/auth'
     | '/simulator'
+    | '/app/agent'
     | '/app/dashboard'
     | '/app/markets'
     | '/app/portfolio'
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/simulator'
+    | '/app/agent'
     | '/app/dashboard'
     | '/app/markets'
     | '/app/portfolio'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/auth'
     | '/simulator'
+    | '/app/agent'
     | '/app/dashboard'
     | '/app/markets'
     | '/app/portfolio'
@@ -255,6 +267,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/agent': {
+      id: '/app/agent'
+      path: '/agent'
+      fullPath: '/app/agent'
+      preLoaderRoute: typeof AppAgentRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/stock/$symbol': {
       id: '/app/stock/$symbol'
       path: '/stock/$symbol'
@@ -266,6 +285,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAgentRoute: typeof AppAgentRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppMarketsRoute: typeof AppMarketsRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
@@ -277,6 +297,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAgentRoute: AppAgentRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppMarketsRoute: AppMarketsRoute,
   AppPortfolioRoute: AppPortfolioRoute,

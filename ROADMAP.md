@@ -58,6 +58,20 @@ The loop for every step: **CTO (Cowork) writes a precise prompt → Venky runs i
 
 ---
 
+## Phase 10 — AI Portfolio Agent (post-launch epic)
+An autonomous AI "personal investor" that manages a **separate virtual sub-portfolio** (funded with an amount the user chooses from their virtual cash), picks a diversified mix of stocks/ETFs from real data + news, sizes to a chosen risk level, protects with smart trailing stops, and shows day-over-day growth + a plain-English decision log.
+
+**Decisions locked (2026-06-16):** fully autonomous within guardrails · hybrid brain (quant rules + LLM news reading, needs an Anthropic API key) · two-loop cadence (cheap intraday watchdog for stops/guardrails + ~daily LLM "thinker") · smart trailing stops + rebalance (NOT naive 1% stops) · separate agent sub-portfolio funded from virtual cash · it's an educational SIMULATION, paper money only, not financial advice (clear UI disclaimer).
+
+Honest expectation: no agent can guarantee gains; it can lose paper money. The value is intelligent, transparent, risk-managed simulation.
+
+Sub-phases:
+- **10.1 Foundations** — data model (agent_config, agent_holdings, agent_transactions, agent_decisions; RLS) + funding flow (atomic move of virtual cash main↔agent) + UI shell (AI Agent page: on/off, risk selector, fund input, disclaimer, empty holdings/log/performance).
+- **10.2 Decision engine (the "thinker")** — quant candidate scoring (momentum/volatility/diversification + Finnhub fundamentals) + LLM news/sentiment reasoning → target allocation + rationale; executes via the existing trade path into the agent sub-portfolio; guardrails (max position %, min holdings, cash buffer). Logs every decision.
+- **10.3 Risk loop (the "watchdog")** — frequent live-price check, volatility-sized trailing stops, protective sells + sensible re-entry.
+- **10.4 Agent dashboard** — day-over-day growth, holdings, decision log w/ plain-English rationale, performance vs SPY.
+- **10.5 Scheduling** — wire both loops to cron (watchdog frequent, thinker ~daily) using the CRON_SECRET pattern.
+
 ## Backlog (post-v1 ideas)
 - **Public simulator preview (conversion play):** let visitors use the What-If Simulator WITHOUT logging in — feel the magic first, then prompt sign-up to save it. The simulator is our best hook; gating it entirely behind login hurts conversion. (Currently the landing "Try the simulator / Explore demo" buttons redirect to login since `/app/*` is gated — revisit when we polish the simulator, ~Phase 7.)
 - Other: leaderboards, achievements, multiple watchlists, dividends, options, crypto, social/sharing of simulations, news feed per stock, CSV export, mobile app.

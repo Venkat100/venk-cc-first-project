@@ -54,6 +54,53 @@ export type PortfolioSnapshot = {
   captured_at: string; // date (YYYY-MM-DD)
 };
 
+// ── AI Agent (Phase 10) ───────────────────────────────────────
+export type AgentMode = "autonomous" | "approve";
+export type RiskLevel = "conservative" | "balanced" | "aggressive";
+
+export type AgentConfig = {
+  user_id: string;
+  enabled: boolean;
+  mode: AgentMode;
+  risk_level: RiskLevel;
+  agent_cash: number;
+  allocated_total: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentHolding = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  quantity: number;
+  avg_cost: number;
+  trailing_stop_price: number | null;
+  updated_at: string;
+};
+
+export type AgentTransaction = {
+  id: string;
+  user_id: string;
+  symbol: string;
+  side: TransactionSide;
+  quantity: number;
+  price: number;
+  total: number;
+  reason: string | null;
+  created_at: string;
+};
+
+export type AgentDecision = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  action: string;
+  symbol: string | null;
+  rationale: string | null;
+  signals: unknown;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -134,6 +181,75 @@ export type Database = {
           cash?: number;
           holdings_value?: number;
         };
+        Relationships: [];
+      };
+      agent_config: {
+        Row: AgentConfig;
+        Insert: {
+          user_id: string;
+          enabled?: boolean;
+          mode?: AgentMode;
+          risk_level?: RiskLevel;
+          agent_cash?: number;
+          allocated_total?: number;
+        };
+        Update: {
+          enabled?: boolean;
+          mode?: AgentMode;
+          risk_level?: RiskLevel;
+          agent_cash?: number;
+          allocated_total?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_holdings: {
+        Row: AgentHolding;
+        Insert: {
+          id?: string;
+          user_id: string;
+          symbol: string;
+          quantity: number;
+          avg_cost: number;
+          trailing_stop_price?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          quantity?: number;
+          avg_cost?: number;
+          trailing_stop_price?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_transactions: {
+        Row: AgentTransaction;
+        Insert: {
+          id?: string;
+          user_id: string;
+          symbol: string;
+          side: TransactionSide;
+          quantity: number;
+          price: number;
+          total: number;
+          reason?: string | null;
+          created_at?: string;
+        };
+        Update: { [_ in never]: never }; // append-only
+        Relationships: [];
+      };
+      agent_decisions: {
+        Row: AgentDecision;
+        Insert: {
+          id?: string;
+          user_id: string;
+          action: string;
+          symbol?: string | null;
+          rationale?: string | null;
+          signals?: unknown;
+          created_at?: string;
+        };
+        Update: { [_ in never]: never }; // append-only
         Relationships: [];
       };
     };

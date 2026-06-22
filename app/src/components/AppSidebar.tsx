@@ -1,11 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, LineChart, FlaskConical, PieChart, Star, Settings, Sparkles } from "lucide-react";
+import { LayoutDashboard, LineChart, FlaskConical, PieChart, Star, Settings, Sparkles, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/app/markets", label: "Markets", icon: LineChart },
   { to: "/app/simulator", label: "Simulator", icon: FlaskConical },
+  { to: "/app/agent", label: "AI Agent", icon: Bot },
   { to: "/app/portfolio", label: "Portfolio", icon: PieChart },
   { to: "/app/watchlist", label: "Watchlist", icon: Star },
   { to: "/app/settings", label: "Settings", icon: Settings },
