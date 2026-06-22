@@ -12,7 +12,7 @@
 import { getServiceClient } from "@/lib/supabase/admin.server";
 import { fhCompanyNews } from "@/lib/marketData/finnhub.server";
 import { scoreCandidates, type Candidate } from "./quant.server";
-import { claudeReason, type ClaudeReasoning } from "./anthropic.server";
+import { claudeReason, agentModel, type ClaudeReasoning } from "./anthropic.server";
 import type { RiskLevel } from "@/lib/supabase/types";
 
 type Guardrails = { cashBuffer: number; maxPosition: number; minHoldings: number; maxHoldings: number; shortlist: number };
@@ -30,6 +30,7 @@ export type ThinkerResult = {
   reason?: string; // why it didn't run
   riskLevel?: RiskLevel;
   aiUsed?: boolean;
+  model?: string;
   guardrails?: Guardrails;
   agentCashBefore?: number;
   agentCashAfter?: number;
@@ -96,6 +97,7 @@ export async function runThinker(userId: string): Promise<ThinkerResult> {
     .filter((p) => p.include && bySym.has(p.symbol.toUpperCase()))
     .map((p) => p.symbol.toUpperCase());
   targets = Array.from(new Set(targets));
+  const claudeIncluded = new Set(targets);
 
   // enforce min holdings (top up from quant ranking) and max holdings (cap)
   for (const c of candidates) {
@@ -104,8 +106,18 @@ export async function runThinker(userId: string): Promise<ThinkerResult> {
   }
   targets = targets.slice(0, g.maxHoldings);
 
-  // weights from weight_hint (default 1), normalize, apply per-position cap, renormalize
-  let weights = targets.map((s) => Math.max(0.0001, pickBySym.get(s)?.weight_hint ?? 1));
+  // Weights: use Claude's weight_hint for genuine includes; topped-up names (or
+  // includes with a 0 hint) get a sensible default — the average included hint,
+  // or equal-weight — so a min-holdings top-up never floors to a zero position.
+  const includedHints = targets
+    .filter((s) => claudeIncluded.has(s))
+    .map((s) => pickBySym.get(s)?.weight_hint ?? 0)
+    .filter((w) => w > 0);
+  const defaultWeight = includedHints.length ? includedHints.reduce((a, b) => a + b, 0) / includedHints.length : 1;
+  let weights = targets.map((s) => {
+    const hint = claudeIncluded.has(s) ? pickBySym.get(s)?.weight_hint ?? 0 : 0;
+    return hint > 0 ? hint : defaultWeight;
+  });
   const sum0 = weights.reduce((a, b) => a + b, 0);
   weights = weights.map((w) => w / sum0);
   weights = weights.map((w) => Math.min(w, g.maxPosition));
@@ -126,7 +138,11 @@ export async function runThinker(userId: string): Promise<ThinkerResult> {
     if (qty < 1) continue;
     if (qty * cand.price > agentCashAfter) continue; // guardrail: never overspend agent_cash
 
-    const reason = pickBySym.get(sym)?.reason ?? `Quant rank ${cand.score}.`;
+    // Genuine Claude picks log Claude's rationale; topped-up names log why they
+    // were added (so a buy never carries an "exclude" rationale).
+    const reason = claudeIncluded.has(sym)
+      ? pickBySym.get(sym)?.reason ?? `Quant rank ${cand.score}.`
+      : `Added to meet the ${risk} diversification / minimum-holdings guardrail (quant rank ${cand.score}).`;
     const { data: rpc, error } = await admin.rpc("agent_execute_trade", {
       p_user_id: userId,
       p_symbol: sym,
@@ -173,6 +189,7 @@ export async function runThinker(userId: string): Promise<ThinkerResult> {
     ran: true,
     riskLevel: risk,
     aiUsed,
+    model: agentModel(),
     guardrails: g,
     agentCashBefore: round2(agentCashBefore),
     agentCashAfter: round2(agentCashAfter),

@@ -2,11 +2,16 @@
 // reads recent news/sentiment for the quant shortlist and helps pick + size a
 // portfolio. Claude chooses ONLY from the shortlist — it never invents tickers.
 //
-// Model: claude-opus-4-8 (the default). Swappable to a cheaper model (e.g.
-// claude-haiku-4-5) if cost matters more than reasoning quality.
+// Model is configurable via the server-only AGENT_MODEL env var so it can be
+// swapped (e.g. for cost) without code edits. Defaults to claude-sonnet-4-6.
 
 import Anthropic from "@anthropic-ai/sdk";
-import { requireServerEnv } from "@/lib/marketData/env.server";
+import { requireServerEnv, serverEnv } from "@/lib/marketData/env.server";
+
+const DEFAULT_AGENT_MODEL = "claude-sonnet-4-6";
+export function agentModel(): string {
+  return serverEnv("AGENT_MODEL") || DEFAULT_AGENT_MODEL;
+}
 
 export type ClaudePick = { symbol: string; include: boolean; weight_hint: number; reason: string };
 export type ClaudeReasoning = { picks: ClaudePick[]; commentary: string };
@@ -63,7 +68,7 @@ export async function claudeReason(input: { riskLevel: string; shortlist: Shortl
   );
 
   const res = await client.messages.create({
-    model: "claude-opus-4-8",
+    model: agentModel(),
     max_tokens: 2000,
     system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
     output_config: { format: { type: "json_schema", schema: SCHEMA as unknown as Record<string, unknown> } },
