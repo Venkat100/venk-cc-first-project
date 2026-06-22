@@ -144,6 +144,74 @@ export async function providerQuotes(symbols: string[]): Promise<Quote[]> {
   );
 }
 
+// ── Fundamentals / metrics (for the AI agent's quant layer) ─────────────
+export type SymbolMetrics = {
+  symbol: string;
+  week52High?: number;
+  week52Low?: number;
+  beta?: number; // volatility proxy
+  return4w?: number; // % price return, 4 weeks
+  return13w?: number; // % price return, 13 weeks
+  return26w?: number; // % price return, 26 weeks
+  return52w?: number; // % price return, 52 weeks
+};
+
+const METRICS_TTL = 6 * 60 * 60_000; // 6h
+
+/** Basic financials / momentum metrics for a symbol (Finnhub /stock/metric). */
+export async function fhMetrics(symbol: string): Promise<SymbolMetrics> {
+  const sym = symbol.toUpperCase();
+  const key = `fh:metricsfull:${sym}`;
+  const hit = cachePeek<SymbolMetrics>(key);
+  if (hit) return hit;
+  let out: SymbolMetrics = { symbol: sym };
+  try {
+    const raw = await fhGet(`/stock/metric?symbol=${encodeURIComponent(sym)}&metric=all`);
+    const m = raw?.metric ?? {};
+    const g = (k: string) => (m[k] != null ? num(m[k]) : undefined);
+    out = {
+      symbol: sym,
+      week52High: g("52WeekHigh"),
+      week52Low: g("52WeekLow"),
+      beta: g("beta"),
+      return4w: g("4WeekPriceReturnDaily") ?? g("monthToDatePriceReturnDaily"),
+      return13w: g("13WeekPriceReturnDaily"),
+      return26w: g("26WeekPriceReturnDaily"),
+      return52w: g("52WeekPriceReturnDaily"),
+    };
+  } catch {
+    // best-effort — quant degrades gracefully if metrics are missing
+  }
+  cachePut(key, out, METRICS_TTL);
+  return out;
+}
+
+export type NewsItem = { headline: string; summary?: string; datetime?: number; source?: string };
+
+/** Recent company news (Finnhub /company-news), last `days` days, top `limit`. */
+export async function fhCompanyNews(symbol: string, days = 7, limit = 5): Promise<NewsItem[]> {
+  const sym = symbol.toUpperCase();
+  const key = `fh:news:${sym}`;
+  const hit = cachePeek<NewsItem[]>(key);
+  if (hit) return hit;
+  let out: NewsItem[] = [];
+  try {
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86_400_000);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const json = await fhGet(`/company-news?symbol=${encodeURIComponent(sym)}&from=${fmt(from)}&to=${fmt(to)}`);
+    const arr: any[] = Array.isArray(json) ? json : [];
+    out = arr
+      .filter((n) => n?.headline)
+      .slice(0, limit)
+      .map((n) => ({ headline: String(n.headline), summary: n.summary ? String(n.summary).slice(0, 280) : undefined, datetime: n.datetime, source: n.source }));
+  } catch {
+    // best-effort — ETFs and quiet names may have no news
+  }
+  cachePut(key, out, 60 * 60_000); // 1h
+  return out;
+}
+
 /** Symbol search (Finnhub /search). */
 export async function providerSearch(query: string): Promise<SymbolMatch[]> {
   const json = await fhGet(`/search?q=${encodeURIComponent(query)}`);

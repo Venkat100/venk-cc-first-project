@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
-import { getAgentConfig, updateAgentConfig, fundAgent } from "@/lib/agent/api";
+import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker } from "@/lib/agent/api";
 import { getAgentHoldings, getAgentDecisions } from "@/lib/agent/queries";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD } from "@/lib/mockData";
@@ -46,6 +46,27 @@ function Agent() {
     mutationFn: updateAgentConfig,
     onSuccess: (cfg) => qc.setQueryData(["agentConfig"], cfg),
     onError: (e: Error) => toast.error(e.message || "Couldn't save that setting."),
+  });
+
+  const runMut = useMutation({
+    mutationFn: runAgentThinker,
+    onSuccess: async (r) => {
+      await Promise.all([
+        refreshProfile(),
+        qc.invalidateQueries({ queryKey: ["agentConfig"] }),
+        qc.invalidateQueries({ queryKey: ["agentHoldings"] }),
+        qc.invalidateQueries({ queryKey: ["agentDecisions"] }),
+      ]);
+      if (!r.ran) {
+        toast.message("Agent didn't trade", { description: r.reason });
+        return;
+      }
+      const n = r.executed?.length ?? 0;
+      toast.success(`Agent ran (${r.aiUsed ? "AI + quant" : "quant only"})`, {
+        description: n > 0 ? `Opened ${n} position${n === 1 ? "" : "s"}. ${r.commentary ?? ""}`.trim() : "No trades met the guardrails this run.",
+      });
+    },
+    onError: (e: Error) => toast.error(e.message || "The agent run failed."),
   });
 
   const [amount, setAmount] = useState(1000);
@@ -90,6 +111,30 @@ function Agent() {
           <span className="font-semibold">Educational simulation.</span> The agent trades virtual money only and can lose it. This is not financial advice.
         </p>
       </div>
+
+      {/* Run engine */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="text-sm font-medium">Run the agent now</p>
+            <p className="text-xs text-muted-foreground">
+              Manually trigger one decision cycle (quant screen + AI news read → trades into the agent sub-portfolio). It'll run automatically on a schedule later.
+            </p>
+          </div>
+          <Button
+            className="gap-2"
+            disabled={runMut.isPending || !config.enabled || config.agent_cash <= 0}
+            onClick={() => runMut.mutate()}
+          >
+            <Bot className="h-4 w-4" /> {runMut.isPending ? "Thinking…" : "Run agent now"}
+          </Button>
+        </CardContent>
+      </Card>
+      {(!config.enabled || config.agent_cash <= 0) && (
+        <p className="-mt-3 text-xs text-muted-foreground">
+          {config.agent_cash <= 0 ? "Fund the agent" : "Activate the agent"} to enable a run.
+        </p>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Settings */}

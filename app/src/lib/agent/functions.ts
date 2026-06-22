@@ -9,6 +9,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
+import { runThinker, type ThinkerResult } from "./thinker.server";
 import type { AgentConfig } from "@/lib/supabase/types";
 
 type Admin = ReturnType<typeof getServiceClient>;
@@ -64,6 +65,20 @@ function fundFriendly(token: string): string {
   if (token.includes("profile_not_found")) return "We couldn't find your account.";
   return "That transfer couldn't be completed. Please try again.";
 }
+
+export type ThinkerResponse = { ok: true; result: ThinkerResult } | { ok: false; error: string };
+
+export const runAgentThinkerFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
+  .handler(async ({ data }): Promise<ThinkerResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      const result = await runThinker(userId);
+      return { ok: true, result };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "The agent run failed." };
+    }
+  });
 
 export const fundAgentFn = createServerFn({ method: "POST" })
   .inputValidator(

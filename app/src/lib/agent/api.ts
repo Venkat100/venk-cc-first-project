@@ -2,7 +2,8 @@
 // access token so the server can verify identity; unwrap envelopes.
 
 import { supabase } from "@/lib/supabase/client";
-import { getAgentConfigFn, updateAgentConfigFn, fundAgentFn, type FundResponse } from "./functions";
+import { getAgentConfigFn, updateAgentConfigFn, fundAgentFn, runAgentThinkerFn, type FundResponse, type ThinkerResponse } from "./functions";
+import type { ThinkerResult } from "./thinker.server";
 import type { AgentConfig, AgentMode, RiskLevel } from "@/lib/supabase/types";
 
 async function token(): Promise<string> {
@@ -32,3 +33,12 @@ export async function fundAgent(amount: number): Promise<FundResult> {
   if (!res.ok) throw new Error(res.error);
   return { cashBalance: res.cashBalance, agentCash: res.agentCash, allocatedTotal: res.allocatedTotal };
 }
+
+/** Run the agent's decision engine once (manual trigger). */
+export async function runAgentThinker(): Promise<ThinkerResult> {
+  const res: ThinkerResponse = await runAgentThinkerFn({ data: { accessToken: await token() } });
+  if (!res.ok) throw new Error(res.error);
+  return res.result;
+}
+
+export type { ThinkerResult } from "./thinker.server";
