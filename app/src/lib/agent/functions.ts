@@ -10,6 +10,7 @@ import { z } from "zod";
 
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { runThinker, type ThinkerResult } from "./thinker.server";
+import { runWatchdog, type WatchdogResult } from "./watchdog.server";
 import type { AgentConfig } from "@/lib/supabase/types";
 
 type Admin = ReturnType<typeof getServiceClient>;
@@ -77,6 +78,20 @@ export const runAgentThinkerFn = createServerFn({ method: "POST" })
       return { ok: true, result };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "The agent run failed." };
+    }
+  });
+
+export type WatchdogResponse = { ok: true; result: WatchdogResult } | { ok: false; error: string };
+
+export const runAgentWatchdogFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
+  .handler(async ({ data }): Promise<WatchdogResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      const result = await runWatchdog(userId);
+      return { ok: true, result };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "The watchdog run failed." };
     }
   });
 

@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
-import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker } from "@/lib/agent/api";
+import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker, runAgentWatchdog } from "@/lib/agent/api";
 import { getAgentHoldings, getAgentDecisions } from "@/lib/agent/queries";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD } from "@/lib/mockData";
@@ -69,6 +69,30 @@ function Agent() {
     onError: (e: Error) => toast.error(e.message || "The agent run failed."),
   });
 
+  const watchdogMut = useMutation({
+    mutationFn: runAgentWatchdog,
+    onSuccess: async (r) => {
+      await Promise.all([
+        refreshProfile(),
+        qc.invalidateQueries({ queryKey: ["agentConfig"] }),
+        qc.invalidateQueries({ queryKey: ["agentHoldings"] }),
+        qc.invalidateQueries({ queryKey: ["agentDecisions"] }),
+      ]);
+      if (!r.ran) {
+        toast.message("Watchdog didn't run", { description: r.reason });
+        return;
+      }
+      const sells = r.sells ?? 0;
+      toast.success("Watchdog ran", {
+        description:
+          sells > 0
+            ? `${sells} protective sell${sells === 1 ? "" : "s"} · ${r.ratchets ?? 0} stop${(r.ratchets ?? 0) === 1 ? "" : "s"} raised across ${r.checked} holding${r.checked === 1 ? "" : "s"}.`
+            : `No stops breached. ${r.ratchets ?? 0} stop${(r.ratchets ?? 0) === 1 ? "" : "s"} raised across ${r.checked} holding${r.checked === 1 ? "" : "s"}.`,
+      });
+    },
+    onError: (e: Error) => toast.error(e.message || "The watchdog run failed."),
+  });
+
   const [amount, setAmount] = useState(1000);
   const fundMut = useMutation({
     mutationFn: (amt: number) => fundAgent(amt),
@@ -89,6 +113,7 @@ function Agent() {
   }
 
   const amt = Math.max(0, Math.floor(amount || 0));
+  const holdingsCount = holdingsQ.data?.length ?? 0;
   const fundDisabled = fundMut.isPending || amt <= 0 || amt > cash;
   const withdrawDisabled = fundMut.isPending || amt <= 0 || amt > config.agent_cash;
 
@@ -130,6 +155,29 @@ function Agent() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Watchdog (protective trailing stops) */}
+      <Card>
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <div>
+            <p className="text-sm font-medium">Run the risk watchdog</p>
+            <p className="text-xs text-muted-foreground">
+              Checks live prices for held positions, raises each volatility-sized trailing stop, and protectively sells any holding that breaks below its stop. No AI, no re-buying — proceeds stay in the agent. It'll run frequently on a schedule later.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={watchdogMut.isPending || !config.enabled || holdingsCount === 0}
+            onClick={() => watchdogMut.mutate()}
+          >
+            <ShieldAlert className="h-4 w-4" /> {watchdogMut.isPending ? "Checking…" : "Run watchdog"}
+          </Button>
+        </CardContent>
+      </Card>
+      {config.enabled && holdingsCount === 0 && (
+        <p className="-mt-3 text-xs text-muted-foreground">The watchdog activates once the agent holds positions.</p>
+      )}
       {(!config.enabled || config.agent_cash <= 0) && (
         <p className="-mt-3 text-xs text-muted-foreground">
           {config.agent_cash <= 0 ? "Fund the agent" : "Activate the agent"} to enable a run.

@@ -13,6 +13,7 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { fhCompanyNews } from "@/lib/marketData/finnhub.server";
 import { scoreCandidates, type Candidate } from "./quant.server";
 import { claudeReason, agentModel, type ClaudeReasoning } from "./anthropic.server";
+import { stopPct } from "./watchdog.server";
 import type { RiskLevel } from "@/lib/supabase/types";
 
 type Guardrails = { cashBuffer: number; maxPosition: number; minHoldings: number; maxHoldings: number; shortlist: number };
@@ -158,6 +159,11 @@ export async function runThinker(userId: string): Promise<ThinkerResult> {
     const r = rpc as Record<string, unknown>;
     agentCashAfter = Number(r.agent_cash);
     executed.push({ symbol: sym, side: "buy", quantity: qty, price: cand.price, total: round2(qty * cand.price), weight: round2(weight), reason });
+
+    // Seed the protective trailing stop at buy time = price × (1 − stopPct);
+    // the watchdog (10.3) then ratchets it up as the price rises.
+    const seedStop = round2(cand.price * (1 - stopPct(cand.signals.beta, risk)));
+    await admin.from("agent_holdings").update({ trailing_stop_price: seedStop }).eq("user_id", userId).eq("symbol", sym);
 
     // per-action decision log
     await admin.from("agent_decisions").insert({

@@ -2,8 +2,9 @@
 // access token so the server can verify identity; unwrap envelopes.
 
 import { supabase } from "@/lib/supabase/client";
-import { getAgentConfigFn, updateAgentConfigFn, fundAgentFn, runAgentThinkerFn, type FundResponse, type ThinkerResponse } from "./functions";
+import { getAgentConfigFn, updateAgentConfigFn, fundAgentFn, runAgentThinkerFn, runAgentWatchdogFn, type FundResponse, type ThinkerResponse, type WatchdogResponse } from "./functions";
 import type { ThinkerResult } from "./thinker.server";
+import type { WatchdogResult } from "./watchdog.server";
 import type { AgentConfig, AgentMode, RiskLevel } from "@/lib/supabase/types";
 
 async function token(): Promise<string> {
@@ -41,4 +42,12 @@ export async function runAgentThinker(): Promise<ThinkerResult> {
   return res.result;
 }
 
+/** Run the agent's protective trailing-stop watchdog once (manual trigger). */
+export async function runAgentWatchdog(): Promise<WatchdogResult> {
+  const res: WatchdogResponse = await runAgentWatchdogFn({ data: { accessToken: await token() } });
+  if (!res.ok) throw new Error(res.error);
+  return res.result;
+}
+
 export type { ThinkerResult } from "./thinker.server";
+export type { WatchdogResult } from "./watchdog.server";
