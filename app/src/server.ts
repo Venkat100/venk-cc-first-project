@@ -43,9 +43,21 @@ export default {
       // Token-protected snapshot trigger (Vercel Cron in Phase 9). Handled here
       // so it's a stable HTTP path independent of the app router. Dynamic import
       // keeps the server-only writer out of the SSR/client path.
-      if (new URL(request.url).pathname === "/api/cron/snapshot") {
+      const pathname = new URL(request.url).pathname;
+      if (pathname === "/api/cron/snapshot") {
         const { handleSnapshotRequest } = await import("./lib/snapshots/endpoint.server");
         return await handleSnapshotRequest(request);
+      }
+      // Agent autopilot crons (Phase 10.5): thinker daily (Vercel Cron), watchdog
+      // intraday (GitHub Actions). Dynamic import keeps server-only code off the
+      // SSR/client path.
+      if (pathname === "/api/cron/agent-thinker") {
+        const { handleAgentThinkerRequest } = await import("./lib/agent/cron.server");
+        return await handleAgentThinkerRequest(request);
+      }
+      if (pathname === "/api/cron/agent-watchdog") {
+        const { handleAgentWatchdogRequest } = await import("./lib/agent/cron.server");
+        return await handleAgentWatchdogRequest(request);
       }
 
       const handler = await getServerEntry();

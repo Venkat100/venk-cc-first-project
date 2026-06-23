@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
+      "path": "/api/cron/agent-thinker",
+      "schedule": "30 21 * * *"
+    },
+    {
       "path": "/api/cron/snapshot",
       "schedule": "0 22 * * *"
     }
