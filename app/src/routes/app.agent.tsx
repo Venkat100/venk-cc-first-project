@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,14 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
+import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker, runAgentWatchdog } from "@/lib/agent/api";
-import { getAgentHoldings, getAgentDecisions } from "@/lib/agent/queries";
+import { getAgentHoldings, getAgentDecisions, getAgentSnapshots } from "@/lib/agent/queries";
+import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useAuth } from "@/lib/auth/auth-context";
-import { fmtUSD } from "@/lib/mockData";
+import { fmtUSD, fmtPct } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import type { RiskLevel, AgentMode } from "@/lib/supabase/types";
+import type { RiskLevel, AgentMode, AgentDecision } from "@/lib/supabase/types";
 import { toast } from "sonner";
-import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye } from "lucide-react";
 
 export const Route = createFileRoute("/app/agent")({
   head: () => ({ meta: [{ title: "AI Agent · PaperTrader" }] }),
@@ -40,7 +42,25 @@ function Agent() {
   const configQ = useQuery({ queryKey: ["agentConfig"], queryFn: getAgentConfig });
   const holdingsQ = useQuery({ queryKey: ["agentHoldings"], queryFn: getAgentHoldings });
   const decisionsQ = useQuery({ queryKey: ["agentDecisions"], queryFn: getAgentDecisions });
+  const snapshotsQ = useQuery({ queryKey: ["agentSnapshots"], queryFn: getAgentSnapshots });
   const config = configQ.data;
+
+  const agentHoldings = holdingsQ.data ?? [];
+  const symbols = useMemo(() => agentHoldings.map((h) => h.symbol), [agentHoldings]);
+  const quotesQ = useQuotes(symbols);
+  const quotes = quotesQ.data;
+  const pricesReady = agentHoldings.length === 0 || quotesQ.isSuccess;
+
+  // Agent value = agent_cash + Σ(qty × live price). Return vs the amount allocated.
+  const agentCash = config?.agent_cash ?? 0;
+  const allocated = config?.allocated_total ?? 0;
+  const holdingsValue = useMemo(
+    () => agentHoldings.reduce((sum, h) => sum + quoteOf(quotes, h.symbol).price * h.quantity, 0),
+    [agentHoldings, quotes],
+  );
+  const totalValue = agentCash + holdingsValue;
+  const retAbs = totalValue - allocated;
+  const retPct = allocated > 0 ? (retAbs / allocated) * 100 : 0;
 
   const updateMut = useMutation({
     mutationFn: updateAgentConfig,
@@ -136,6 +156,21 @@ function Agent() {
           <span className="font-semibold">Educational simulation.</span> The agent trades virtual money only and can lose it. This is not financial advice.
         </p>
       </div>
+
+      {/* Summary header — agent value, return vs allocated, invested/cash split */}
+      {(allocated > 0 || totalValue > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryStat label="Agent value" value={pricesReady ? fmtUSD(totalValue) : "—"} sub={`${agentHoldings.length} position${agentHoldings.length === 1 ? "" : "s"}`} />
+          <SummaryStat
+            label="Total return"
+            value={pricesReady ? `${retAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(retAbs))}` : "—"}
+            sub={pricesReady ? `${fmtPct(retPct)} vs ${fmtUSD(allocated)} allocated` : ""}
+            tone={retAbs >= 0 ? "gain" : "loss"}
+          />
+          <SummaryStat label="Invested" value={pricesReady ? fmtUSD(holdingsValue) : "—"} sub="In positions" />
+          <SummaryStat label="Cash" value={fmtUSD(agentCash)} sub="Uninvested, ready to deploy" />
+        </div>
+      )}
 
       {/* Run engine */}
       <Card>
@@ -280,30 +315,109 @@ function Agent() {
         </Card>
       </div>
 
-      {/* Holdings / Performance / Decision log — empty until the engine runs */}
+      {/* Agent holdings — live values, weights, P&L, and the watchdog's stop levels */}
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Agent holdings</CardTitle></CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="overflow-x-auto p-0">
           {holdingsQ.isLoading ? (
             <LoadingState label="Loading…" />
           ) : holdingsQ.isError ? (
             <ErrorState message={(holdingsQ.error as Error)?.message} />
-          ) : (holdingsQ.data ?? []).length === 0 ? (
-            <EmptyState icon={Wallet} title="No agent positions yet" description="Fund and activate the agent — once the engine is live, the positions it opens will appear here." />
+          ) : agentHoldings.length === 0 ? (
+            <EmptyState icon={Wallet} title="No agent positions yet" description="Fund and activate the agent, then run it — the positions it opens will appear here." />
+          ) : quotesQ.isError ? (
+            <ErrorState message="Couldn't load live prices. Please try again in a moment." />
+          ) : !pricesReady ? (
+            <LoadingState label="Loading live prices…" />
           ) : (
-            <div className="px-4 py-3 text-sm text-muted-foreground">{(holdingsQ.data ?? []).length} positions</div>
+            <table className="w-full min-w-[820px] text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Symbol</th>
+                  <th className="py-3 font-medium text-right">Qty</th>
+                  <th className="py-3 font-medium text-right">Avg cost</th>
+                  <th className="py-3 font-medium text-right">Price</th>
+                  <th className="py-3 font-medium text-right">Market value</th>
+                  <th className="py-3 font-medium text-right">Weight</th>
+                  <th className="py-3 font-medium text-right">P&L</th>
+                  <th className="px-4 py-3 font-medium text-right">Trailing stop</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agentHoldings.map((h) => {
+                  const q = quoteOf(quotes, h.symbol);
+                  const mv = q.price * h.quantity;
+                  const pl = (q.price - h.avg_cost) * h.quantity;
+                  const up = pl >= 0;
+                  const weight = holdingsValue > 0 ? (mv / holdingsValue) * 100 : 0;
+                  const stop = h.trailing_stop_price;
+                  const cushion = stop != null && q.price > 0 ? ((q.price - stop) / q.price) * 100 : null;
+                  return (
+                    <tr key={h.symbol} className="border-b border-border/60 last:border-0">
+                      <td className="px-4 py-3">
+                        <div className="font-semibold">{q.symbol}</div>
+                        <div className="text-xs text-muted-foreground truncate max-w-[160px]">{q.name}</div>
+                      </td>
+                      <td className="py-3 text-right tabular">{h.quantity}</td>
+                      <td className="py-3 text-right tabular">{fmtUSD(h.avg_cost)}</td>
+                      <td className="py-3 text-right tabular">{fmtUSD(q.price)}</td>
+                      <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
+                      <td className="py-3 text-right tabular text-muted-foreground">{weight.toFixed(1)}%</td>
+                      <td className={cn("py-3 text-right tabular font-medium", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
+                        {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="text-xs opacity-80">({fmtPct(h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0)})</span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular">
+                        {stop != null ? (
+                          <>
+                            <div className="flex items-center justify-end gap-1">
+                              <ShieldCheck className="h-3.5 w-3.5 text-[color:var(--color-primary)]" />
+                              {fmtUSD(stop)}
+                            </div>
+                            {cushion != null && (
+                              <div className={cn("text-xs", cushion >= 0 ? "text-muted-foreground" : "text-[color:var(--color-loss)]")}>
+                                {cushion >= 0 ? `${cushion.toFixed(1)}% cushion` : "below stop"}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </CardContent>
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        {/* Performance */}
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><LineChart className="h-4 w-4" /> Performance</CardTitle></CardHeader>
-          <CardContent className="p-0">
-            <EmptyState icon={LineChart} title="No performance yet" description="Day-over-day growth vs. the amount you allocated will appear once the agent starts trading." />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2"><LineChart className="h-4 w-4" /> Performance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {allocated > 0 || totalValue > 0 ? (
+              <>
+                <PortfolioValueChart
+                  snapshots={snapshotsQ.data ?? []}
+                  liveTotal={totalValue}
+                  baseline={allocated}
+                  loading={snapshotsQ.isLoading}
+                  error={snapshotsQ.isError ? (snapshotsQ.error as Error)?.message : undefined}
+                  height={260}
+                />
+                <p className="mt-2 text-[11px] text-muted-foreground">Dashed line = amount allocated ({fmtUSD(allocated)}). SPY benchmark overlay coming soon.</p>
+              </>
+            ) : (
+              <div className="p-0"><EmptyState icon={LineChart} title="No performance yet" description="Day-over-day growth vs. the amount you allocated will appear once you fund and run the agent." /></div>
+            )}
           </CardContent>
         </Card>
 
+        {/* Decision log */}
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><ListTree className="h-4 w-4" /> Decision log</CardTitle></CardHeader>
           <CardContent className="p-0">
@@ -312,13 +426,50 @@ function Agent() {
             ) : decisionsQ.isError ? (
               <ErrorState message={(decisionsQ.error as Error)?.message} />
             ) : (decisionsQ.data ?? []).length === 0 ? (
-              <EmptyState icon={ListTree} title="No decisions yet" description="The agent will explain every buy, sell, and hold here in plain English once it starts trading." />
+              <EmptyState icon={ListTree} title="No decisions yet" description="The agent explains every buy, protective sell, and rebalance here in plain English." />
             ) : (
-              <div className="px-4 py-3 text-sm text-muted-foreground">{(decisionsQ.data ?? []).length} decisions</div>
+              <div className="max-h-[420px] overflow-y-auto divide-y divide-border/60">
+                {(decisionsQ.data ?? []).map((d) => <DecisionRow key={d.id} d={d} />)}
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
+    </div>
+  );
+}
+
+const ACTION_META: Record<string, { label: string; icon: typeof ShoppingCart; cls: string }> = {
+  buy: { label: "Buy", icon: ShoppingCart, cls: "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]" },
+  sell: { label: "Protective sell", icon: ShieldCheck, cls: "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]" },
+  rebalance: { label: "Rebalance", icon: RefreshCw, cls: "bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)]" },
+  watchdog: { label: "Watchdog", icon: Eye, cls: "bg-muted text-muted-foreground" },
+};
+
+function DecisionRow({ d }: { d: AgentDecision }) {
+  const meta = ACTION_META[d.action] ?? { label: d.action, icon: ListTree, cls: "bg-muted text-muted-foreground" };
+  const Icon = meta.icon;
+  const accent = d.action === "buy" ? "border-l-[color:var(--color-gain)]" : d.action === "sell" ? "border-l-[color:var(--color-loss)]" : d.action === "rebalance" ? "border-l-[color:var(--color-primary)]" : "border-l-border";
+  return (
+    <div className={cn("border-l-2 px-4 py-3", accent)}>
+      <div className="flex items-center gap-2">
+        <span className={cn("inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider", meta.cls)}>
+          <Icon className="h-3 w-3" /> {meta.label}
+        </span>
+        {d.symbol && <span className="text-sm font-semibold">{d.symbol}</span>}
+        <span className="ml-auto text-[11px] text-muted-foreground tabular">{new Date(d.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+      </div>
+      {d.rationale && <p className="mt-1.5 text-sm text-foreground/90">{d.rationale}</p>}
+    </div>
+  );
+}
+
+function SummaryStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "gain" | "loss" }) {
+  return (
+    <div className="rounded-lg border border-border bg-surface p-4">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={cn("mt-1 text-xl font-semibold tabular", tone === "gain" && "text-[color:var(--color-gain)]", tone === "loss" && "text-[color:var(--color-loss)]")}>{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }

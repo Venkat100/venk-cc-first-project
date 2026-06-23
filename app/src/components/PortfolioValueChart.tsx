@@ -15,6 +15,8 @@ const STARTING_CAPITAL = 100000;
 /**
  * Real portfolio-value chart from daily snapshots, with a live "now" point so
  * the end of the chart matches the headline value. Builds up day by day.
+ * `baseline` is the dashed reference line (default $100k for the main account;
+ * the agent passes its allocated amount).
  */
 export function PortfolioValueChart({
   snapshots,
@@ -22,12 +24,14 @@ export function PortfolioValueChart({
   loading,
   error,
   height = 300,
+  baseline = STARTING_CAPITAL,
 }: {
   snapshots: Snapshot[];
   liveTotal: number;
   loading?: boolean;
   error?: string;
   height?: number;
+  baseline?: number;
 }) {
   const [range, setRange] = useState<ChartRange>("1M");
 
@@ -85,8 +89,8 @@ export function PortfolioValueChart({
                 labelFormatter={(v) => new Date(v as string).toLocaleDateString()}
                 formatter={(v: number) => [fmtUSD(v), "Portfolio value"]}
               />
-              {/* Starting-capital reference so gains/losses vs $100k are obvious. */}
-              <ReferenceLine y={STARTING_CAPITAL} stroke="var(--color-border)" strokeDasharray="4 4" />
+              {/* Baseline reference so gains/losses vs the starting amount are obvious. */}
+              <ReferenceLine y={baseline} stroke="var(--color-border)" strokeDasharray="4 4" />
               <Area type="monotone" dataKey="v" stroke={stroke} strokeWidth={2} fill="url(#pv-grad)" />
             </AreaChart>
           </ResponsiveContainer>

@@ -101,6 +101,15 @@ export type AgentDecision = {
   signals: unknown;
 };
 
+export type AgentSnapshot = {
+  id: string;
+  user_id: string;
+  total_value: number;
+  agent_cash: number;
+  holdings_value: number;
+  captured_at: string; // date (YYYY-MM-DD)
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -250,6 +259,23 @@ export type Database = {
           created_at?: string;
         };
         Update: { [_ in never]: never }; // append-only
+        Relationships: [];
+      };
+      agent_snapshots: {
+        Row: AgentSnapshot;
+        Insert: {
+          id?: string;
+          user_id: string;
+          total_value: number;
+          agent_cash: number;
+          holdings_value: number;
+          captured_at?: string;
+        };
+        Update: {
+          total_value?: number;
+          agent_cash?: number;
+          holdings_value?: number;
+        };
         Relationships: [];
       };
     };
