@@ -1,0 +1,43 @@
+# Agent risk watchdog — intraday autopilot (Phase 10.5).
+#
+# Vercel Hobby cron runs at most ONCE PER DAY, which is too coarse for protective
+# trailing stops. So this free GitHub Actions workflow pings the production
+# watchdog endpoint several times during US market hours. The endpoint itself
+# no-ops cheaply when the market is closed (weekend / outside 9:30–16:00 ET).
+#
+# ── ONE-TIME SETUP ──
+# Add two repository secrets (Settings → Secrets and variables → Actions):
+#   • CRON_SECRET    — the SAME value as CRON_SECRET in Vercel.
+#   • AGENT_BASE_URL — prod base URL, no trailing slash, e.g.
+#                      https://venk-cc-first-project.vercel.app
+name: Agent Watchdog
+
+on:
+  schedule:
+    # Every 30 minutes, 13:00–21:59 UTC, Monday–Friday.
+    - cron: "*/30 13-21 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  ping-watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping production watchdog endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          AGENT_BASE_URL: ${{ secrets.AGENT_BASE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$AGENT_BASE_URL" ]; then
+            echo "::error::Missing CRON_SECRET and/or AGENT_BASE_URL repository secrets."
+            exit 1
+          fi
+          http_code=$(curl -sS -o /tmp/watchdog.json -w "%{http_code}" \
+            -X POST "$AGENT_BASE_URL/api/cron/agent-watchdog" \
+            -H "Authorization: Bearer $CRON_SECRET")
+          echo "HTTP $http_code"
+          cat /tmp/watchdog.json || true
+          echo ""
+          case "$http_code" in
+            2*) echo "Watchdog ping OK." ;;
+            *) echo "::error::Watchdog ping failed (HTTP $http_code)."; exit 1 ;;
+          esac
