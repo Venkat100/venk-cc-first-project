@@ -7,10 +7,24 @@
 
 import { providerQuotes, fhMetrics, type SymbolMetrics } from "@/lib/marketData/finnhub.server";
 import { MARKET_UNIVERSE } from "@/lib/marketData";
+import type { Quote } from "@/lib/marketData/types";
 import type { RiskLevel } from "@/lib/supabase/types";
 
 const ETFS = ["SPY", "QQQ", "VOO"] as const;
 export const AGENT_UNIVERSE: string[] = Array.from(new Set([...MARKET_UNIVERSE, ...ETFS]));
+
+// A per-run snapshot of the universe's quotes + metrics. The market data is the
+// SAME for every agent (only the risk-weighted scoring differs), so a batch can
+// fetch it ONCE and reuse it for every user instead of re-fetching per user.
+export type UniverseData = { quotes: Quote[]; metrics: SymbolMetrics[] };
+
+export async function prefetchUniverse(): Promise<UniverseData> {
+  const [quotes, metrics] = await Promise.all([
+    providerQuotes(AGENT_UNIVERSE),
+    Promise.all(AGENT_UNIVERSE.map((s) => fhMetrics(s).catch((): SymbolMetrics => ({ symbol: s })))),
+  ]);
+  return { quotes, metrics };
+}
 
 export type Candidate = {
   symbol: string;
@@ -35,10 +49,10 @@ function z(values: number[]): (v: number) => number {
   return (v: number) => (Number.isFinite(v) ? (v - mean) / sd : 0);
 }
 
-/** Score + rank the universe for a risk level. Returns highest-first. */
-export async function scoreCandidates(risk: RiskLevel): Promise<Candidate[]> {
-  const quotes = await providerQuotes(AGENT_UNIVERSE);
-  const metrics = await Promise.all(AGENT_UNIVERSE.map((s) => fhMetrics(s).catch((): SymbolMetrics => ({ symbol: s }))));
+/** Score + rank the universe for a risk level. Returns highest-first. Pass
+ *  `prefetched` (from prefetchUniverse) to reuse one snapshot across many runs. */
+export async function scoreCandidates(risk: RiskLevel, prefetched?: UniverseData): Promise<Candidate[]> {
+  const { quotes, metrics } = prefetched ?? (await prefetchUniverse());
   const metricBySym = new Map(metrics.map((m) => [m.symbol, m]));
 
   const raw = quotes

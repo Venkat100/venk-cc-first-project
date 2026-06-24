@@ -13,6 +13,7 @@
 import { requireServerEnv } from "./env.server";
 import { ProviderError, num } from "./provider.server";
 import { cachePeek, cachePut } from "./cache.server";
+import { RateLimiter, withRetry, withTimeout } from "./ratelimit.server";
 import type { Quote, SymbolMatch } from "./types";
 
 const FH_BASE = "https://finnhub.io/api/v1";
@@ -21,18 +22,55 @@ const FH_BASE = "https://finnhub.io/api/v1";
 const PROFILE_TTL = 24 * 60 * 60_000; // 24h
 const METRIC_TTL = 6 * 60 * 60_000; // 6h
 
+// Stay safely under Finnhub's 60 req/min: ≤50 starts per rolling minute, ≤6 in
+// flight. A single module-level limiter governs EVERY Finnhub call in the
+// process, so a many-agent batch can't blow the cap. Per-call timeout prevents
+// a stuck request from hanging an unattended run; 429/5xx/network → retry+backoff.
+const FETCH_TIMEOUT_MS = 8_000;
+const limiter = new RateLimiter(50, 6);
+
+// Test/telemetry counters: actual network attempts (incl. retries).
+let _netFetches = 0;
+let _quoteFetches = 0;
+export function fetchStats() {
+  return { total: _netFetches, quotes: _quoteFetches };
+}
+export function resetFetchStats() {
+  _netFetches = 0;
+  _quoteFetches = 0;
+}
+
 async function fhGet(path: string): Promise<any> {
   const token = requireServerEnv("FINNHUB_API_KEY");
   const sep = path.includes("?") ? "&" : "?";
-  const res = await fetch(`${FH_BASE}${path}${sep}token=${token}`);
-  if (res.status === 429) throw new ProviderError("Finnhub rate limit", 429);
-  if (!res.ok) throw new ProviderError(`Finnhub HTTP ${res.status}`, res.status);
-  const json = await res.json();
-  // Finnhub returns {error: "..."} on some failures (e.g. invalid key/symbol).
-  if (json && typeof json === "object" && "error" in json && json.error) {
-    throw new ProviderError(String(json.error));
-  }
-  return json;
+  const url = `${FH_BASE}${path}${sep}token=${token}`;
+  const isQuote = path.startsWith("/quote");
+  return limiter.run(() =>
+    withRetry(
+      () =>
+        withTimeout(async (signal) => {
+          _netFetches++;
+          if (isQuote) _quoteFetches++;
+          const res = await fetch(url, { signal });
+          if (res.status === 429) throw new ProviderError("Finnhub rate limit", 429);
+          if (!res.ok) throw new ProviderError(`Finnhub HTTP ${res.status}`, res.status);
+          const json = await res.json();
+          // Finnhub returns {error: "..."} on some failures (e.g. invalid key/symbol).
+          if (json && typeof json === "object" && "error" in json && json.error) {
+            throw new ProviderError(String(json.error));
+          }
+          return json;
+        }, FETCH_TIMEOUT_MS),
+      {
+        retries: 3,
+        baseMs: 500,
+        // Retry rate-limit / server / network / timeout; never retry a 4xx like
+        // an invalid symbol (ProviderError with no/!retriable code).
+        isRetriable: (e) =>
+          e instanceof ProviderError ? e.code === 429 || (e.code ?? 0) >= 500 : true,
+      },
+    ),
+  );
 }
 
 type Profile = { name?: string; sector?: string; marketCap?: number; logo?: string; exchange?: string };

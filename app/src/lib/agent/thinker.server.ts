@@ -11,7 +11,7 @@
 
 import { getServiceClient } from "@/lib/supabase/admin.server";
 import { fhCompanyNews, providerQuotes } from "@/lib/marketData/finnhub.server";
-import { scoreCandidates, type Candidate } from "./quant.server";
+import { scoreCandidates, type Candidate, type UniverseData } from "./quant.server";
 import { claudeReason, agentModel, type ClaudeReasoning } from "./anthropic.server";
 import { stopPct } from "./watchdog.server";
 import { planRebalance, DRIFT_BAND, COOLDOWN_DAYS, type PlanTarget, type PlanHolding } from "./rebalance";
@@ -49,7 +49,7 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-export async function runThinker(userId: string, opts: { disableAi?: boolean } = {}): Promise<ThinkerResult> {
+export async function runThinker(userId: string, opts: { disableAi?: boolean; prefetch?: UniverseData } = {}): Promise<ThinkerResult> {
   const admin = getServiceClient();
   const errors: string[] = [];
 
@@ -62,8 +62,8 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean } =
   const risk = cfg.risk_level as RiskLevel;
   const g = GUARDRAILS[risk];
 
-  // 1) QUANT
-  const candidates = await scoreCandidates(risk);
+  // 1) QUANT (reuse the per-run universe snapshot when the batch supplies one)
+  const candidates = await scoreCandidates(risk, opts.prefetch);
   if (candidates.length === 0) return { ran: false, reason: "No live market data available right now — try again shortly." };
   const shortlist = candidates.slice(0, g.shortlist);
 

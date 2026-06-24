@@ -21,14 +21,21 @@
 // should instead generate *proposals* for the user to confirm. Not built yet —
 // for now they're simply not auto-traded.
 //
-// SCALING CAVEAT (hardening, not solved here): the thinker makes one LLM call
-// per autonomous agent per run (fine), but both loops price held symbols via
-// Finnhub (60 req/min free tier). We run agents SEQUENTIALLY (natural pacing)
-// rather than in parallel, but as the user base grows this will need real
-// throttling / a shared price cache / batched quotes. Logged in HANDOFF.
+// RATE-LIMIT SAFETY (hardening #2): both loops price held symbols via Finnhub
+// (60 req/min free tier). To stay safe + fast as the user base grows:
+//   • Per-run DEDUP — the thinker batch fetches ONE universe snapshot and reuses
+//     it for every agent; the watchdog batch fetches the UNION of held symbols
+//     once and reuses it for every agent. Most agents share the same ~12 names,
+//     so unique fetches stay tiny even with many users.
+//   • A global limiter + retry/backoff + per-call timeout in finnhub.server.ts
+//     keeps every Finnhub call under the cap and resilient (a stuck/failing
+//     symbol is skipped, never hangs or aborts the batch).
+// Next lever if needed: a durable Postgres price_cache (deferred since Phase 5).
 
 import { serverEnv } from "@/lib/marketData/env.server";
+import { providerQuotes, fhMetrics } from "@/lib/marketData/finnhub.server";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { prefetchUniverse, type UniverseData } from "./quant.server";
 import { runThinker } from "./thinker.server";
 import { runWatchdog, type WatchdogSources } from "./watchdog.server";
 
@@ -80,19 +87,24 @@ export type ThinkerBatchSummary = {
 
 // `onlyUserId` scopes the batch to one agent (on-demand / verification); omitted
 // in production so the cron runs every eligible agent.
-export async function runThinkerForAllAgents(opts: { onlyUserId?: string } = {}): Promise<ThinkerBatchSummary> {
+export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUserIds?: string[]; prefetch?: UniverseData } = {}): Promise<ThinkerBatchSummary> {
   const admin = getServiceClient();
   const errors: string[] = [];
   let q = admin.from("agent_config").select("user_id").eq("enabled", true).eq("mode", "autonomous").gt("agent_cash", 0);
   if (opts.onlyUserId) q = q.eq("user_id", opts.onlyUserId);
+  if (opts.onlyUserIds) q = q.in("user_id", opts.onlyUserIds);
   const { data: cfgs, error } = await q;
   if (error) throw new Error("read agent_config: " + error.message);
+
+  // Price the universe ONCE for the whole batch (same data for every agent) and
+  // reuse it — instead of every agent re-fetching the same ~12 symbols.
+  const prefetch = (cfgs ?? []).length ? opts.prefetch ?? (await prefetchUniverse()) : undefined;
 
   const results: ThinkerBatchSummary["results"] = [];
   let tradesTotal = 0;
   for (const c of cfgs ?? []) {
     try {
-      const r = await runThinker(c.user_id);
+      const r = await runThinker(c.user_id, { prefetch });
       const trades = r.executed?.length ?? 0;
       tradesTotal += trades;
       results.push({ userId: c.user_id, ran: r.ran, trades, reason: r.ran ? undefined : r.reason });
@@ -118,7 +130,7 @@ export type WatchdogBatchSummary = {
 
 // `sources`/`skipMarketCheck`/`onlyUserId` exist only for verification; production
 // calls with no args (real market gate, real quote sources, every eligible agent).
-export async function runWatchdogForAllAgents(opts: { onlyUserId?: string; sources?: WatchdogSources; skipMarketCheck?: boolean } = {}): Promise<WatchdogBatchSummary> {
+export async function runWatchdogForAllAgents(opts: { onlyUserId?: string; onlyUserIds?: string[]; sources?: WatchdogSources; skipMarketCheck?: boolean } = {}): Promise<WatchdogBatchSummary> {
   const ranAt = new Date().toISOString();
   if (!opts.skipMarketCheck && !isUsMarketOpen()) {
     return { ranAt, marketOpen: false, skipped: true, eligible: 0, processed: 0, sellsTotal: 0, results: [], errors: [] };
@@ -128,19 +140,49 @@ export async function runWatchdogForAllAgents(opts: { onlyUserId?: string; sourc
   const errors: string[] = [];
   let cq = admin.from("agent_config").select("user_id").eq("enabled", true);
   if (opts.onlyUserId) cq = cq.eq("user_id", opts.onlyUserId);
+  if (opts.onlyUserIds) cq = cq.in("user_id", opts.onlyUserIds);
   const { data: cfgs, error: cErr } = await cq;
   if (cErr) throw new Error("read agent_config: " + cErr.message);
-  const { data: holds, error: hErr } = await admin.from("agent_holdings").select("user_id");
+  let hq = admin.from("agent_holdings").select("user_id, symbol");
+  if (opts.onlyUserId) hq = hq.eq("user_id", opts.onlyUserId);
+  if (opts.onlyUserIds) hq = hq.in("user_id", opts.onlyUserIds);
+  const { data: holds, error: hErr } = await hq;
   if (hErr) throw new Error("read agent_holdings: " + hErr.message);
 
+  const enabledUsers = new Set((cfgs ?? []).map((c) => c.user_id));
   const withHoldings = new Set((holds ?? []).map((h) => h.user_id));
   const eligible = (cfgs ?? []).filter((c) => withHoldings.has(c.user_id));
+
+  // Build SHARED price + beta sources ONCE from the union of held symbols across
+  // all eligible agents (most overlap on the same universe), so each agent's
+  // watchdog reuses them instead of re-fetching. Verification may inject sources.
+  let sources = opts.sources;
+  if (!sources && eligible.length) {
+    const symbols = Array.from(new Set((holds ?? []).filter((h) => enabledUsers.has(h.user_id)).map((h) => String(h.symbol).toUpperCase())));
+    const quotes = await providerQuotes(symbols);
+    const priceMap = new Map(quotes.filter((qt) => qt.price > 0).map((qt) => [qt.symbol, qt.price]));
+    const betaMap = new Map<string, number>();
+    await Promise.all(
+      symbols.map(async (s) => {
+        try {
+          const m = await fhMetrics(s);
+          if (m.beta && m.beta > 0) betaMap.set(s, m.beta);
+        } catch {
+          /* leave unset → watchdog defaults beta to 1 */
+        }
+      }),
+    );
+    sources = {
+      prices: async (syms) => new Map(syms.filter((s) => priceMap.has(s)).map((s) => [s, priceMap.get(s)!])),
+      betas: async (syms) => new Map(syms.filter((s) => betaMap.has(s)).map((s) => [s, betaMap.get(s)!])),
+    };
+  }
 
   const results: WatchdogBatchSummary["results"] = [];
   let sellsTotal = 0;
   for (const c of eligible) {
     try {
-      const r = await runWatchdog(c.user_id, opts.sources);
+      const r = await runWatchdog(c.user_id, sources);
       sellsTotal += r.sells ?? 0;
       results.push({ userId: c.user_id, ran: r.ran, checked: r.checked, sells: r.sells, ratchets: r.ratchets, reason: r.ran ? undefined : r.reason });
     } catch (e) {
