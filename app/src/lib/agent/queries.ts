@@ -2,7 +2,7 @@
 // engine (Phase 10.2+) starts trading.
 
 import { supabase } from "@/lib/supabase/client";
-import type { AgentHolding, AgentTransaction, AgentDecision } from "@/lib/supabase/types";
+import type { AgentHolding, AgentTransaction, AgentDecision, AgentProposal } from "@/lib/supabase/types";
 import type { Snapshot } from "@/lib/snapshots/queries";
 
 export async function getAgentHoldings(): Promise<AgentHolding[]> {
@@ -21,6 +21,19 @@ export async function getAgentDecisions(): Promise<AgentDecision[]> {
   const { data, error } = await supabase.from("agent_decisions").select("*").order("created_at", { ascending: false });
   if (error) throw error;
   return data ?? [];
+}
+
+/** The current pending proposal (approve mode), or null. */
+export async function getPendingProposal(): Promise<AgentProposal | null> {
+  const { data, error } = await supabase
+    .from("agent_proposals")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as AgentProposal) ?? null;
 }
 
 /** Agent value history, mapped to the shared Snapshot shape (agent_cash → cash)

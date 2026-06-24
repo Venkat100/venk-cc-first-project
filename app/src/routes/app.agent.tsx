@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
-import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker, runAgentWatchdog } from "@/lib/agent/api";
-import { getAgentHoldings, getAgentDecisions, getAgentSnapshots } from "@/lib/agent/queries";
+import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker, runAgentWatchdog, approveAgentProposal, rejectAgentProposal } from "@/lib/agent/api";
+import { getAgentHoldings, getAgentDecisions, getAgentSnapshots, getPendingProposal } from "@/lib/agent/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { getCandles } from "@/lib/marketData";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -17,7 +17,7 @@ import { fmtUSD, fmtPct } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import type { RiskLevel, AgentMode, AgentDecision } from "@/lib/supabase/types";
 import { toast } from "sonner";
-import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye, Scissors, PauseCircle } from "lucide-react";
+import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye, Scissors, PauseCircle, ClipboardCheck, Check, X } from "lucide-react";
 
 export const Route = createFileRoute("/app/agent")({
   head: () => ({ meta: [{ title: "AI Agent · PaperTrader" }] }),
@@ -44,6 +44,7 @@ function Agent() {
   const holdingsQ = useQuery({ queryKey: ["agentHoldings"], queryFn: getAgentHoldings });
   const decisionsQ = useQuery({ queryKey: ["agentDecisions"], queryFn: getAgentDecisions });
   const snapshotsQ = useQuery({ queryKey: ["agentSnapshots"], queryFn: getAgentSnapshots });
+  const proposalQ = useQuery({ queryKey: ["agentProposal"], queryFn: getPendingProposal });
   // S&P 500 benchmark for the performance chart: one fetch per load, reused
   // across range toggles (the chart slices it locally). 1h cache; never blocks
   // the chart if it fails.
@@ -87,9 +88,14 @@ function Agent() {
         qc.invalidateQueries({ queryKey: ["agentConfig"] }),
         qc.invalidateQueries({ queryKey: ["agentHoldings"] }),
         qc.invalidateQueries({ queryKey: ["agentDecisions"] }),
+        qc.invalidateQueries({ queryKey: ["agentProposal"] }),
       ]);
       if (!r.ran) {
         toast.message("Agent didn't trade", { description: r.reason });
+        return;
+      }
+      if (r.proposed) {
+        toast.success("Proposal ready for review", { description: "The agent proposed changes — review and approve them below." });
         return;
       }
       const n = r.executed?.length ?? 0;
@@ -98,6 +104,25 @@ function Agent() {
       });
     },
     onError: (e: Error) => toast.error(e.message || "The agent run failed."),
+  });
+
+  const proposalMut = useMutation({
+    mutationFn: (v: { id: string; approve: boolean }) => (v.approve ? approveAgentProposal(v.id) : rejectAgentProposal(v.id).then(() => undefined)),
+    onSuccess: async (res, v) => {
+      await Promise.all([
+        refreshProfile(),
+        qc.invalidateQueries({ queryKey: ["agentConfig"] }),
+        qc.invalidateQueries({ queryKey: ["agentHoldings"] }),
+        qc.invalidateQueries({ queryKey: ["agentDecisions"] }),
+        qc.invalidateQueries({ queryKey: ["agentProposal"] }),
+      ]);
+      if (!v.approve) toast.message("Proposal rejected", { description: "No trades were made." });
+      else {
+        const n = (res as { executed?: unknown[] })?.executed?.length ?? 0;
+        toast.success("Proposal approved", { description: n > 0 ? `Executed ${n} trade${n === 1 ? "" : "s"} at current prices.` : "No trades needed at current prices." });
+      }
+    },
+    onError: (e: Error) => toast.error(e.message || "Couldn't update the proposal."),
   });
 
   const watchdogMut = useMutation({
@@ -183,13 +208,51 @@ function Agent() {
         </div>
       )}
 
+      {/* Approve-mode proposal */}
+      {config.mode === "approve" && proposalQ.data && (
+        <Card className="border-[color:var(--color-primary)]/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2"><ClipboardCheck className="h-4 w-4" /> Proposed changes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-foreground">{proposalQ.data.rationale}</p>
+            {(proposalQ.data.trades ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">No trades — the portfolio is already within its drift bands.</p>
+            ) : (
+              <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border">
+                {(proposalQ.data.trades ?? []).map((t, i) => (
+                  <li key={i} className="flex items-center gap-2 px-3 py-2 text-sm">
+                    <span className={cn("rounded-md px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider", t.side === "buy" ? "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]" : "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]")}>{t.kind}</span>
+                    <span className="font-semibold">{t.symbol}</span>
+                    <span className="tabular text-muted-foreground">{t.quantity} @ {fmtUSD(t.price)}</span>
+                    <span className="ml-auto hidden max-w-[45%] truncate text-xs text-muted-foreground sm:block">{t.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {proposalQ.data.commentary && <p className="text-xs italic text-muted-foreground">{proposalQ.data.commentary}</p>}
+            <p className="text-[11px] text-muted-foreground">On approve, trades execute toward this target at <span className="font-medium text-foreground">current live prices</span> (not the indicative prices above), with all guardrails re-checked.</p>
+            <div className="flex gap-2">
+              <Button className="gap-2" disabled={proposalMut.isPending} onClick={() => proposalMut.mutate({ id: proposalQ.data!.id, approve: true })}>
+                <Check className="h-4 w-4" /> {proposalMut.isPending ? "Working…" : "Approve & execute"}
+              </Button>
+              <Button variant="outline" className="gap-2" disabled={proposalMut.isPending} onClick={() => proposalMut.mutate({ id: proposalQ.data!.id, approve: false })}>
+                <X className="h-4 w-4" /> Reject
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Run engine */}
       <Card>
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <p className="text-sm font-medium">Run the agent now</p>
             <p className="text-xs text-muted-foreground">
-              Manually trigger one decision cycle (quant screen + AI news read → trades into the agent sub-portfolio). It'll run automatically on a schedule later.
+              {config.mode === "approve"
+                ? "Manually trigger one decision cycle. In “approve first” mode the agent proposes changes for you to review — it won't trade until you approve."
+                : "Manually trigger one decision cycle (quant screen + AI news read → trades into the agent sub-portfolio). It'll run automatically on a schedule later."}
             </p>
           </div>
           <Button
@@ -197,7 +260,7 @@ function Agent() {
             disabled={runMut.isPending || !config.enabled || config.agent_cash <= 0}
             onClick={() => runMut.mutate()}
           >
-            <Bot className="h-4 w-4" /> {runMut.isPending ? "Thinking…" : "Run agent now"}
+            <Bot className="h-4 w-4" /> {runMut.isPending ? (config.mode === "approve" ? "Proposing…" : "Thinking…") : config.mode === "approve" ? "Propose changes" : "Run agent now"}
           </Button>
         </CardContent>
       </Card>

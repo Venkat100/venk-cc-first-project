@@ -13,23 +13,17 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { fhCompanyNews, providerQuotes } from "@/lib/marketData/finnhub.server";
 import { scoreCandidates, type Candidate, type UniverseData } from "./quant.server";
 import { claudeReason, agentModel, type ClaudeReasoning } from "./anthropic.server";
-import { stopPct } from "./watchdog.server";
 import { planRebalance, DRIFT_BAND, COOLDOWN_DAYS, type PlanTarget, type PlanHolding } from "./rebalance";
-import type { RiskLevel } from "@/lib/supabase/types";
+import { GUARDRAILS, round2, executePlan, type Guardrails, type ThinkerExecution } from "./execute.server";
+import { writeProposal } from "./proposals.server";
+import type { AgentMode, AgentProposalTarget, AgentProposalTrade, RiskLevel } from "@/lib/supabase/types";
 
-type Guardrails = { cashBuffer: number; maxPosition: number; minHoldings: number; maxHoldings: number; shortlist: number };
-
-const GUARDRAILS: Record<RiskLevel, Guardrails> = {
-  conservative: { cashBuffer: 0.25, maxPosition: 0.25, minHoldings: 5, maxHoldings: 7, shortlist: 8 },
-  balanced: { cashBuffer: 0.15, maxPosition: 0.3, minHoldings: 4, maxHoldings: 6, shortlist: 8 },
-  aggressive: { cashBuffer: 0.08, maxPosition: 0.35, minHoldings: 3, maxHoldings: 5, shortlist: 7 },
-};
-
-export type ThinkerExecution = { symbol: string; side: "buy" | "sell"; quantity: number; price: number; total: number; weight: number; reason: string };
+export type { ThinkerExecution } from "./execute.server";
 
 export type ThinkerResult = {
   ran: boolean;
   reason?: string; // why it didn't run
+  proposed?: boolean; // approve-mode: wrote a proposal instead of trading
   riskLevel?: RiskLevel;
   aiUsed?: boolean;
   model?: string;
@@ -44,10 +38,6 @@ export type ThinkerResult = {
   cooldownSkipped?: string[]; // targets not bought due to watchdog re-entry cooldown
   errors?: string[];
 };
-
-function round2(n: number) {
-  return Math.round(n * 100) / 100;
-}
 
 export async function runThinker(userId: string, opts: { disableAi?: boolean; prefetch?: UniverseData } = {}): Promise<ThinkerResult> {
   const admin = getServiceClient();
@@ -152,7 +142,6 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
   // any straggler not in the scan).
   const { data: holdRows } = await admin.from("agent_holdings").select("symbol, quantity").eq("user_id", userId);
   const holdings = (holdRows ?? []).map((h) => ({ symbol: String(h.symbol).toUpperCase(), quantity: Number(h.quantity) }));
-  const heldSet = new Set(holdings.map((h) => h.symbol));
   const priceOf = (s: string) => bySym.get(s)?.price ?? 0;
   const extraPrice = new Map<string, number>();
   const missing = holdings.filter((h) => !(priceOf(h.symbol) > 0)).map((h) => h.symbol);
@@ -191,44 +180,54 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
     cooldown,
   });
 
-  const executed: ThinkerExecution[] = [];
-  let agentCashAfter = agentCashBefore;
-  for (const a of plan.actions) {
-    const { data: rpc, error } = await admin.rpc("agent_execute_trade", {
-      p_user_id: userId,
-      p_symbol: a.symbol,
-      p_side: a.side,
-      p_quantity: a.quantity,
-      p_price: a.price,
-      p_reason: a.reason,
-    });
-    if (error) {
-      errors.push(`${a.kind} ${a.symbol}: ${error.message}`);
-      continue;
-    }
-    agentCashAfter = Number((rpc as Record<string, unknown>).agent_cash);
-    executed.push({ symbol: a.symbol, side: a.side, quantity: a.quantity, price: a.price, total: round2(a.quantity * a.price), weight: 0, reason: a.reason });
-
-    // Seed the protective stop only for NEW positions — never lower an existing
-    // (already ratcheted) stop when adding to a held position.
-    if (a.side === "buy" && a.isNewPosition && !heldSet.has(a.symbol)) {
-      const cand = bySym.get(a.symbol);
-      const seedStop = round2(a.price * (1 - stopPct(cand?.signals.beta, risk)));
-      await admin.from("agent_holdings").update({ trailing_stop_price: seedStop }).eq("user_id", userId).eq("symbol", a.symbol);
-    }
-
-    await admin.from("agent_decisions").insert({
-      user_id: userId,
-      action: a.kind === "buy" ? "buy" : "trim", // 'trim' covers trims + exits (distinct from watchdog 'sell')
-      symbol: a.symbol,
-      rationale: a.reason,
-      signals: { side: a.side, kind: a.kind, quantity: a.quantity, price: round2(a.price), source: aiUsed ? "quant+ai" : "quant" },
-    });
-  }
-
-  // All names skipped on cooldown — both AI picks dropped during construction and
+  // All names skipped on cooldown — AI picks dropped during construction plus
   // any double-guarded by the planner.
   const cooldownSkipped = Array.from(new Set([...cooldownDropped, ...plan.cooldownSkipped]));
+
+  // APPROVE MODE: write a reviewable PROPOSAL instead of trading (applies to the
+  // manual "Run agent now" button AND the daily cron). Nothing executes.
+  if ((cfg.mode as AgentMode) === "approve") {
+    const target: AgentProposalTarget[] = planTargets.map((t) => ({
+      symbol: t.symbol,
+      weight: Math.round(t.weight * 1e4) / 1e4,
+      score: t.score,
+      beta: bySym.get(t.symbol)?.signals.beta ?? 1,
+      reason: t.reason,
+    }));
+    const trades: AgentProposalTrade[] = plan.actions.map((a) => ({ kind: a.kind, side: a.side, symbol: a.symbol, quantity: a.quantity, price: round2(a.price), reason: a.reason }));
+    await writeProposal(admin, userId, {
+      target,
+      trades,
+      rationale: plan.actions.length
+        ? `Proposed ${plan.actions.length} change(s) to reach the ${risk} target.`
+        : `Proposed: portfolio already within the ±${(DRIFT_BAND * 100).toFixed(0)}pp drift band — no changes.`,
+      commentary: reasoning.commentary,
+    });
+    return {
+      ran: true,
+      proposed: true,
+      riskLevel: risk,
+      aiUsed,
+      model: agentModel(),
+      guardrails: g,
+      agentCashBefore: round2(agentCashBefore),
+      agentCashAfter: round2(agentCashBefore),
+      candidates: candidates.slice(0, g.shortlist),
+      commentary: reasoning.commentary,
+      picks: reasoning.picks,
+      executed: [],
+      held: plan.held,
+      cooldownSkipped,
+      errors,
+    };
+  }
+
+  // AUTONOMOUS MODE: execute the plan (sells first, then buys).
+  const betaBySym = new Map(candidates.map((c) => [c.symbol, c.signals.beta]));
+  const exec = await executePlan(admin, userId, risk, plan, agentCashBefore, betaBySym, aiUsed);
+  const executed = exec.executed;
+  const agentCashAfter = exec.agentCashAfter;
+  errors.push(...exec.errors);
 
   // Transparent "didn't fight the watchdog" log for each cooldown-skipped name.
   for (const s of cooldownSkipped) {

@@ -110,6 +110,20 @@ export type AgentSnapshot = {
   captured_at: string; // date (YYYY-MM-DD)
 };
 
+export type ProposalStatus = "pending" | "approved" | "rejected" | "superseded";
+export type AgentProposalTarget = { symbol: string; weight: number; score: number; beta: number; reason: string };
+export type AgentProposalTrade = { kind: "buy" | "trim" | "exit"; side: "buy" | "sell"; symbol: string; quantity: number; price: number; reason: string };
+export type AgentProposal = {
+  id: string;
+  user_id: string;
+  created_at: string;
+  status: ProposalStatus;
+  target: AgentProposalTarget[] | null;
+  trades: AgentProposalTrade[] | null;
+  rationale: string | null;
+  commentary: string | null;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -275,6 +289,27 @@ export type Database = {
           total_value?: number;
           agent_cash?: number;
           holdings_value?: number;
+        };
+        Relationships: [];
+      };
+      agent_proposals: {
+        Row: AgentProposal;
+        Insert: {
+          id?: string;
+          user_id: string;
+          status?: ProposalStatus;
+          target?: unknown;
+          trades?: unknown;
+          rationale?: string | null;
+          commentary?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          status?: ProposalStatus;
+          target?: unknown;
+          trades?: unknown;
+          rationale?: string | null;
+          commentary?: string | null;
         };
         Relationships: [];
       };

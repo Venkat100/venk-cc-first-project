@@ -2,7 +2,8 @@
 // access token so the server can verify identity; unwrap envelopes.
 
 import { supabase } from "@/lib/supabase/client";
-import { getAgentConfigFn, updateAgentConfigFn, fundAgentFn, runAgentThinkerFn, runAgentWatchdogFn, type FundResponse, type ThinkerResponse, type WatchdogResponse } from "./functions";
+import { getAgentConfigFn, updateAgentConfigFn, fundAgentFn, runAgentThinkerFn, runAgentWatchdogFn, approveAgentProposalFn, rejectAgentProposalFn, type FundResponse, type ThinkerResponse, type WatchdogResponse, type ApproveResponse } from "./functions";
+import type { ApproveResult } from "./proposals.server";
 import type { ThinkerResult } from "./thinker.server";
 import type { WatchdogResult } from "./watchdog.server";
 import type { AgentConfig, AgentMode, RiskLevel } from "@/lib/supabase/types";
@@ -49,5 +50,19 @@ export async function runAgentWatchdog(): Promise<WatchdogResult> {
   return res.result;
 }
 
+/** Approve a pending proposal — executes toward its target at current prices. */
+export async function approveAgentProposal(proposalId: string): Promise<ApproveResult> {
+  const res: ApproveResponse = await approveAgentProposalFn({ data: { accessToken: await token(), proposalId } });
+  if (!res.ok) throw new Error(res.error);
+  return res.result;
+}
+
+/** Reject a pending proposal — nothing executes. */
+export async function rejectAgentProposal(proposalId: string): Promise<void> {
+  const res = await rejectAgentProposalFn({ data: { accessToken: await token(), proposalId } });
+  if (!res.ok) throw new Error(res.error);
+}
+
 export type { ThinkerResult } from "./thinker.server";
 export type { WatchdogResult } from "./watchdog.server";
+export type { ApproveResult } from "./proposals.server";

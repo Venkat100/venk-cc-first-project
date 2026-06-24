@@ -11,6 +11,7 @@ import { z } from "zod";
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { runThinker, type ThinkerResult } from "./thinker.server";
 import { runWatchdog, type WatchdogResult } from "./watchdog.server";
+import { executeProposal, rejectProposal, supersedePending, type ApproveResult } from "./proposals.server";
 import type { AgentConfig } from "@/lib/supabase/types";
 
 type Admin = ReturnType<typeof getServiceClient>;
@@ -51,7 +52,35 @@ export const updateAgentConfigFn = createServerFn({ method: "POST" })
 
     const { error } = await admin.from("agent_config").update(patch).eq("user_id", userId);
     if (error) throw new Error(error.message);
+    // Switching to autonomous strands any pending proposal — supersede it.
+    if (data.mode === "autonomous") await supersedePending(admin, userId);
     return readConfig(admin, userId);
+  });
+
+export type ApproveResponse = { ok: true; result: ApproveResult } | { ok: false; error: string };
+
+export const approveAgentProposalFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1), proposalId: z.string().uuid() }))
+  .handler(async ({ data }): Promise<ApproveResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      const result = await executeProposal(userId, data.proposalId);
+      return { ok: true, result };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Couldn't approve the proposal." };
+    }
+  });
+
+export const rejectAgentProposalFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1), proposalId: z.string().uuid() }))
+  .handler(async ({ data }): Promise<{ ok: true } | { ok: false; error: string }> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      await rejectProposal(userId, data.proposalId);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Couldn't reject the proposal." };
+    }
   });
 
 export type FundResponse =

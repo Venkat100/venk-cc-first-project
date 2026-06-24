@@ -5,8 +5,9 @@
 // agent's own user_id — NOT a JWT (there's no signed-in user during a cron).
 //
 //   • /api/cron/agent-thinker  — DAILY (Vercel Cron). Runs the real thinker for
-//     every agent that is enabled AND mode='autonomous' AND agent_cash > 0.
-//     mode='approve' agents are intentionally SKIPPED (see TODO below).
+//     every enabled agent with agent_cash > 0. Autonomous agents auto-trade;
+//     approve-mode agents get a fresh PENDING proposal (the thinker decides
+//     based on each agent's mode — see thinker.server.ts).
 //   • /api/cron/agent-watchdog — INTRADAY (GitHub Actions, a few times during US
 //     market hours, since Vercel Hobby cron runs at most once/day). Runs the
 //     real watchdog for every enabled agent that holds positions. No-ops cheaply
@@ -16,10 +17,6 @@
 // `Authorization: Bearer <secret>` (Vercel Cron auto-sends it), `x-cron-secret`,
 // or `?secret=`. Per-agent errors are isolated so one failure can't abort the
 // batch. Both return a JSON summary.
-//
-// TODO (approve mode): autonomous agents auto-trade here; approve-mode agents
-// should instead generate *proposals* for the user to confirm. Not built yet —
-// for now they're simply not auto-traded.
 //
 // RATE-LIMIT SAFETY (hardening #2): both loops price held symbols via Finnhub
 // (60 req/min free tier). To stay safe + fast as the user base grows:
@@ -81,16 +78,18 @@ export type ThinkerBatchSummary = {
   eligible: number;
   processed: number;
   tradesTotal: number;
-  results: Array<{ userId: string; ran: boolean; trades?: number; reason?: string; error?: string }>;
+  proposalsTotal: number;
+  results: Array<{ userId: string; ran: boolean; trades?: number; proposed?: boolean; reason?: string; error?: string }>;
   errors: string[];
 };
 
 // `onlyUserId` scopes the batch to one agent (on-demand / verification); omitted
-// in production so the cron runs every eligible agent.
+// in production so the cron runs every eligible agent (BOTH modes — the thinker
+// auto-trades autonomous agents and proposes for approve-mode agents).
 export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUserIds?: string[]; prefetch?: UniverseData } = {}): Promise<ThinkerBatchSummary> {
   const admin = getServiceClient();
   const errors: string[] = [];
-  let q = admin.from("agent_config").select("user_id").eq("enabled", true).eq("mode", "autonomous").gt("agent_cash", 0);
+  let q = admin.from("agent_config").select("user_id").eq("enabled", true).gt("agent_cash", 0);
   if (opts.onlyUserId) q = q.eq("user_id", opts.onlyUserId);
   if (opts.onlyUserIds) q = q.in("user_id", opts.onlyUserIds);
   const { data: cfgs, error } = await q;
@@ -102,19 +101,21 @@ export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUs
 
   const results: ThinkerBatchSummary["results"] = [];
   let tradesTotal = 0;
+  let proposalsTotal = 0;
   for (const c of cfgs ?? []) {
     try {
       const r = await runThinker(c.user_id, { prefetch });
       const trades = r.executed?.length ?? 0;
       tradesTotal += trades;
-      results.push({ userId: c.user_id, ran: r.ran, trades, reason: r.ran ? undefined : r.reason });
+      if (r.proposed) proposalsTotal += 1;
+      results.push({ userId: c.user_id, ran: r.ran, trades, proposed: r.proposed, reason: r.ran ? undefined : r.reason });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "thinker failed";
       errors.push(`${c.user_id}: ${msg}`);
       results.push({ userId: c.user_id, ran: false, error: msg });
     }
   }
-  return { ranAt: new Date().toISOString(), eligible: (cfgs ?? []).length, processed: results.filter((r) => r.ran).length, tradesTotal, results, errors };
+  return { ranAt: new Date().toISOString(), eligible: (cfgs ?? []).length, processed: results.filter((r) => r.ran).length, tradesTotal, proposalsTotal, results, errors };
 }
 
 export type WatchdogBatchSummary = {
