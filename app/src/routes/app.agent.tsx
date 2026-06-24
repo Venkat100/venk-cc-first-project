@@ -16,7 +16,7 @@ import { fmtUSD, fmtPct } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import type { RiskLevel, AgentMode, AgentDecision } from "@/lib/supabase/types";
 import { toast } from "sonner";
-import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye } from "lucide-react";
+import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye, Scissors, PauseCircle } from "lucide-react";
 
 export const Route = createFileRoute("/app/agent")({
   head: () => ({ meta: [{ title: "AI Agent · PaperTrader" }] }),
@@ -83,7 +83,7 @@ function Agent() {
       }
       const n = r.executed?.length ?? 0;
       toast.success(`Agent ran (${r.aiUsed ? "AI + quant" : "quant only"})`, {
-        description: n > 0 ? `Opened ${n} position${n === 1 ? "" : "s"}. ${r.commentary ?? ""}`.trim() : "No trades met the guardrails this run.",
+        description: n > 0 ? `${n} trade${n === 1 ? "" : "s"} · held ${r.held?.length ?? 0} within drift bands.` : "No trades needed — portfolio within drift bands.",
       });
     },
     onError: (e: Error) => toast.error(e.message || "The agent run failed."),
@@ -442,14 +442,16 @@ function Agent() {
 const ACTION_META: Record<string, { label: string; icon: typeof ShoppingCart; cls: string }> = {
   buy: { label: "Buy", icon: ShoppingCart, cls: "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]" },
   sell: { label: "Protective sell", icon: ShieldCheck, cls: "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]" },
+  trim: { label: "Trim / exit", icon: Scissors, cls: "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]" },
   rebalance: { label: "Rebalance", icon: RefreshCw, cls: "bg-[color:var(--color-primary)]/15 text-[color:var(--color-primary)]" },
+  hold: { label: "Hold", icon: PauseCircle, cls: "bg-muted text-muted-foreground" },
   watchdog: { label: "Watchdog", icon: Eye, cls: "bg-muted text-muted-foreground" },
 };
 
 function DecisionRow({ d }: { d: AgentDecision }) {
   const meta = ACTION_META[d.action] ?? { label: d.action, icon: ListTree, cls: "bg-muted text-muted-foreground" };
   const Icon = meta.icon;
-  const accent = d.action === "buy" ? "border-l-[color:var(--color-gain)]" : d.action === "sell" ? "border-l-[color:var(--color-loss)]" : d.action === "rebalance" ? "border-l-[color:var(--color-primary)]" : "border-l-border";
+  const accent = d.action === "buy" ? "border-l-[color:var(--color-gain)]" : d.action === "sell" || d.action === "trim" ? "border-l-[color:var(--color-loss)]" : d.action === "rebalance" ? "border-l-[color:var(--color-primary)]" : "border-l-border";
   return (
     <div className={cn("border-l-2 px-4 py-3", accent)}>
       <div className="flex items-center gap-2">
