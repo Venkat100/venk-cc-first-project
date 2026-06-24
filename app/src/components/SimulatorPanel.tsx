@@ -22,7 +22,10 @@ const EXAMPLES = [
 const SUGGESTIONS = Array.from(new Set([...MARKET_UNIVERSE, "SPY", "QQQ", "GOOG", "NFLX", "JPM", "DIS", "KO"]));
 
 function prettyDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  // `iso` is a date-only string (YYYY-MM-DD) = UTC midnight. Format in UTC so
+  // the displayed day matches the date the user picked — otherwise timezones
+  // behind UTC render it a day early.
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
 export function SimulatorPanel() {
