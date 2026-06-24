@@ -4,7 +4,10 @@ import { cn } from "@/lib/utils";
 import { fmtUSD } from "@/lib/mockData";
 import { LoadingState, ErrorState } from "@/components/DataStates";
 import type { Snapshot } from "@/lib/snapshots/queries";
+import { indexBenchmark, type SpyPoint } from "@/components/portfolioBenchmark";
 import { LineChart } from "lucide-react";
+
+export type Benchmark = { series: SpyPoint[]; loading?: boolean; error?: boolean };
 
 type ChartRange = "1W" | "1M" | "3M" | "1Y" | "ALL";
 const RANGES: ChartRange[] = ["1W", "1M", "3M", "1Y", "ALL"];
@@ -25,6 +28,7 @@ export function PortfolioValueChart({
   error,
   height = 300,
   baseline = STARTING_CAPITAL,
+  benchmark,
 }: {
   snapshots: Snapshot[];
   liveTotal: number;
@@ -32,6 +36,7 @@ export function PortfolioValueChart({
   error?: string;
   height?: number;
   baseline?: number;
+  benchmark?: Benchmark;
 }) {
   const [range, setRange] = useState<ChartRange>("1M");
 
@@ -44,13 +49,20 @@ export function PortfolioValueChart({
     return pts;
   }, [snapshots, liveTotal]);
 
-  const data = useMemo(() => {
+  const windowPoints = useMemo(() => {
     const days = RANGE_DAYS[range];
     if (days === Infinity) return allPoints;
     const cutoff = Date.now() - days * 86_400_000;
     const filtered = allPoints.filter((p) => new Date(p.t).getTime() >= cutoff);
     return filtered.length >= 2 ? filtered : allPoints.slice(-2);
   }, [allPoints, range]);
+
+  // S&P 500 benchmark, indexed to the agent's value at the window's left edge.
+  const bench = useMemo(
+    () => (benchmark && benchmark.series.length ? indexBenchmark(windowPoints, benchmark.series) : null),
+    [benchmark, windowPoints],
+  );
+  const data = bench?.available ? bench.data : windowPoints;
 
   const first = data[0]?.v ?? 0;
   const last = data[data.length - 1]?.v ?? 0;
@@ -71,6 +83,7 @@ export function PortfolioValueChart({
             <LineChart className="h-8 w-8 opacity-60" />
             <p className="text-sm">Your value chart builds day by day as you trade.</p>
             <p className="text-xs">Today: <span className="tabular text-foreground">{fmtUSD(liveTotal)}</span></p>
+            {benchmark && <p className="text-xs">The S&amp;P 500 benchmark line appears as history grows.</p>}
           </div>
         ) : (
           <ResponsiveContainer>
@@ -87,15 +100,23 @@ export function PortfolioValueChart({
                 cursor={{ stroke: "var(--color-muted-foreground)", strokeDasharray: "3 3" }}
                 contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
                 labelFormatter={(v) => new Date(v as string).toLocaleDateString()}
-                formatter={(v: number) => [fmtUSD(v), "Portfolio value"]}
+                formatter={(v: number, name) => [fmtUSD(v), name === "spy" ? "S&P 500 (indexed)" : "Portfolio value"]}
               />
               {/* Baseline reference so gains/losses vs the starting amount are obvious. */}
               <ReferenceLine y={baseline} stroke="var(--color-border)" strokeDasharray="4 4" />
               <Area type="monotone" dataKey="v" stroke={stroke} strokeWidth={2} fill="url(#pv-grad)" />
+              {bench?.available && (
+                <Area type="monotone" dataKey="spy" stroke="var(--color-muted-foreground)" strokeWidth={1.5} strokeDasharray="5 4" fill="none" dot={false} />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         )}
       </div>
+
+      {/* Beat/lag readout vs the S&P 500 over the visible window. */}
+      {!loading && !error && !shortHistory && benchmark && (
+        <BenchmarkReadout bench={bench} loading={benchmark.loading} failed={benchmark.error} />
+      )}
       <div className="mt-3 flex flex-wrap gap-1">
         {RANGES.map((r) => (
           <button
@@ -110,6 +131,31 @@ export function PortfolioValueChart({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+const fmtSigned = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(n).toFixed(1)}%`;
+
+function BenchmarkReadout({ bench, loading, failed }: { bench: ReturnType<typeof indexBenchmark> | null; loading?: boolean; failed?: boolean }) {
+  if (failed) return <p className="mt-2 text-[11px] text-muted-foreground">S&amp;P 500 benchmark unavailable right now.</p>;
+  if (loading && !bench?.available) return <p className="mt-2 text-[11px] text-muted-foreground">Loading S&amp;P 500 benchmark…</p>;
+  if (!bench?.available) return null;
+
+  const beating = bench.diffPct >= 0;
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block h-0.5 w-4 rounded bg-[color:var(--color-primary)]" /> Agent
+        <span className="tabular font-medium text-foreground">{fmtSigned(bench.agentReturnPct)}</span>
+      </span>
+      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+        <span className="inline-block h-0 w-4 border-t border-dashed border-[color:var(--color-muted-foreground)]" /> S&amp;P 500
+        <span className="tabular font-medium">{fmtSigned(bench.spyReturnPct)}</span>
+      </span>
+      <span className={cn("tabular font-medium", beating ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
+        {beating ? "Beating" : "Lagging"} the market by {Math.abs(bench.diffPct).toFixed(1)}%
+      </span>
     </div>
   );
 }

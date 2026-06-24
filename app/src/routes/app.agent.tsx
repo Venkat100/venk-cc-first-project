@@ -11,6 +11,7 @@ import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker, runAgentWatchdog } from "@/lib/agent/api";
 import { getAgentHoldings, getAgentDecisions, getAgentSnapshots } from "@/lib/agent/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
+import { getCandles } from "@/lib/marketData";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,16 @@ function Agent() {
   const holdingsQ = useQuery({ queryKey: ["agentHoldings"], queryFn: getAgentHoldings });
   const decisionsQ = useQuery({ queryKey: ["agentDecisions"], queryFn: getAgentDecisions });
   const snapshotsQ = useQuery({ queryKey: ["agentSnapshots"], queryFn: getAgentSnapshots });
+  // S&P 500 benchmark for the performance chart: one fetch per load, reused
+  // across range toggles (the chart slices it locally). 1h cache; never blocks
+  // the chart if it fails.
+  const spyQ = useQuery({
+    queryKey: ["spyBenchmark"],
+    queryFn: () => getCandles("SPY", "1Y"),
+    staleTime: 60 * 60_000,
+    retry: 1,
+    enabled: (snapshotsQ.data?.length ?? 0) >= 1,
+  });
   const config = configQ.data;
 
   const agentHoldings = holdingsQ.data ?? [];
@@ -408,8 +419,9 @@ function Agent() {
                   loading={snapshotsQ.isLoading}
                   error={snapshotsQ.isError ? (snapshotsQ.error as Error)?.message : undefined}
                   height={260}
+                  benchmark={{ series: (spyQ.data ?? []).map((c) => ({ t: c.t, close: c.close })), loading: spyQ.isLoading, error: spyQ.isError }}
                 />
-                <p className="mt-2 text-[11px] text-muted-foreground">Dashed line = amount allocated ({fmtUSD(allocated)}). SPY benchmark overlay coming soon.</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">Dashed line = amount allocated ({fmtUSD(allocated)}). The dashed grey line is the S&amp;P 500 (SPY), indexed to your agent's value at the start of the window.</p>
               </>
             ) : (
               <div className="p-0"><EmptyState icon={LineChart} title="No performance yet" description="Day-over-day growth vs. the amount you allocated will appear once you fund and run the agent." /></div>
