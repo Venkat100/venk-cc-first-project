@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Search, Sun, Moon, Bell, Menu, X } from "lucide-react";
-import { STOCKS, fmtUSD, fmtPct } from "@/lib/mockData";
+import { Search, SearchX, Sun, Moon, Bell, Menu, X } from "lucide-react";
+import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
+import { WatchlistStar } from "@/components/WatchlistStar";
 import { applyTheme, getTheme, type Theme } from "@/lib/theme";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,15 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const [theme, setTheme] = useState<Theme>("dark");
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
+
+  // Live Finnhub-backed search — same path as the Markets tab, finds any ticker.
+  const search = useSymbolSearch(q, 8);
+  const results = search.matches;
 
   const displayName = profile?.display_name || user?.email || "Account";
   const email = user?.email ?? "";
@@ -49,11 +56,40 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  const matches = useMemo(() => {
-    if (!q.trim()) return [];
-    const term = q.toLowerCase();
-    return STOCKS.filter((s) => s.symbol.toLowerCase().includes(term) || s.name.toLowerCase().includes(term)).slice(0, 6);
-  }, [q]);
+  // "/" focuses the search box (unless already typing somewhere).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement | null;
+      const typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      if (e.key === "/" && !typing) {
+        e.preventDefault();
+        inputRef.current?.focus();
+        setOpen(true);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Reset the highlighted result whenever the query changes.
+  useEffect(() => { setActive(0); }, [q]);
+
+  function goTo(symbol: string) {
+    navigate({ to: "/app/stock/$symbol", params: { symbol } });
+    setOpen(false);
+    setQ("");
+  }
+
+  function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") { setOpen(false); inputRef.current?.blur(); return; }
+    if (results.length === 0) {
+      if (e.key === "Enter" && results[0]) goTo(results[0].symbol);
+      return;
+    }
+    if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(i + 1, results.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); const r = results[active] ?? results[0]; if (r) goTo(r.symbol); }
+  }
 
   function toggle() {
     const next: Theme = theme === "dark" ? "light" : "dark";
@@ -71,38 +107,51 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
         <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
+            ref={inputRef}
             value={q}
             onFocus={() => setOpen(true)}
             onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-            placeholder="Search stocks (AAPL, Tesla…)"
+            onKeyDown={onSearchKeyDown}
+            placeholder="Search any ticker — AAPL, QQQ, VOO…"
+            aria-label="Search stocks and ETFs"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">/</kbd>
         </div>
-        {open && matches.length > 0 && (
+        {open && q.trim().length > 0 && (
           <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
-            {matches.map((s) => {
-              const up = s.dayChangePct >= 0;
-              return (
-                <button
-                  key={s.symbol}
-                  onClick={() => { navigate({ to: "/app/stock/$symbol", params: { symbol: s.symbol } }); setOpen(false); setQ(""); }}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-accent"
+            {search.pending && results.length === 0 ? (
+              <div className="px-3 py-3 text-sm text-muted-foreground">Searching “{q}”…</div>
+            ) : search.isError ? (
+              <div className="px-3 py-3 text-sm text-muted-foreground">Search is busy right now (rate limit). Try again in a moment.</div>
+            ) : results.length === 0 ? (
+              <div className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+                <SearchX className="h-4 w-4" /> No tickers match “{q}”.
+              </div>
+            ) : (
+              results.map((m, i) => (
+                <div
+                  key={m.symbol}
+                  className={cn("flex items-center gap-2 px-2 py-1.5", i === active && "bg-accent")}
+                  onMouseEnter={() => setActive(i)}
                 >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-xs font-bold">{s.symbol.slice(0, 2)}</div>
+                  <button
+                    onClick={() => goTo(m.symbol)}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1 text-left text-sm"
+                  >
+                    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-xs font-bold">{m.symbol.slice(0, 2)}</div>
                     <div className="min-w-0">
-                      <div className="font-semibold">{s.symbol}</div>
-                      <div className="truncate text-xs text-muted-foreground">{s.name}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{m.symbol}</span>
+                        {m.type && <span className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{m.type}</span>}
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">{m.name}</div>
                     </div>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end">
-                    <span className="tabular">{fmtUSD(s.price)}</span>
-                    <span className={cn("tabular text-xs", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>{fmtPct(s.dayChangePct)}</span>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                  <WatchlistStar symbol={m.symbol} />
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

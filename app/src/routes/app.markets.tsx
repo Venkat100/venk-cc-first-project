@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/PriceChart";
+import { WatchlistStar } from "@/components/WatchlistStar";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { MARKET_UNIVERSE } from "@/lib/marketData";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
@@ -128,8 +129,11 @@ function Markets() {
                           <td className={cn("py-3 text-right tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
                             {priced ? <>{up ? "+" : "−"}{fmtUSD(Math.abs(r.dayChange))} <span className="text-xs opacity-80">({fmtPct(r.dayChangePct)})</span></> : "…"}
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            <Link to="/app/stock/$symbol" params={{ symbol: m.symbol }}><Button size="sm" variant="outline">Trade</Button></Link>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <WatchlistStar symbol={m.symbol} />
+                              <Link to="/app/stock/$symbol" params={{ symbol: m.symbol }}><Button size="sm" variant="outline">Trade</Button></Link>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -154,8 +158,11 @@ function Markets() {
                           </td>
                           {/* TODO: real sparklines need a batch intraday source; mock trend for now. */}
                           <td className="py-3"><Sparkline data={sparkline(r.symbol)} up={up} width={96} height={28} /></td>
-                          <td className="px-4 py-3 text-right">
-                            <Link to="/app/stock/$symbol" params={{ symbol: r.symbol }}><Button size="sm" variant="outline">Trade</Button></Link>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <WatchlistStar symbol={r.symbol} />
+                              <Link to="/app/stock/$symbol" params={{ symbol: r.symbol }}><Button size="sm" variant="outline">Trade</Button></Link>
+                            </div>
                           </td>
                         </tr>
                       );
