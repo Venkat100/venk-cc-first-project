@@ -92,14 +92,14 @@ function Portfolio() {
           ) : !pricesReady ? (
             <LoadingState label="Loading live prices…" />
           ) : (
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Symbol</th>
-                  <th className="py-3 font-medium">Sector</th>
-                  <th className="py-3 font-medium text-right">Shares</th>
-                  <th className="py-3 font-medium text-right">Avg cost</th>
-                  <th className="py-3 font-medium text-right">Price</th>
+                  <th className="hidden py-3 font-medium sm:table-cell">Sector</th>
+                  <th className="hidden py-3 font-medium text-right sm:table-cell">Shares</th>
+                  <th className="hidden py-3 font-medium text-right md:table-cell">Avg cost</th>
+                  <th className="hidden py-3 font-medium text-right sm:table-cell">Price</th>
                   <th className="py-3 font-medium text-right">Market value</th>
                   <th className="px-4 py-3 font-medium text-right">P&L</th>
                 </tr>
@@ -113,13 +113,13 @@ function Portfolio() {
                   return (
                     <tr key={h.symbol} className="border-b border-border/60 last:border-0">
                       <td className="px-4 py-3 font-semibold">{q.symbol}</td>
-                      <td className="py-3 text-xs text-muted-foreground">{q.sector}</td>
-                      <td className="py-3 text-right tabular">{fmtQty(h.quantity)}</td>
-                      <td className="py-3 text-right tabular">{fmtUSD(h.avg_cost)}</td>
-                      <td className="py-3 text-right tabular">{fmtUSD(q.price)}</td>
+                      <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{q.sector}</td>
+                      <td className="hidden py-3 text-right tabular sm:table-cell">{fmtQty(h.quantity)}</td>
+                      <td className="hidden py-3 text-right tabular md:table-cell">{fmtUSD(h.avg_cost)}</td>
+                      <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(q.price)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
                       <td className={cn("px-4 py-3 text-right tabular font-medium", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
-                        {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="text-xs opacity-80">({fmtPct(h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0)})</span>
+                        {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0)})</span>
                       </td>
                     </tr>
                   );
@@ -150,21 +150,21 @@ function Portfolio() {
             />
           ) : (
             <>
-              <table className="w-full min-w-[640px] text-sm">
+              <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                     <th className="px-4 py-3 font-medium">Date</th>
                     <th className="py-3 font-medium">Type</th>
                     <th className="py-3 font-medium">Symbol</th>
-                    <th className="py-3 font-medium text-right">Qty</th>
-                    <th className="py-3 font-medium text-right">Price</th>
+                    <th className="hidden py-3 font-medium text-right sm:table-cell">Qty</th>
+                    <th className="hidden py-3 font-medium text-right sm:table-cell">Price</th>
                     <th className="px-4 py-3 font-medium text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {txPage.map((t) => (
                     <tr key={t.id} className="border-b border-border/60 last:border-0">
-                      <td className="px-4 py-3 tabular text-muted-foreground">{new Date(t.created_at).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 tabular text-muted-foreground">{new Date(t.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</td>
                       <td className="py-3">
                         <span className={cn(
                           "rounded-md px-2 py-0.5 text-xs font-medium uppercase tracking-wider",
@@ -174,8 +174,8 @@ function Portfolio() {
                         )}>{t.side}</span>
                       </td>
                       <td className="py-3 font-semibold">{t.symbol}</td>
-                      <td className="py-3 text-right tabular">{fmtQty(t.quantity)}</td>
-                      <td className="py-3 text-right tabular">{fmtUSD(t.price)}</td>
+                      <td className="hidden py-3 text-right tabular sm:table-cell">{fmtQty(t.quantity)}</td>
+                      <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(t.price)}</td>
                       <td className="px-4 py-3 text-right tabular">{fmtUSD(t.total)}</td>
                     </tr>
                   ))}

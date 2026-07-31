@@ -95,14 +95,14 @@ function Markets() {
           ) : active && search.matches.length === 0 ? (
             <EmptyState icon={SearchX} title={`No tickers match “${q}”`} description="Try a symbol like AAPL, QQQ, VOO, or a company name." />
           ) : (
-            <table className="w-full min-w-[720px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Symbol</th>
-                  <th className="py-3 font-medium">{active ? "Type" : "Sector"}</th>
+                  <th className="hidden py-3 font-medium sm:table-cell">{active ? "Type" : "Sector"}</th>
                   <th className="py-3 font-medium text-right">Price</th>
                   <th className="py-3 font-medium text-right">Change</th>
-                  {!active && <th className="py-3 font-medium">Trend</th>}
+                  {!active && <th className="hidden py-3 font-medium md:table-cell">Trend</th>}
                   <th className="px-4 py-3 font-medium text-right">Trade</th>
                 </tr>
               </thead>
@@ -115,21 +115,21 @@ function Markets() {
                       const priced = !quotesQ.isLoading;
                       return (
                         <tr key={m.symbol} className="border-b border-border/60 last:border-0 hover:bg-accent/40">
-                          <td className="px-4 py-3">
-                            <Link to="/app/stock/$symbol" params={{ symbol: m.symbol }} className="flex items-center gap-3">
-                              <div className="grid h-8 w-8 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{m.symbol.slice(0, 2)}</div>
-                              <div>
+                          <td className="px-2 py-3 sm:px-4">
+                            <Link to="/app/stock/$symbol" params={{ symbol: m.symbol }} className="flex min-w-0 items-center gap-2 sm:gap-3">
+                              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{m.symbol.slice(0, 2)}</div>
+                              <div className="min-w-0">
                                 <div className="font-semibold">{m.symbol}</div>
-                                <div className="max-w-[260px] truncate text-xs text-muted-foreground">{name}</div>
+                                <div className="max-w-[90px] truncate text-xs text-muted-foreground sm:max-w-[260px]">{name}</div>
                               </div>
                             </Link>
                           </td>
-                          <td className="py-3 text-xs text-muted-foreground">{m.type || r.sector}</td>
+                          <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{m.type || r.sector}</td>
                           <td className="py-3 text-right tabular">{priced ? fmtUSD(r.price) : "…"}</td>
                           <td className={cn("py-3 text-right tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
-                            {priced ? <>{up ? "+" : "−"}{fmtUSD(Math.abs(r.dayChange))} <span className="text-xs opacity-80">({fmtPct(r.dayChangePct)})</span></> : "…"}
+                            {priced ? <>{up ? "+" : "−"}{fmtUSD(Math.abs(r.dayChange))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(r.dayChangePct)})</span></> : "…"}
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-2 py-3 sm:px-4">
                             <div className="flex items-center justify-end gap-1">
                               <WatchlistStar symbol={m.symbol} />
                               <Link to="/app/stock/$symbol" params={{ symbol: m.symbol }}><Button size="sm" variant="outline">Trade</Button></Link>
@@ -142,23 +142,23 @@ function Markets() {
                       const up = r.dayChangePct >= 0;
                       return (
                         <tr key={r.symbol} className="border-b border-border/60 last:border-0 hover:bg-accent/40">
-                          <td className="px-4 py-3">
-                            <Link to="/app/stock/$symbol" params={{ symbol: r.symbol }} className="flex items-center gap-3">
-                              <div className="grid h-8 w-8 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{r.symbol.slice(0, 2)}</div>
-                              <div>
+                          <td className="px-2 py-3 sm:px-4">
+                            <Link to="/app/stock/$symbol" params={{ symbol: r.symbol }} className="flex min-w-0 items-center gap-2 sm:gap-3">
+                              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{r.symbol.slice(0, 2)}</div>
+                              <div className="min-w-0">
                                 <div className="font-semibold">{r.symbol}</div>
-                                <div className="text-xs text-muted-foreground">{r.name}</div>
+                                <div className="max-w-[90px] truncate text-xs text-muted-foreground sm:max-w-none">{r.name}</div>
                               </div>
                             </Link>
                           </td>
-                          <td className="py-3 text-xs text-muted-foreground">{r.sector}</td>
+                          <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{r.sector}</td>
                           <td className="py-3 text-right tabular">{fmtUSD(r.price)}</td>
                           <td className={cn("py-3 text-right tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
-                            {up ? "+" : "−"}{fmtUSD(Math.abs(r.dayChange))} <span className="text-xs opacity-80">({fmtPct(r.dayChangePct)})</span>
+                            {up ? "+" : "−"}{fmtUSD(Math.abs(r.dayChange))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(r.dayChangePct)})</span>
                           </td>
                           {/* TODO: real sparklines need a batch intraday source; mock trend for now. */}
-                          <td className="py-3"><Sparkline data={sparkline(r.symbol)} up={up} width={96} height={28} /></td>
-                          <td className="px-4 py-3">
+                          <td className="hidden py-3 md:table-cell"><Sparkline data={sparkline(r.symbol)} up={up} width={96} height={28} /></td>
+                          <td className="px-2 py-3 sm:px-4">
                             <div className="flex items-center justify-end gap-1">
                               <WatchlistStar symbol={r.symbol} />
                               <Link to="/app/stock/$symbol" params={{ symbol: r.symbol }}><Button size="sm" variant="outline">Trade</Button></Link>

@@ -78,7 +78,7 @@ function Watchlist() {
                   <th className="px-4 py-3 font-medium">Symbol</th>
                   <th className="py-3 font-medium text-right">Price</th>
                   <th className="py-3 font-medium text-right">Day</th>
-                  <th className="py-3 font-medium">Trend</th>
+                  <th className="hidden py-3 font-medium md:table-cell">Trend</th>
                   <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
@@ -89,22 +89,22 @@ function Watchlist() {
                   return (
                     <tr key={sym} className="border-b border-border/60 last:border-0 hover:bg-accent/40">
                       <td className="px-4 py-3">
-                        <Link to="/app/stock/$symbol" params={{ symbol: sym }} className="flex items-center gap-3">
-                          <div className="grid h-8 w-8 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{r.symbol.slice(0, 2)}</div>
-                          <div>
+                        <Link to="/app/stock/$symbol" params={{ symbol: sym }} className="flex min-w-0 items-center gap-2 sm:gap-3">
+                          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{r.symbol.slice(0, 2)}</div>
+                          <div className="min-w-0">
                             <div className="font-semibold">{r.symbol}</div>
-                            <div className="text-xs text-muted-foreground">{r.name}</div>
+                            <div className="max-w-[100px] truncate text-xs text-muted-foreground sm:max-w-[220px]">{r.name}</div>
                           </div>
                         </Link>
                       </td>
                       <td className="py-3 text-right tabular">{fmtUSD(r.price)}</td>
                       <td className={cn("py-3 text-right tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>{fmtPct(r.dayChangePct)}</td>
-                      <td className="py-3"><Sparkline data={sparkline(sym)} up={up} width={120} height={32} /></td>
+                      <td className="hidden py-3 md:table-cell"><Sparkline data={sparkline(sym)} up={up} width={120} height={32} /></td>
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => removeMut.mutate(sym)}
                           disabled={removeMut.isPending}
-                          className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:h-auto sm:w-auto sm:rounded-none"
                           aria-label={`Remove ${sym}`}
                         >
                           <X className="h-4 w-4" />
