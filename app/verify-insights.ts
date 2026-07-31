@@ -69,7 +69,10 @@ try {
   const pub = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
   const { error: sErr } = await pub.auth.signInWithPassword({ email, password: "Test1234!pw" });
   if (sErr) throw new Error("signIn: " + sErr.message);
-  const { error: wErr } = await pub.from("watchlist").upsert(["NVDA", "AAPL", "VOO"].map((symbol) => ({ user_id: uid, symbol })), { onConflict: "user_id,symbol" });
+  // ignoreDuplicates: true matches the real addToWatchlist() — plain upsert
+  // (DO UPDATE) needs an UPDATE grant the `authenticated` role was never given
+  // (and the real app never needed, since it always upserts this way too).
+  const { error: wErr } = await pub.from("watchlist").upsert(["NVDA", "AAPL", "VOO"].map((symbol) => ({ user_id: uid, symbol })), { onConflict: "user_id,symbol", ignoreDuplicates: true });
   if (wErr) throw new Error("seed watchlist: " + wErr.message);
 
   const before = insightClaudeCalls();

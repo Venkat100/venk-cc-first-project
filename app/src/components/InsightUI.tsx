@@ -94,7 +94,10 @@ export function MarketBriefBody({ brief, createdAt }: { brief: MarketBrief; crea
         </ul>
       )}
       {brief.overall_note && <p className="text-sm text-muted-foreground">{brief.overall_note}</p>}
-      <p className="text-[11px] text-muted-foreground">For {new Date(createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</p>
+      {/* createdAt is a date-only (UTC-midnight) string — format in UTC or it
+          can render a day early in timezones behind UTC (same bug as H4b's
+          simulator date fix). */}
+      <p className="text-[11px] text-muted-foreground">For {new Date(createdAt).toLocaleDateString(undefined, { timeZone: "UTC", month: "short", day: "numeric" })}</p>
       <AiDisclaimer />
     </div>
   );
