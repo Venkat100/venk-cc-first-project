@@ -110,6 +110,14 @@ export type AgentSnapshot = {
   captured_at: string; // date (YYYY-MM-DD)
 };
 
+export type Insight = {
+  id: string;
+  user_id: string;
+  kind: string;
+  payload: unknown;
+  created_at: string; // date (YYYY-MM-DD)
+};
+
 export type ProposalStatus = "pending" | "approved" | "rejected" | "superseded";
 export type AgentProposalTarget = { symbol: string; weight: number; score: number; beta: number; reason: string };
 export type AgentProposalTrade = { kind: "buy" | "trim" | "exit"; side: "buy" | "sell"; symbol: string; quantity: number; price: number; reason: string };
@@ -310,6 +318,20 @@ export type Database = {
           trades?: unknown;
           rationale?: string | null;
           commentary?: string | null;
+        };
+        Relationships: [];
+      };
+      insights: {
+        Row: Insight;
+        Insert: {
+          id?: string;
+          user_id: string;
+          kind: string;
+          payload: unknown;
+          created_at?: string;
+        };
+        Update: {
+          payload?: unknown;
         };
         Relationships: [];
       };

@@ -9,12 +9,15 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LivePriceChart } from "@/components/LivePriceChart";
 import { LoadingState } from "@/components/DataStates";
+import { StockInsightBody, AiDisclaimer } from "@/components/InsightUI";
 import { getQuote } from "@/lib/marketData";
+import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { executeTrade } from "@/lib/trading/execute";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct, fmtCompact } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
+import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/stock/$symbol")({
@@ -109,6 +112,8 @@ function StockDetail() {
             </CardContent>
           </Card>
 
+          <InsightCard symbol={symbol} />
+
           <Card>
             <CardContent className="p-5">
               <Tabs defaultValue="position">
@@ -167,6 +172,44 @@ function StockDetail() {
         <OrderPanel price={quote?.price ?? 0} symbol={symbol} buyingPower={profile?.cash_balance ?? 0} ready={!!quote} />
       </div>
     </div>
+  );
+}
+
+function InsightCard({ symbol }: { symbol: string }) {
+  const [requested, setRequested] = useState(false);
+  const insightQ = useQuery({
+    queryKey: ["insight", symbol],
+    queryFn: () => getStockInsight(symbol),
+    enabled: requested,
+    staleTime: 6 * 60 * 60_000, // server caches per day; keep the client copy too
+    retry: 0,
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4 text-[color:var(--color-primary)]" /> AI Insight</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!requested ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">News-driven, history-aware analysis of {symbol} — generated on demand and refreshed daily.</p>
+            <Button className="gap-2" onClick={() => setRequested(true)}><Sparkles className="h-4 w-4" /> Get AI insight</Button>
+            <AiDisclaimer />
+          </div>
+        ) : insightQ.isLoading ? (
+          <LoadingState label="Reading the latest news…" />
+        ) : insightQ.isError ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">Couldn't generate an insight right now — the AI or news service may be busy. Please try again shortly.</p>
+            <Button variant="outline" size="sm" onClick={() => insightQ.refetch()}>Try again</Button>
+            <AiDisclaimer />
+          </div>
+        ) : insightQ.data ? (
+          <StockInsightBody insight={insightQ.data} />
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }
 

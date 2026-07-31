@@ -32,6 +32,7 @@
 import { serverEnv } from "@/lib/marketData/env.server";
 import { providerQuotes, fhMetrics } from "@/lib/marketData/finnhub.server";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { runDailyBriefs } from "@/lib/insights/insights.server";
 import { prefetchUniverse, type UniverseData } from "./quant.server";
 import { runThinker } from "./thinker.server";
 import { runWatchdog, type WatchdogSources } from "./watchdog.server";
@@ -199,7 +200,17 @@ export async function handleAgentThinkerRequest(request: Request): Promise<Respo
   const denied = authorizeCron(request);
   if (denied) return denied;
   try {
-    return json({ ok: true, summary: await runThinkerForAllAgents() }, 200);
+    const summary = await runThinkerForAllAgents();
+    // Fold the daily AI "market brief" into this same daily cron run (Vercel
+    // Hobby caps us at 2 crons and both slots are used). It's independent of the
+    // agent loop — a failure here must not fail the thinker result.
+    let briefs;
+    try {
+      briefs = await runDailyBriefs();
+    } catch (e) {
+      briefs = { error: e instanceof Error ? e.message : "brief job failed" };
+    }
+    return json({ ok: true, summary, briefs }, 200);
   } catch (e) {
     return json({ ok: false, error: e instanceof Error ? e.message : "Agent thinker batch failed." }, 500);
   }
