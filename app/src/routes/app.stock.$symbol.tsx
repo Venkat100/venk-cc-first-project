@@ -99,7 +99,7 @@ function StockDetail() {
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <Card>
-            <CardContent className="p-5">
+            <CardContent className="p-3 sm:p-5">
               <LivePriceChart symbol={symbol} height={340} defaultRange="3M" quote={quote} />
             </CardContent>
           </Card>
@@ -125,14 +125,16 @@ function StockDetail() {
           <InsightCard symbol={symbol} />
 
           <Card>
-            <CardContent className="p-5">
+            <CardContent className="p-3 sm:p-5">
               <Tabs defaultValue="position">
-                <TabsList>
-                  <TabsTrigger value="position">Your position</TabsTrigger>
-                  <TabsTrigger value="news">News</TabsTrigger>
-                  <TabsTrigger value="about">About</TabsTrigger>
-                  <TabsTrigger value="trades">Recent trades</TabsTrigger>
-                </TabsList>
+                <div className="overflow-x-auto">
+                  <TabsList className="w-max">
+                    <TabsTrigger value="position">Your position</TabsTrigger>
+                    <TabsTrigger value="news">News</TabsTrigger>
+                    <TabsTrigger value="about">About</TabsTrigger>
+                    <TabsTrigger value="trades">Recent trades</TabsTrigger>
+                  </TabsList>
+                </div>
                 <TabsContent value="position" className="mt-4">
                   {position && quote ? (
                     (() => {
@@ -446,7 +448,7 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-1 rounded-md bg-surface p-1">
           {(["buy", "sell"] as const).map((s) => (
-            <button key={s} onClick={() => setSide(s)} className={cn("rounded px-3 py-1.5 text-sm font-medium capitalize", side === s ? (s === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)]" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)]") : "text-muted-foreground")}>{s}</button>
+            <button key={s} onClick={() => setSide(s)} className={cn("rounded px-3 py-2.5 text-sm font-medium capitalize sm:py-1.5", side === s ? (s === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)]" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)]") : "text-muted-foreground")}>{s}</button>
           ))}
         </div>
 
@@ -466,7 +468,7 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
             type="button"
             onClick={() => setSellAll((v) => !v)}
             className={cn(
-              "w-full rounded-md border px-3 py-2 text-left text-sm transition-colors",
+              "w-full rounded-md border px-3 py-3 text-left text-sm transition-colors sm:py-2",
               isSellAll ? "border-[color:var(--color-loss)] bg-[color:var(--color-loss)]/10 text-[color:var(--color-loss)]" : "border-border text-muted-foreground hover:bg-accent",
             )}
           >
@@ -478,7 +480,7 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
           <>
             <div className="grid grid-cols-2 gap-1 rounded-md bg-surface p-1">
               {(["shares", "dollars"] as const).map((m) => (
-                <button key={m} onClick={() => setMode(m)} className={cn("rounded px-3 py-1.5 text-sm font-medium capitalize", mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>{m}</button>
+                <button key={m} onClick={() => setMode(m)} className={cn("rounded px-3 py-2.5 text-sm font-medium capitalize sm:py-1.5", mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>{m}</button>
               ))}
             </div>
 
@@ -517,7 +519,7 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
 
         <Button
           disabled={!ready || pending}
-          className={cn("w-full", side === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)] hover:opacity-90" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)] hover:opacity-90")}
+          className={cn("h-12 w-full text-base", side === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)] hover:opacity-90" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)] hover:opacity-90")}
           onClick={onConfirm}
         >
           {pending ? "Placing…" : confirmLabel}
