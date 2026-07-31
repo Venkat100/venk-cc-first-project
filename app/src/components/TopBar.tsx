@@ -112,7 +112,7 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
             onFocus={() => setOpen(true)}
             onChange={(e) => { setQ(e.target.value); setOpen(true); }}
             onKeyDown={onSearchKeyDown}
-            placeholder="Search any ticker — AAPL, QQQ, VOO…"
+            placeholder="Search any ticker…"
             aria-label="Search stocks and ETFs"
             className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />

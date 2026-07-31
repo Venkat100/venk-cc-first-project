@@ -195,7 +195,7 @@ function Agent() {
 
       {/* Summary header — agent value, return vs allocated, invested/cash split */}
       {(allocated > 0 || totalValue > 0) && (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
           <SummaryStat label="Agent value" value={pricesReady ? fmtUSD(totalValue) : "—"} sub={`${agentHoldings.length} position${agentHoldings.length === 1 ? "" : "s"}`} />
           <SummaryStat
             label="Total return"
@@ -221,7 +221,7 @@ function Agent() {
             ) : (
               <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border">
                 {(proposalQ.data.trades ?? []).map((t, i) => (
-                  <li key={i} className="flex items-center gap-2 px-3 py-2 text-sm">
+                  <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 text-sm">
                     <span className={cn("rounded-md px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider", t.side === "buy" ? "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]" : "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]")}>{t.kind}</span>
                     <span className="font-semibold">{t.symbol}</span>
                     <span className="tabular text-muted-foreground">{fmtQty(t.quantity)} @ {fmtUSD(t.price)}</span>
@@ -232,7 +232,7 @@ function Agent() {
             )}
             {proposalQ.data.commentary && <p className="text-xs italic text-muted-foreground">{proposalQ.data.commentary}</p>}
             <p className="text-[11px] text-muted-foreground">On approve, trades execute toward this target at <span className="font-medium text-foreground">current live prices</span> (not the indicative prices above), with all guardrails re-checked.</p>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Button className="gap-2" disabled={proposalMut.isPending} onClick={() => proposalMut.mutate({ id: proposalQ.data!.id, approve: true })}>
                 <Check className="h-4 w-4" /> {proposalMut.isPending ? "Working…" : "Approve & execute"}
               </Button>
@@ -317,7 +317,7 @@ function Agent() {
                     disabled={updateMut.isPending}
                     onClick={() => updateMut.mutate({ risk_level: r.id })}
                     className={cn(
-                      "rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-60",
+                      "rounded-lg border px-3 py-2.5 text-left transition-colors disabled:opacity-60 sm:py-2",
                       config.risk_level === r.id ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
                     )}
                   >
@@ -338,7 +338,7 @@ function Agent() {
                     disabled={updateMut.isPending}
                     onClick={() => updateMut.mutate({ mode: m.id })}
                     className={cn(
-                      "rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-60",
+                      "rounded-lg border px-3 py-2.5 text-left transition-colors disabled:opacity-60 sm:py-2",
                       config.mode === m.id ? "border-primary bg-primary/10" : "border-border hover:bg-accent/50",
                     )}
                   >
@@ -376,7 +376,7 @@ function Agent() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <Button className="gap-2" disabled={fundDisabled} onClick={() => fundMut.mutate(amt)}>
                 <ArrowDownToLine className="h-4 w-4" /> Fund agent
               </Button>
@@ -404,17 +404,17 @@ function Agent() {
           ) : !pricesReady ? (
             <LoadingState label="Loading live prices…" />
           ) : (
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Symbol</th>
-                  <th className="py-3 font-medium text-right">Qty</th>
-                  <th className="py-3 font-medium text-right">Avg cost</th>
-                  <th className="py-3 font-medium text-right">Price</th>
+                  <th className="hidden py-3 font-medium text-right sm:table-cell">Qty</th>
+                  <th className="hidden py-3 font-medium text-right lg:table-cell">Avg cost</th>
+                  <th className="hidden py-3 font-medium text-right md:table-cell">Price</th>
                   <th className="py-3 font-medium text-right">Market value</th>
-                  <th className="py-3 font-medium text-right">Weight</th>
+                  <th className="hidden py-3 font-medium text-right md:table-cell">Weight</th>
                   <th className="py-3 font-medium text-right">P&L</th>
-                  <th className="px-4 py-3 font-medium text-right">Trailing stop</th>
+                  <th className="hidden px-4 py-3 font-medium text-right sm:table-cell">Trailing stop</th>
                 </tr>
               </thead>
               <tbody>
@@ -430,17 +430,17 @@ function Agent() {
                     <tr key={h.symbol} className="border-b border-border/60 last:border-0">
                       <td className="px-4 py-3">
                         <div className="font-semibold">{q.symbol}</div>
-                        <div className="text-xs text-muted-foreground truncate max-w-[160px]">{q.name}</div>
+                        <div className="text-xs text-muted-foreground truncate max-w-[100px] sm:max-w-[160px]">{q.name}</div>
                       </td>
-                      <td className="py-3 text-right tabular">{fmtQty(h.quantity)}</td>
-                      <td className="py-3 text-right tabular">{fmtUSD(h.avg_cost)}</td>
-                      <td className="py-3 text-right tabular">{fmtUSD(q.price)}</td>
+                      <td className="hidden py-3 text-right tabular sm:table-cell">{fmtQty(h.quantity)}</td>
+                      <td className="hidden py-3 text-right tabular lg:table-cell">{fmtUSD(h.avg_cost)}</td>
+                      <td className="hidden py-3 text-right tabular md:table-cell">{fmtUSD(q.price)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
-                      <td className="py-3 text-right tabular text-muted-foreground">{weight.toFixed(1)}%</td>
+                      <td className="hidden py-3 text-right tabular text-muted-foreground md:table-cell">{weight.toFixed(1)}%</td>
                       <td className={cn("py-3 text-right tabular font-medium", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
-                        {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="text-xs opacity-80">({fmtPct(h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0)})</span>
+                        {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="hidden text-xs opacity-80 lg:inline">({fmtPct(h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0)})</span>
                       </td>
-                      <td className="px-4 py-3 text-right tabular">
+                      <td className="hidden px-4 py-3 text-right tabular sm:table-cell">
                         {stop != null ? (
                           <>
                             <div className="flex items-center justify-end gap-1">
@@ -543,20 +543,20 @@ function DecisionRow({ d }: { d: AgentDecision }) {
 
 function SummaryStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "gain" | "loss" }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-4">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={cn("mt-1 text-xl font-semibold tabular", tone === "gain" && "text-[color:var(--color-gain)]", tone === "loss" && "text-[color:var(--color-loss)]")}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+    <div className="rounded-lg border border-border bg-surface p-3 sm:p-4">
+      <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={cn("mt-1 truncate text-lg font-semibold tabular sm:text-xl", tone === "gain" && "text-[color:var(--color-gain)]", tone === "loss" && "text-[color:var(--color-loss)]")}>{value}</p>
+      {sub && <p className="mt-0.5 truncate text-xs text-muted-foreground">{sub}</p>}
     </div>
   );
 }
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-3">
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-base font-semibold tabular">{value}</p>
-      {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
+    <div className="rounded-lg border border-border bg-surface p-2 sm:p-3">
+      <p className="truncate text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-xs font-semibold leading-tight tabular sm:text-base">{value}</p>
+      {hint && <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{hint}</p>}
     </div>
   );
 }
