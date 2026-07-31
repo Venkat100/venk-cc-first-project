@@ -14,7 +14,7 @@ import { requireServerEnv } from "./env.server";
 import { ProviderError, num } from "./provider.server";
 import { cachePeek, cachePut } from "./cache.server";
 import { RateLimiter, withRetry, withTimeout } from "./ratelimit.server";
-import type { Quote, SymbolMatch } from "./types";
+import type { Quote, SymbolMatch, NewsItem } from "./types";
 
 const FH_BASE = "https://finnhub.io/api/v1";
 
@@ -73,7 +73,7 @@ async function fhGet(path: string): Promise<any> {
   );
 }
 
-type Profile = { name?: string; sector?: string; marketCap?: number; logo?: string; exchange?: string };
+type Profile = { name?: string; sector?: string; marketCap?: number; logo?: string; exchange?: string; weburl?: string; country?: string; ipo?: string };
 
 async function fhProfile(symbol: string): Promise<Profile> {
   const key = `fh:profile:${symbol}`;
@@ -89,6 +89,10 @@ async function fhProfile(symbol: string): Promise<Profile> {
       marketCap: raw?.marketCapitalization ? num(raw.marketCapitalization) * 1e6 : undefined,
       logo: raw?.logo || undefined,
       exchange: raw?.exchange || undefined,
+      // Same response, no extra call — empty for ETFs like everything above.
+      weburl: raw?.weburl || undefined,
+      country: raw?.country || undefined,
+      ipo: raw?.ipo || undefined,
     };
   } catch {
     // Profile is best-effort enrichment; never fail a quote because of it.
@@ -168,6 +172,9 @@ async function fhQuote(symbol: string): Promise<Quote> {
     marketCap: profile.marketCap,
     logo: profile.logo,
     exchange: profile.exchange,
+    weburl: profile.weburl,
+    country: profile.country,
+    ipo: profile.ipo,
   };
 }
 
@@ -224,28 +231,31 @@ export async function fhMetrics(symbol: string): Promise<SymbolMetrics> {
   return out;
 }
 
-export type NewsItem = { headline: string; summary?: string; datetime?: number; source?: string };
-
-/** Recent company news (Finnhub /company-news), last `days` days, top `limit`. */
+/** Recent company news (Finnhub /company-news), last `days` days, top `limit`.
+ *  Errors PROPAGATE (unlike most best-effort enrichment here) so callers that
+ *  need to tell "genuinely no news" apart from "provider error/rate-limited"
+ *  can — e.g. the News tab. Existing callers that just want best-effort
+ *  already wrap this in `.catch(() => [])`. */
 export async function fhCompanyNews(symbol: string, days = 7, limit = 5): Promise<NewsItem[]> {
   const sym = symbol.toUpperCase();
-  const key = `fh:news:${sym}`;
+  const key = `fh:news:${sym}:${limit}`;
   const hit = cachePeek<NewsItem[]>(key);
   if (hit) return hit;
-  let out: NewsItem[] = [];
-  try {
-    const to = new Date();
-    const from = new Date(to.getTime() - days * 86_400_000);
-    const fmt = (d: Date) => d.toISOString().slice(0, 10);
-    const json = await fhGet(`/company-news?symbol=${encodeURIComponent(sym)}&from=${fmt(from)}&to=${fmt(to)}`);
-    const arr: any[] = Array.isArray(json) ? json : [];
-    out = arr
-      .filter((n) => n?.headline)
-      .slice(0, limit)
-      .map((n) => ({ headline: String(n.headline), summary: n.summary ? String(n.summary).slice(0, 280) : undefined, datetime: n.datetime, source: n.source }));
-  } catch {
-    // best-effort — ETFs and quiet names may have no news
-  }
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 86_400_000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const json = await fhGet(`/company-news?symbol=${encodeURIComponent(sym)}&from=${fmt(from)}&to=${fmt(to)}`);
+  const arr: any[] = Array.isArray(json) ? json : [];
+  const out: NewsItem[] = arr
+    .filter((n) => n?.headline)
+    .slice(0, limit)
+    .map((n) => ({
+      headline: String(n.headline),
+      summary: n.summary ? String(n.summary).slice(0, 280) : undefined,
+      datetime: n.datetime,
+      source: n.source,
+      url: n.url ? String(n.url) : undefined,
+    }));
   cachePut(key, out, 60 * 60_000); // 1h
   return out;
 }

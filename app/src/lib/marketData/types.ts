@@ -24,6 +24,11 @@ export type Quote = {
   marketCap?: number; // absolute USD
   logo?: string;
   exchange?: string;
+  // Extra profile fields (same /stock/profile2 call, no extra cost). Empty
+  // for ETFs/funds, where Finnhub's profile has no data at all.
+  weburl?: string;
+  country?: string;
+  ipo?: string; // YYYY-MM-DD
 };
 
 export type Candle = {
@@ -41,4 +46,14 @@ export type SymbolMatch = {
   name: string;
   exchange?: string;
   type?: string;
+};
+
+export type NewsItem = {
+  headline: string;
+  summary?: string;
+  /** Unix seconds. */
+  datetime?: number;
+  source?: string;
+  /** Link to the original article. Absent → render as plain text, not a dead link. */
+  url?: string;
 };

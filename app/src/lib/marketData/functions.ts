@@ -9,9 +9,9 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { providerCandles } from "./provider.server";
-import { providerQuotes, providerSearch } from "./finnhub.server";
+import { providerQuotes, providerSearch, fhCompanyNews } from "./finnhub.server";
 import { cached, cachePeek, cachePut, TTL } from "./cache.server";
-import type { Candle, Quote, SymbolMatch } from "./types";
+import type { Candle, Quote, SymbolMatch, NewsItem } from "./types";
 
 const RANGES = ["1D", "1W", "1M", "3M", "1Y", "ALL"] as const;
 
@@ -54,4 +54,21 @@ export const searchSymbolsFn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<SymbolMatch[]> => {
     const q = data.query.trim().toLowerCase();
     return cached(`search:${q}`, TTL.search, () => providerSearch(q));
+  });
+
+export type CompanyNewsResponse = { ok: true; items: NewsItem[] } | { ok: false; error: string };
+
+/** Recent company news for the Stock Detail news tab. Not user-specific, so
+ *  no auth needed (same pattern as quotes/candles/search). Distinguishes a
+ *  genuinely-empty result from a provider error/rate-limit, since those need
+ *  different UI treatment. */
+export const getCompanyNewsFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ symbol: z.string().min(1) }))
+  .handler(async ({ data }): Promise<CompanyNewsResponse> => {
+    try {
+      const items = await fhCompanyNews(data.symbol.toUpperCase(), 7, 10);
+      return { ok: true, items };
+    } catch {
+      return { ok: false, error: "Couldn't load news right now — the provider may be rate-limited. Try again shortly." };
+    }
   });

@@ -10,11 +10,11 @@
 //  Call sites fetch via react-query and render loading/empty/error states.
 // ════════════════════════════════════════════════════════════════════════
 
-import { getQuotesFn, getCandlesFn, searchSymbolsFn } from "./functions";
+import { getQuotesFn, getCandlesFn, searchSymbolsFn, getCompanyNewsFn } from "./functions";
 import { getStock } from "@/lib/mockData";
-import type { Candle, Quote, Range, SymbolMatch } from "./types";
+import type { Candle, Quote, Range, SymbolMatch, NewsItem } from "./types";
 
-export type { Candle, Quote, Range, SymbolMatch } from "./types";
+export type { Candle, Quote, Range, SymbolMatch, NewsItem } from "./types";
 
 // Curated universe shown on the Markets page. Kept small to respect the
 // Twelve Data free tier (≈8 credits/min). Names/sectors come from curated
@@ -58,4 +58,11 @@ export async function getCandles(symbol: string, range: Range): Promise<Candle[]
 export async function searchSymbols(query: string): Promise<SymbolMatch[]> {
   if (!query.trim()) return [];
   return searchSymbolsFn({ data: { query } });
+}
+
+/** Recent company news for the Stock Detail news tab (last ~7 days, capped). */
+export async function getCompanyNews(symbol: string): Promise<NewsItem[]> {
+  const res = await getCompanyNewsFn({ data: { symbol: symbol.toUpperCase() } });
+  if (!res.ok) throw new Error(res.error);
+  return res.items;
 }

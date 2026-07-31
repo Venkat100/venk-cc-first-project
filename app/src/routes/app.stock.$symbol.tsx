@@ -8,16 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LivePriceChart } from "@/components/LivePriceChart";
-import { LoadingState } from "@/components/DataStates";
+import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { StockInsightBody, AiDisclaimer } from "@/components/InsightUI";
-import { getQuote } from "@/lib/marketData";
+import { getQuote, getCompanyNews, type NewsItem, type Quote } from "@/lib/marketData";
+import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { executeTrade } from "@/lib/trading/execute";
 import { useAuth } from "@/lib/auth/auth-context";
-import { fmtUSD, fmtPct, fmtCompact, fmtQty } from "@/lib/mockData";
+import { fmtUSD, fmtPct, fmtCompact, fmtQty, fmtRelativeTime } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Newspaper, ExternalLink, Globe } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/stock/$symbol")({
@@ -38,6 +39,15 @@ function StockDetail() {
   const quote = quoteQ.data;
   const position = (holdingsQ.data ?? []).find((h) => h.symbol === symbol);
   const recent = useMemo(() => (txQ.data ?? []).filter((t) => t.symbol === symbol).slice(0, 8), [txQ.data, symbol]);
+
+  // Total portfolio value — same formula as the Dashboard (cash + Σ qty×price)
+  // — needed for "% of portfolio" on the position card. Reuses the quote
+  // already loaded for THIS symbol; only fetches the OTHER held symbols.
+  const otherSymbols = useMemo(() => (holdingsQ.data ?? []).map((h) => h.symbol).filter((s) => s !== symbol), [holdingsQ.data, symbol]);
+  const otherQuotesQ = useQuotes(otherSymbols);
+  const portfolioPricesReady = otherSymbols.length === 0 || otherQuotesQ.isSuccess;
+  const holdingsValue = (holdingsQ.data ?? []).reduce((sum, h) => sum + (h.symbol === symbol ? (quote?.price ?? 0) : quoteOf(otherQuotesQ.data, h.symbol).price) * h.quantity, 0);
+  const totalPortfolio = (profile?.cash_balance ?? 0) + holdingsValue;
 
   // Invalid ticker or provider failure → friendly card, never a crash.
   if (quoteQ.isError) {
@@ -119,20 +129,46 @@ function StockDetail() {
               <Tabs defaultValue="position">
                 <TabsList>
                   <TabsTrigger value="position">Your position</TabsTrigger>
-                  <TabsTrigger value="trades">Recent trades</TabsTrigger>
+                  <TabsTrigger value="news">News</TabsTrigger>
                   <TabsTrigger value="about">About</TabsTrigger>
+                  <TabsTrigger value="trades">Recent trades</TabsTrigger>
                 </TabsList>
                 <TabsContent value="position" className="mt-4">
                   {position && quote ? (
-                    <div className="grid gap-4 sm:grid-cols-4">
-                      <Stat label="Shares" value={fmtQty(position.quantity)} />
-                      <Stat label="Avg cost" value={fmtUSD(position.avg_cost)} />
-                      <Stat label="Market value" value={fmtUSD(quote.price * position.quantity)} />
-                      <Stat label="Unrealized P&L" value={`${(quote.price - position.avg_cost) * position.quantity >= 0 ? "+" : "−"}${fmtUSD(Math.abs((quote.price - position.avg_cost) * position.quantity))}`} />
-                    </div>
+                    (() => {
+                      const marketValue = quote.price * position.quantity;
+                      const returnAbs = (quote.price - position.avg_cost) * position.quantity;
+                      const returnPct = position.avg_cost > 0 ? ((quote.price - position.avg_cost) / position.avg_cost) * 100 : 0;
+                      const todayAbs = quote.dayChange * position.quantity;
+                      const pctOfPortfolio = portfolioPricesReady && totalPortfolio > 0 ? (marketValue / totalPortfolio) * 100 : null;
+                      return (
+                        <div className="space-y-4">
+                          <div className="grid gap-4 sm:grid-cols-4">
+                            <Stat label="Shares" value={fmtQty(position.quantity)} />
+                            <Stat label="Avg cost" value={fmtUSD(position.avg_cost)} />
+                            <Stat label="Market value" value={fmtUSD(marketValue)} />
+                            <Stat label="Today's change" value={`${todayAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(todayAbs))}`} tone={todayAbs >= 0 ? "gain" : "loss"} />
+                          </div>
+                          <div className="grid gap-4 sm:grid-cols-3">
+                            <Stat label="Total return" value={`${returnAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(returnAbs))}`} tone={returnAbs >= 0 ? "gain" : "loss"} />
+                            <Stat label="Total return %" value={fmtPct(returnPct)} tone={returnPct >= 0 ? "gain" : "loss"} />
+                            <Stat label="% of portfolio" value={pctOfPortfolio != null ? `${pctOfPortfolio.toFixed(1)}%` : "—"} />
+                          </div>
+                        </div>
+                      );
+                    })()
                   ) : (
-                    <p className="text-sm text-muted-foreground">You don't own any {symbol} yet. Place a paper order from the panel on the right.</p>
+                    <div className="rounded-lg border border-dashed border-border py-8 text-center">
+                      <p className="text-sm text-muted-foreground">You don't own any {symbol} yet.</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Place a paper order from the panel on the right to start a position.</p>
+                    </div>
                   )}
+                </TabsContent>
+                <TabsContent value="news" className="mt-4">
+                  <NewsTab symbol={symbol} />
+                </TabsContent>
+                <TabsContent value="about" className="mt-4">
+                  <AboutTab symbol={symbol} quote={quote} />
                 </TabsContent>
                 <TabsContent value="trades" className="mt-4">
                   {recent.length ? (
@@ -150,19 +186,6 @@ function StockDetail() {
                       </tbody>
                     </table>
                   ) : <p className="text-sm text-muted-foreground">No trades for {symbol} yet.</p>}
-                </TabsContent>
-                <TabsContent value="about" className="mt-4">
-                  <div className="space-y-2 text-sm text-muted-foreground">
-                    <p className="leading-relaxed">
-                      <span className="font-medium text-foreground">{quote?.name ?? symbol}</span> ({symbol})
-                      {quote?.sector && quote.sector !== "—" ? ` · ${quote.sector}` : ""}
-                      {quote?.exchange ? ` · ${quote.exchange}` : ""}.
-                    </p>
-                    {quote?.marketCap != null && (
-                      <p>Market capitalization: <span className="tabular text-foreground">${fmtCompact(quote.marketCap)}</span>.</p>
-                    )}
-                    <p>Live quote &amp; company profile from Finnhub; historical price chart from Twelve Data.</p>
-                  </div>
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -213,11 +236,97 @@ function InsightCard({ symbol }: { symbol: string }) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "gain" | "loss" }) {
   return (
     <div>
       <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-medium tabular">{value}</p>
+      <p className={cn("mt-1 text-sm font-medium tabular", tone === "gain" && "text-[color:var(--color-gain)]", tone === "loss" && "text-[color:var(--color-loss)]")}>{value}</p>
+    </div>
+  );
+}
+
+function NewsTab({ symbol }: { symbol: string }) {
+  const newsQ = useQuery({ queryKey: ["news", symbol], queryFn: () => getCompanyNews(symbol), staleTime: 10 * 60_000, retry: 1 });
+
+  // isPending (not isLoading): isLoading is isPending && isFetching, which
+  // goes false during the gap between retry attempts even though we still
+  // have neither data nor a settled error — that gap would otherwise flash
+  // the empty state instead of the spinner.
+  if (newsQ.isPending) return <LoadingState label="Loading news…" />;
+  if (newsQ.isError) {
+    return (
+      <div className="space-y-3">
+        <ErrorState message={(newsQ.error as Error)?.message ?? "Couldn't load news right now."} />
+        <div className="text-center"><Button variant="outline" size="sm" onClick={() => newsQ.refetch()}>Try again</Button></div>
+      </div>
+    );
+  }
+  const items = newsQ.data ?? [];
+  if (items.length === 0) {
+    return <EmptyState icon={Newspaper} title="No recent news" description={`No recent news for ${symbol} in the last week.`} />;
+  }
+  return (
+    <ul className="divide-y divide-border/60">
+      {items.map((n, i) => <NewsRow key={i} item={n} />)}
+    </ul>
+  );
+}
+
+function NewsRow({ item }: { item: NewsItem }) {
+  const meta = [item.source, fmtRelativeTime(item.datetime)].filter(Boolean).join(" · ");
+  const body = (
+    <>
+      <p className={cn("text-sm font-medium leading-snug", item.url && "group-hover:underline")}>{item.headline}</p>
+      {meta && <p className="mt-1 text-xs text-muted-foreground">{meta}</p>}
+    </>
+  );
+  return (
+    <li className="py-3 first:pt-0 last:pb-0">
+      {item.url ? (
+        <a href={item.url} target="_blank" rel="noopener noreferrer" className="group flex items-start justify-between gap-2">
+          {body}
+          <ExternalLink className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        </a>
+      ) : (
+        body
+      )}
+    </li>
+  );
+}
+
+function AboutTab({ symbol, quote }: { symbol: string; quote?: Quote }) {
+  if (!quote) return <LoadingState label="Loading company info…" />;
+  // Finnhub's /stock/profile2 is empty for ETFs/funds — no sector, no market
+  // cap, no country. Degrade to a clear fund label instead of blank gaps.
+  const isLikelyFund = !quote.marketCap && (!quote.sector || quote.sector === "—");
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        {quote.logo ? (
+          <img src={quote.logo} alt={symbol} className="h-11 w-11 shrink-0 rounded-xl bg-white object-contain p-1" />
+        ) : (
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-2 text-xs font-bold">{symbol.slice(0, 2)}</div>
+        )}
+        <div className="min-w-0">
+          <p className="truncate font-medium text-foreground">{quote.name}</p>
+          <p className="text-xs text-muted-foreground">{symbol}{quote.exchange ? ` · ${quote.exchange}` : ""}</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat label="Sector / type" value={isLikelyFund ? "Exchange-traded fund" : (quote.sector ?? "—")} />
+        <Stat label="Market cap" value={quote.marketCap != null ? `$${fmtCompact(quote.marketCap)}` : "—"} />
+        <Stat label="Country" value={quote.country ?? "—"} />
+        {quote.ipo && <Stat label="IPO date" value={quote.ipo} />}
+      </div>
+
+      {quote.weburl && (
+        <a href={quote.weburl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-[color:var(--color-primary)] hover:underline">
+          <Globe className="h-3.5 w-3.5" /> Visit website
+        </a>
+      )}
+
+      <p className="text-[11px] text-muted-foreground">Live quote &amp; company profile from Finnhub; historical price chart from Twelve Data.</p>
     </div>
   );
 }
