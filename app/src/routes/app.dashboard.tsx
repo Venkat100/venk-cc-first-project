@@ -71,8 +71,8 @@ function Dashboard() {
         <p className="text-sm text-muted-foreground">Here's where your paper portfolio stands today.</p>
       </div>
 
-      {/* Stat row */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Stat row — 2×2 on phones/tablets (Robinhood-style compact), 4-across on wide screens */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Stat label="Portfolio value" value={pricesReady ? fmtUSD(total) : dash} sub={`${holdings.length} holding${holdings.length === 1 ? "" : "s"}`} />
         <Stat label="Buying power" value={fmtUSD(cash)} sub="Virtual cash available" />
         <Stat label="Today's change" value={pricesReady ? `${dayAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(dayAbs))}` : dash} sub={pricesReady ? fmtPct(dayPct) : ""} tone={dayAbs >= 0 ? "gain" : "loss"} />
@@ -135,13 +135,13 @@ function Dashboard() {
               ) : !pricesReady ? (
                 <LoadingState label="Loading live prices…" />
               ) : (
-                <table className="w-full min-w-[640px] text-sm">
+                <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                       <th className="py-2 font-medium">Symbol</th>
-                      <th className="py-2 font-medium">Shares</th>
-                      <th className="py-2 font-medium text-right">Avg cost</th>
-                      <th className="py-2 font-medium text-right">Price</th>
+                      <th className="hidden py-2 font-medium sm:table-cell">Shares</th>
+                      <th className="hidden py-2 font-medium text-right sm:table-cell">Avg cost</th>
+                      <th className="hidden py-2 font-medium text-right sm:table-cell">Price</th>
                       <th className="py-2 font-medium text-right">Market value</th>
                       <th className="py-2 font-medium text-right">Unrealized P&L</th>
                     </tr>
@@ -156,20 +156,20 @@ function Dashboard() {
                       return (
                         <tr key={h.symbol} className="border-b border-border/60 last:border-0 hover:bg-accent/40">
                           <td className="py-3">
-                            <Link to="/app/stock/$symbol" params={{ symbol: q.symbol }} className="flex items-center gap-3">
-                              <div className="grid h-8 w-8 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{q.symbol.slice(0, 2)}</div>
-                              <div>
+                            <Link to="/app/stock/$symbol" params={{ symbol: q.symbol }} className="flex min-w-0 items-center gap-2 sm:gap-3">
+                              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{q.symbol.slice(0, 2)}</div>
+                              <div className="min-w-0">
                                 <div className="font-semibold">{q.symbol}</div>
-                                <div className="text-xs text-muted-foreground">{q.name}</div>
+                                <div className="max-w-[100px] truncate text-xs text-muted-foreground sm:max-w-[180px]">{q.name}</div>
                               </div>
                             </Link>
                           </td>
-                          <td className="py-3 tabular">{fmtQty(h.quantity)}</td>
-                          <td className="py-3 text-right tabular">{fmtUSD(h.avg_cost)}</td>
-                          <td className="py-3 text-right tabular">{fmtUSD(q.price)}</td>
+                          <td className="hidden py-3 tabular sm:table-cell">{fmtQty(h.quantity)}</td>
+                          <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(h.avg_cost)}</td>
+                          <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(q.price)}</td>
                           <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
                           <td className={cn("py-3 text-right tabular font-medium", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
-                            {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="text-xs opacity-80">({fmtPct(plPct)})</span>
+                            {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(plPct)})</span>
                           </td>
                         </tr>
                       );
@@ -292,12 +292,12 @@ function MarketBriefCard({ hasTracked }: { hasTracked: boolean }) {
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "gain" | "loss" }) {
   return (
     <Card>
-      <CardContent className="p-5">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
-        <p className="mt-2 text-2xl font-semibold tabular">{value}</p>
+      <CardContent className="p-3 sm:p-5">
+        <p className="truncate text-[11px] uppercase tracking-wider text-muted-foreground sm:text-xs">{label}</p>
+        <p className="mt-1.5 truncate text-lg font-semibold tabular sm:mt-2 sm:text-2xl">{value}</p>
         {sub && (
           <p className={cn(
-            "mt-1 text-xs tabular",
+            "mt-1 truncate text-xs tabular",
             tone === "gain" && "text-[color:var(--color-gain)]",
             tone === "loss" && "text-[color:var(--color-loss)]",
             !tone && "text-muted-foreground",

@@ -75,6 +75,22 @@ export function PortfolioValueChart({
 
   const shortHistory = allPoints.length < 2;
 
+  // Y-axis tick precision, chosen from the visible value SPAN so ticks stay
+  // distinct instead of all rounding to the same "$100k" (the k-rounding
+  // collision bug): a wide span can round to whole $k; a narrow one (a flat
+  // week, or a small agent allocation) needs a decimal — or full dollars —
+  // to keep neighboring ticks from colliding.
+  const valueSpan = useMemo(() => {
+    if (data.length === 0) return 0;
+    const vs = data.map((d) => d.v);
+    return Math.max(...vs) - Math.min(...vs);
+  }, [data]);
+  const fmtAxisTick = (v: number) => {
+    if (valueSpan >= 20_000) return `$${Math.round(v / 1000)}k`;
+    if (valueSpan >= 300) return `$${(v / 1000).toFixed(1)}k`;
+    return fmtUSD(v, { maximumFractionDigits: 0 });
+  };
+
   // Window (or, while scrubbing, "start → cursor") change readout — computed
   // purely from the already-loaded `data`, no refetch.
   const readout = useMemo(() => {
@@ -115,7 +131,7 @@ export function PortfolioValueChart({
                 </linearGradient>
               </defs>
               <XAxis dataKey="t" tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={40} />
-              <YAxis domain={["dataMin - 100", "dataMax + 100"]} tickFormatter={(v) => `$${Math.round(Number(v) / 1000)}k`} stroke="var(--color-muted-foreground)" fontSize={11} width={48} />
+              <YAxis domain={["dataMin - 100", "dataMax + 100"]} tickFormatter={(v) => fmtAxisTick(Number(v))} stroke="var(--color-muted-foreground)" fontSize={11} width={52} />
               <Tooltip
                 cursor={{ stroke: "var(--color-muted-foreground)", strokeDasharray: "3 3" }}
                 contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
