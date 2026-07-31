@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
-import { fmtUSD, fmtPct } from "@/lib/mockData";
+import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
 import { Wallet, Receipt, PieChart as PieIcon } from "lucide-react";
@@ -114,7 +114,7 @@ function Portfolio() {
                     <tr key={h.symbol} className="border-b border-border/60 last:border-0">
                       <td className="px-4 py-3 font-semibold">{q.symbol}</td>
                       <td className="py-3 text-xs text-muted-foreground">{q.sector}</td>
-                      <td className="py-3 text-right tabular">{h.quantity}</td>
+                      <td className="py-3 text-right tabular">{fmtQty(h.quantity)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(h.avg_cost)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(q.price)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
@@ -174,7 +174,7 @@ function Portfolio() {
                         )}>{t.side}</span>
                       </td>
                       <td className="py-3 font-semibold">{t.symbol}</td>
-                      <td className="py-3 text-right tabular">{t.quantity}</td>
+                      <td className="py-3 text-right tabular">{fmtQty(t.quantity)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(t.price)}</td>
                       <td className="px-4 py-3 text-right tabular">{fmtUSD(t.total)}</td>
                     </tr>

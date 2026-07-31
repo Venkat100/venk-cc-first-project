@@ -5,7 +5,13 @@
 import { supabase } from "@/lib/supabase/client";
 import { executeTradeFn, type TradeResult } from "./functions";
 
-export type TradeInput = { symbol: string; side: "buy" | "sell"; quantity: number };
+// Exactly one of quantity / amount / sellAll selects the order mode — see
+// executeTradeFn for how each is resolved server-side.
+export type TradeInput = { symbol: string; side: "buy" | "sell" } & (
+  | { quantity: number; amount?: never; sellAll?: never }
+  | { amount: number; quantity?: never; sellAll?: never }
+  | { sellAll: true; quantity?: never; amount?: never }
+);
 
 export async function executeTrade(input: TradeInput): Promise<TradeResult> {
   const { data } = await supabase.auth.getSession();
@@ -18,6 +24,8 @@ export async function executeTrade(input: TradeInput): Promise<TradeResult> {
       symbol: input.symbol.toUpperCase(),
       side: input.side,
       quantity: input.quantity,
+      amount: input.amount,
+      sellAll: input.sellAll,
     },
   });
 

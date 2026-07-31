@@ -49,12 +49,24 @@ function friendly(token: string): string {
 
 export const executeTradeFn = createServerFn({ method: "POST" })
   .inputValidator(
-    z.object({
-      accessToken: z.string().min(1),
-      symbol: z.string().min(1),
-      side: z.enum(["buy", "sell"]),
-      quantity: z.number().positive(),
-    }),
+    z
+      .object({
+        accessToken: z.string().min(1),
+        symbol: z.string().min(1),
+        side: z.enum(["buy", "sell"]),
+        // Exactly one of these three selects the order mode:
+        //  - quantity: a SHARE order (fractional allowed) — qty is trusted as-is.
+        //  - amount: a DOLLAR order — the server converts amount -> qty at the
+        //    server-fetched price; the client's own estimate is never trusted.
+        //  - sellAll: close the whole position at its EXACT stored quantity
+        //    (no rounding), so no dust remainder is left behind.
+        quantity: z.number().positive().optional(),
+        amount: z.number().positive().optional(),
+        sellAll: z.boolean().optional(),
+      })
+      .refine((d) => [d.quantity != null, d.amount != null, d.sellAll === true].filter(Boolean).length === 1, {
+        message: "Specify exactly one of quantity, amount, or sellAll.",
+      }),
   )
   .handler(async ({ data }): Promise<TradeResponse> => {
     try {
@@ -65,13 +77,42 @@ export const executeTradeFn = createServerFn({ method: "POST" })
       const quote = await getServerQuote(data.symbol);
       if (!quote || !(quote.price > 0)) return { ok: false, error: friendly("no_price") };
 
-      // 3) Atomic execution in the DB via the service-role client.
       const admin = getServiceClient();
+      const sym = data.symbol.toUpperCase();
+
+      // 3) Resolve the actual share quantity to execute, server-side.
+      let quantity: number;
+      if (data.sellAll) {
+        if (data.side !== "sell") return { ok: false, error: "Sell-all only applies to a sell order." };
+        const { data: holding } = await admin.from("holdings").select("quantity").eq("user_id", userId).eq("symbol", sym).maybeSingle();
+        const held = holding ? Number(holding.quantity) : 0;
+        if (held <= 0) return { ok: false, error: friendly("insufficient_shares") };
+        quantity = held; // exact stored value — zero dust
+      } else if (data.amount != null) {
+        // Round to 6dp: enough precision for a sane fractional order, avoids
+        // float noise (e.g. 50/207.12 = 0.24151...49999999996).
+        const rawQty = Math.round((data.amount / quote.price) * 1e6) / 1e6;
+        if (!(rawQty > 0)) return { ok: false, error: "That amount is too small at the current price." };
+        if (data.side === "sell") {
+          // Cap a dollar-based sell at the held quantity instead of erroring —
+          // "sell $X worth" of a position worth less than $X just sells it all.
+          const { data: holding } = await admin.from("holdings").select("quantity").eq("user_id", userId).eq("symbol", sym).maybeSingle();
+          const held = holding ? Number(holding.quantity) : 0;
+          if (held <= 0) return { ok: false, error: friendly("insufficient_shares") };
+          quantity = Math.min(rawQty, held);
+        } else {
+          quantity = rawQty;
+        }
+      } else {
+        quantity = data.quantity!;
+      }
+
+      // 4) Atomic execution in the DB via the service-role client.
       const { data: rpc, error } = await admin.rpc("execute_trade", {
         p_user_id: userId,
-        p_symbol: data.symbol.toUpperCase(),
+        p_symbol: sym,
         p_side: data.side,
-        p_quantity: data.quantity,
+        p_quantity: quantity,
         p_price: quote.price,
       });
 

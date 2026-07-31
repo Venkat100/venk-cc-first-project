@@ -15,7 +15,7 @@ import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { executeTrade } from "@/lib/trading/execute";
 import { useAuth } from "@/lib/auth/auth-context";
-import { fmtUSD, fmtPct, fmtCompact } from "@/lib/mockData";
+import { fmtUSD, fmtPct, fmtCompact, fmtQty } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -125,7 +125,7 @@ function StockDetail() {
                 <TabsContent value="position" className="mt-4">
                   {position && quote ? (
                     <div className="grid gap-4 sm:grid-cols-4">
-                      <Stat label="Shares" value={String(position.quantity)} />
+                      <Stat label="Shares" value={fmtQty(position.quantity)} />
                       <Stat label="Avg cost" value={fmtUSD(position.avg_cost)} />
                       <Stat label="Market value" value={fmtUSD(quote.price * position.quantity)} />
                       <Stat label="Unrealized P&L" value={`${(quote.price - position.avg_cost) * position.quantity >= 0 ? "+" : "−"}${fmtUSD(Math.abs((quote.price - position.avg_cost) * position.quantity))}`} />
@@ -143,7 +143,7 @@ function StockDetail() {
                           <tr key={t.id} className="border-b border-border/60 last:border-0">
                             <td className="py-2 text-muted-foreground">{new Date(t.created_at).toLocaleDateString()}</td>
                             <td className="py-2 uppercase">{t.side}</td>
-                            <td className="py-2 text-right tabular">{t.quantity}</td>
+                            <td className="py-2 text-right tabular">{fmtQty(t.quantity)}</td>
                             <td className="py-2 text-right tabular">{fmtUSD(t.price)}</td>
                           </tr>
                         ))}
@@ -169,7 +169,7 @@ function StockDetail() {
           </Card>
         </div>
 
-        <OrderPanel price={quote?.price ?? 0} symbol={symbol} buyingPower={profile?.cash_balance ?? 0} ready={!!quote} />
+        <OrderPanel price={quote?.price ?? 0} symbol={symbol} buyingPower={profile?.cash_balance ?? 0} positionQty={position?.quantity ?? 0} ready={!!quote} />
       </div>
     </div>
   );
@@ -222,18 +222,58 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symbol: string; buyingPower: number; ready: boolean }) {
+// Sensible minimums; anything below is rejected with a friendly message
+// rather than silently truncated or crashing on absurd precision.
+const MIN_SHARES = 0.0001;
+const MIN_DOLLARS = 1;
+
+function validateSharesQty(raw: string): { ok: true; qty: number } | { ok: false; error: string } {
+  const n = Number(raw);
+  if (raw.trim() === "" || !Number.isFinite(n)) return { ok: false, error: "Enter a quantity." };
+  if (n <= 0) return { ok: false, error: "Enter a quantity greater than zero." };
+  if (n < MIN_SHARES) return { ok: false, error: `Minimum order is ${MIN_SHARES} shares.` };
+  const dp = (raw.split(".")[1] ?? "").length;
+  if (dp > 6) return { ok: false, error: "Enter up to 6 decimal places." };
+  return { ok: true, qty: n };
+}
+
+function validateDollarAmount(raw: string): { ok: true; amount: number } | { ok: false; error: string } {
+  const n = Number(raw);
+  if (raw.trim() === "" || !Number.isFinite(n)) return { ok: false, error: "Enter a dollar amount." };
+  if (n <= 0) return { ok: false, error: "Enter an amount greater than zero." };
+  if (n < MIN_DOLLARS) return { ok: false, error: `Minimum order is ${fmtUSD(MIN_DOLLARS)}.` };
+  const dp = (raw.split(".")[1] ?? "").length;
+  if (dp > 2) return { ok: false, error: "Enter up to 2 decimal places." };
+  return { ok: true, amount: n };
+}
+
+function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price: number; symbol: string; buyingPower: number; positionQty: number; ready: boolean }) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [type, setType] = useState<"market" | "limit">("market");
-  const [qty, setQty] = useState(1);
+  const [mode, setMode] = useState<"shares" | "dollars">("shares");
+  const [qtyInput, setQtyInput] = useState("1");
+  const [amountInput, setAmountInput] = useState("50");
   const [limit, setLimit] = useState(price);
-  const est = (type === "market" ? price : limit) * qty;
+  const [sellAll, setSellAll] = useState(false);
+
+  const execPrice = type === "market" ? price : limit;
+  const qtyNum = Number(qtyInput) || 0;
+  const amountNum = Number(amountInput) || 0;
+  const estQtyForDollars = execPrice > 0 ? amountNum / execPrice : 0;
+  const isSellAll = side === "sell" && sellAll;
+  const hasPosition = positionQty > 0;
+
+  const est = isSellAll ? positionQty * execPrice : mode === "shares" ? qtyNum * execPrice : amountNum;
 
   const qc = useQueryClient();
   const { refreshProfile } = useAuth();
 
   const trade = useMutation({
-    mutationFn: () => executeTrade({ symbol, side, quantity: qty }),
+    mutationFn: () => {
+      if (isSellAll) return executeTrade({ symbol, side: "sell", sellAll: true });
+      if (mode === "dollars") return executeTrade({ symbol, side, amount: amountNum });
+      return executeTrade({ symbol, side, quantity: qtyNum });
+    },
     onSuccess: async (r) => {
       // Refresh everything the trade affects so Dashboard/Portfolio/position update.
       await Promise.all([
@@ -241,10 +281,14 @@ function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symb
         qc.invalidateQueries({ queryKey: ["holdings"] }),
         qc.invalidateQueries({ queryKey: ["transactions"] }),
       ]);
+      const verb = r.side === "buy" ? "Bought" : "Sold";
       toast.success(
-        `${r.side === "buy" ? "Bought" : "Sold"} ${r.quantity} ${r.symbol} @ ${fmtUSD(r.price)}`,
+        mode === "dollars" || isSellAll
+          ? `${verb} ≈${fmtQty(r.quantity, 4)} shares of ${r.symbol} for ${fmtUSD(r.total)}`
+          : `${verb} ${fmtQty(r.quantity)} ${r.symbol} @ ${fmtUSD(r.price)}`,
         { description: `${r.side === "buy" ? "Cost" : "Proceeds"} ${fmtUSD(r.total)} · Buying power now ${fmtUSD(r.cashBalance)}` },
       );
+      setSellAll(false);
     },
     onError: (e: Error) => toast.error(e.message || "That order couldn't be completed."),
   });
@@ -256,14 +300,36 @@ function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symb
       toast.info("Limit orders are coming soon — switch to a Market order to trade now.");
       return;
     }
-    if (qty <= 0) {
-      toast.error("Enter a quantity greater than zero.");
+    if (isSellAll) {
+      if (!hasPosition) {
+        toast.error("You don't own any shares to sell.");
+        return;
+      }
+      trade.mutate();
       return;
+    }
+    if (mode === "shares") {
+      const v = validateSharesQty(qtyInput);
+      if (!v.ok) {
+        toast.error(v.error);
+        return;
+      }
+    } else {
+      const v = validateDollarAmount(amountInput);
+      if (!v.ok) {
+        toast.error(v.error);
+        return;
+      }
     }
     trade.mutate();
   }
 
   const pending = trade.isPending;
+  const confirmLabel = isSellAll
+    ? `Confirm sell · all ${symbol} (${fmtQty(positionQty)})`
+    : mode === "dollars"
+      ? `Confirm ${side} · ${fmtUSD(amountNum || 0)} of ${symbol}`
+      : `Confirm ${side} · ${qtyInput || 0} ${symbol}`;
 
   return (
     <Card className="h-fit">
@@ -286,10 +352,46 @@ function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symb
           </Select>
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="qty">Quantity</Label>
-          <Input id="qty" type="number" min={1} value={qty} onChange={(e) => setQty(Math.max(1, Math.floor(Number(e.target.value) || 0)))} className="tabular" />
-        </div>
+        {side === "sell" && hasPosition && (
+          <button
+            type="button"
+            onClick={() => setSellAll((v) => !v)}
+            className={cn(
+              "w-full rounded-md border px-3 py-2 text-left text-sm transition-colors",
+              isSellAll ? "border-[color:var(--color-loss)] bg-[color:var(--color-loss)]/10 text-[color:var(--color-loss)]" : "border-border text-muted-foreground hover:bg-accent",
+            )}
+          >
+            {isSellAll ? "✓ " : ""}Sell all — closes your entire position ({fmtQty(positionQty)} shares ≈ {fmtUSD(positionQty * execPrice)})
+          </button>
+        )}
+
+        {!isSellAll && (
+          <>
+            <div className="grid grid-cols-2 gap-1 rounded-md bg-surface p-1">
+              {(["shares", "dollars"] as const).map((m) => (
+                <button key={m} onClick={() => setMode(m)} className={cn("rounded px-3 py-1.5 text-sm font-medium capitalize", mode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>{m}</button>
+              ))}
+            </div>
+
+            {mode === "shares" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="qty">Quantity</Label>
+                <Input id="qty" type="number" min={MIN_SHARES} step="any" value={qtyInput} onChange={(e) => setQtyInput(e.target.value)} className="tabular" />
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Label htmlFor="amount">Amount</Label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+                  <Input id="amount" type="number" min={MIN_DOLLARS} step="0.01" value={amountInput} onChange={(e) => setAmountInput(e.target.value)} className="tabular pl-6" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  ≈ {fmtQty(estQtyForDollars, 4)} shares @ {fmtUSD(execPrice)}
+                </p>
+              </div>
+            )}
+          </>
+        )}
 
         {type === "limit" && (
           <div className="space-y-1.5">
@@ -309,7 +411,7 @@ function OrderPanel({ price, symbol, buyingPower, ready }: { price: number; symb
           className={cn("w-full", side === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)] hover:opacity-90" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)] hover:opacity-90")}
           onClick={onConfirm}
         >
-          {pending ? "Placing…" : `Confirm ${side} · ${qty} ${symbol}`}
+          {pending ? "Placing…" : confirmLabel}
         </Button>
         <p className="text-[11px] text-muted-foreground">All orders are simulated paper trades. No real money is used.</p>
       </CardContent>

@@ -11,7 +11,7 @@ import { getTodaysBrief } from "@/lib/insights/api";
 import { getSnapshots } from "@/lib/snapshots/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useAuth } from "@/lib/auth/auth-context";
-import { topMovers, fmtUSD, fmtPct, sparkline, STARTING_CASH } from "@/lib/mockData";
+import { topMovers, fmtUSD, fmtPct, fmtQty, sparkline, STARTING_CASH } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight, ArrowDownRight, Star, Wallet, Newspaper } from "lucide-react";
 
@@ -164,7 +164,7 @@ function Dashboard() {
                               </div>
                             </Link>
                           </td>
-                          <td className="py-3 tabular">{h.quantity}</td>
+                          <td className="py-3 tabular">{fmtQty(h.quantity)}</td>
                           <td className="py-3 text-right tabular">{fmtUSD(h.avg_cost)}</td>
                           <td className="py-3 text-right tabular">{fmtUSD(q.price)}</td>
                           <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>

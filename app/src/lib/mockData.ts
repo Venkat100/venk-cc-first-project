@@ -203,6 +203,13 @@ export function fmtSigned(n: number) {
   return `${sign}${fmtUSD(Math.abs(n))}`;
 }
 
+/** Share quantity — up to `maxDp` decimal places, trailing zeros trimmed, so a
+ *  whole share still shows "1" but a fractional order shows "0.241512". */
+export function fmtQty(n: number, maxDp = 6) {
+  if (!Number.isFinite(n)) return "0";
+  return n.toLocaleString("en-US", { maximumFractionDigits: maxDp });
+}
+
 // What-if helper: simulate $amount invested at past date in symbol
 export function whatIf(symbol: string, startDate: Date, amount: number) {
   const stock = getStock(symbol);

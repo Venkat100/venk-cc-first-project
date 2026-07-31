@@ -13,7 +13,7 @@ import { getAgentHoldings, getAgentDecisions, getAgentSnapshots, getPendingPropo
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { getCandles } from "@/lib/marketData";
 import { useAuth } from "@/lib/auth/auth-context";
-import { fmtUSD, fmtPct } from "@/lib/mockData";
+import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import type { RiskLevel, AgentMode, AgentDecision } from "@/lib/supabase/types";
 import { toast } from "sonner";
@@ -224,7 +224,7 @@ function Agent() {
                   <li key={i} className="flex items-center gap-2 px-3 py-2 text-sm">
                     <span className={cn("rounded-md px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider", t.side === "buy" ? "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]" : "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]")}>{t.kind}</span>
                     <span className="font-semibold">{t.symbol}</span>
-                    <span className="tabular text-muted-foreground">{t.quantity} @ {fmtUSD(t.price)}</span>
+                    <span className="tabular text-muted-foreground">{fmtQty(t.quantity)} @ {fmtUSD(t.price)}</span>
                     <span className="ml-auto hidden max-w-[45%] truncate text-xs text-muted-foreground sm:block">{t.reason}</span>
                   </li>
                 ))}
@@ -432,7 +432,7 @@ function Agent() {
                         <div className="font-semibold">{q.symbol}</div>
                         <div className="text-xs text-muted-foreground truncate max-w-[160px]">{q.name}</div>
                       </td>
-                      <td className="py-3 text-right tabular">{h.quantity}</td>
+                      <td className="py-3 text-right tabular">{fmtQty(h.quantity)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(h.avg_cost)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(q.price)}</td>
                       <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
