@@ -87,7 +87,7 @@ function StockDetail() {
         <div className="space-y-6">
           <Card>
             <CardContent className="p-5">
-              <LivePriceChart symbol={symbol} height={340} defaultRange="3M" />
+              <LivePriceChart symbol={symbol} height={340} defaultRange="3M" quote={quote} />
             </CardContent>
           </Card>
 

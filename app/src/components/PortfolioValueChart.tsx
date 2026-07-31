@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { cn } from "@/lib/utils";
 import { fmtUSD } from "@/lib/mockData";
 import { LoadingState, ErrorState } from "@/components/DataStates";
 import type { Snapshot } from "@/lib/snapshots/queries";
 import { indexBenchmark, type SpyPoint } from "@/components/portfolioBenchmark";
+import { RangeChangeReadout } from "@/components/ChartReadout";
+import { computeRangeReadout, RANGE_LABEL } from "@/lib/chartReadout";
 import { LineChart } from "lucide-react";
 
 export type Benchmark = { series: SpyPoint[]; loading?: boolean; error?: boolean };
@@ -39,6 +41,8 @@ export function PortfolioValueChart({
   benchmark?: Benchmark;
 }) {
   const [range, setRange] = useState<ChartRange>("1M");
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  useEffect(() => setHoverIdx(null), [range]);
 
   // Snapshot history + a live point for today (replaces today's stored point).
   const allPoints = useMemo(() => {
@@ -71,6 +75,14 @@ export function PortfolioValueChart({
 
   const shortHistory = allPoints.length < 2;
 
+  // Window (or, while scrubbing, "start → cursor") change readout — computed
+  // purely from the already-loaded `data`, no refetch.
+  const readout = useMemo(() => {
+    const points = data.map((d) => ({ t: d.t, v: d.v }));
+    const slice = hoverIdx !== null ? points.slice(0, hoverIdx + 1) : points;
+    return computeRangeReadout(slice);
+  }, [data, hoverIdx]);
+
   return (
     <div className="w-full">
       <div style={{ height }} className="w-full">
@@ -87,31 +99,65 @@ export function PortfolioValueChart({
           </div>
         ) : (
           <ResponsiveContainer>
-            <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <AreaChart
+              data={data}
+              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+              onMouseMove={(state) => {
+                const idx = (state as { activeTooltipIndex?: number })?.activeTooltipIndex;
+                if (typeof idx === "number") setHoverIdx(idx);
+              }}
+              onMouseLeave={() => setHoverIdx(null)}
+            >
               <defs>
                 <linearGradient id="pv-grad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={stroke} stopOpacity={0.35} />
                   <stop offset="100%" stopColor={stroke} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="t" tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: "short", day: "numeric" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={40} />
+              <XAxis dataKey="t" tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={40} />
               <YAxis domain={["dataMin - 100", "dataMax + 100"]} tickFormatter={(v) => `$${Math.round(Number(v) / 1000)}k`} stroke="var(--color-muted-foreground)" fontSize={11} width={48} />
               <Tooltip
                 cursor={{ stroke: "var(--color-muted-foreground)", strokeDasharray: "3 3" }}
                 contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
-                labelFormatter={(v) => new Date(v as string).toLocaleDateString()}
+                labelFormatter={(v) => new Date(v as string).toLocaleDateString(undefined, { timeZone: "UTC" })}
                 formatter={(v: number, name) => [fmtUSD(v), name === "spy" ? "S&P 500 (indexed)" : "Portfolio value"]}
+                isAnimationActive={false}
               />
               {/* Baseline reference so gains/losses vs the starting amount are obvious. */}
               <ReferenceLine y={baseline} stroke="var(--color-border)" strokeDasharray="4 4" />
-              <Area type="monotone" dataKey="v" stroke={stroke} strokeWidth={2} fill="url(#pv-grad)" />
+              <Area
+                type="monotone"
+                dataKey="v"
+                stroke={stroke}
+                strokeWidth={2}
+                fill="url(#pv-grad)"
+                activeDot={{ r: 5, stroke: "var(--color-background)", strokeWidth: 2, fill: stroke }}
+                isAnimationActive={false}
+              />
               {bench?.available && (
-                <Area type="monotone" dataKey="spy" stroke="var(--color-muted-foreground)" strokeWidth={1.5} strokeDasharray="5 4" fill="none" dot={false} />
+                <Area
+                  type="monotone"
+                  dataKey="spy"
+                  stroke="var(--color-muted-foreground)"
+                  strokeWidth={1.5}
+                  strokeDasharray="5 4"
+                  fill="none"
+                  dot={false}
+                  activeDot={{ r: 4, stroke: "var(--color-background)", strokeWidth: 2, fill: "var(--color-muted-foreground)" }}
+                  isAnimationActive={false}
+                />
               )}
             </AreaChart>
           </ResponsiveContainer>
         )}
       </div>
+
+      {/* Window (or scrub) change readout — always on when there's a real window. */}
+      {!loading && !error && !shortHistory && (
+        <div className="mt-2">
+          <RangeChangeReadout label={hoverIdx !== null ? "Selected" : RANGE_LABEL[range]} readout={readout} />
+        </div>
+      )}
 
       {/* Beat/lag readout vs the S&P 500 over the visible window. */}
       {!loading && !error && !shortHistory && benchmark && (
