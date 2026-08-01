@@ -52,6 +52,8 @@ function Dashboard() {
     dayAbs += q.dayChange * h.quantity;
   }
   // ── Portfolio math (single source of truth) ──────────────────────────
+  // TODO(O3): doesn't yet include option_positions' market value — options
+  // landed in O2 (trade engine only); fold in once the options UI ships.
   // total_value      = cash + Σ(qty × live price)
   // Today's change $ = Σ(qty × dayChange)         (vs prior close; cash is flat intraday)
   // Today's change % = todayChange$ / (total_value − todayChange$)   (vs prior-close value)

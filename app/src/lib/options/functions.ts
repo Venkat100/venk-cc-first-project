@@ -6,11 +6,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { verifyUser } from "@/lib/supabase/admin.server";
+import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { providerQuotes } from "@/lib/marketData/finnhub.server";
+import { getServerQuote } from "@/lib/marketData/quote.server";
 import { cached } from "@/lib/marketData/cache.server";
 import { getRealizedVol } from "./volatility.server";
-import { buildChain, type OptionChain } from "./chain.server";
+import { buildChain, parseContractId, priceParsedContract, type OptionChain } from "./chain.server";
 
 export type OptionChainResponse = { ok: true; chain: OptionChain } | { ok: false; error: string };
 
@@ -43,5 +44,139 @@ export const getOptionChainFn = createServerFn({ method: "POST" })
       return { ok: true, chain };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Couldn't generate an option chain right now." };
+    }
+  });
+
+// ── Trade execution (O2) ────────────────────────────────────────────────────
+//
+// Security boundary — identical model to lib/trading/functions.ts (Phase 6):
+//   1. Caller's identity comes from a VERIFIED Supabase JWT (verifyUser), not
+//      a client-sent user_id.
+//   2. The contract's terms (symbol/type/strike/expiry) come ONLY from
+//      re-parsing the stable contractId server-side — the client never sends
+//      them directly, so there's nothing to spoof beyond a string the server
+//      independently re-derives and re-validates.
+//   3. The premium is computed SERVER-SIDE (live spot + realized vol →
+//      Black-Scholes), never accepted from the client — the input schema
+//      below has no `premium` field at all, so even a doctored payload would
+//      have it silently stripped by Zod before the handler ever runs.
+//   4. The actual mutation runs in the DB via execute_option_trade(), called
+//      with the service-role key — execute-granted to service_role only.
+//   5. All money/position math + atomicity + row locking happen in Postgres.
+
+export type OptionSide = "buy_to_open" | "sell_to_close";
+
+export type OptionTradeResult = {
+  cashBalance: number;
+  contractId: string;
+  symbol: string;
+  side: OptionSide;
+  contracts: number;
+  premium: number; // per-contract, at fill
+  total: number; // premium × 100 × contracts
+  positionContracts: number;
+  positionAvgPremium: number | null;
+};
+
+export type OptionTradeResponse = { ok: true; result: OptionTradeResult } | { ok: false; error: string };
+
+function friendlyTrade(token: string): string {
+  switch (token) {
+    case "insufficient_funds":
+      return "Not enough buying power for this order.";
+    case "insufficient_contracts":
+      return "You don't have enough contracts to sell.";
+    case "invalid_contracts":
+      return "Enter a whole number of contracts greater than zero.";
+    case "invalid_premium":
+    case "no_price":
+      return "No live price available right now — please try again in a moment.";
+    case "invalid_side":
+      return "Invalid order side.";
+    case "invalid_opt_type":
+      return "Invalid option type.";
+    case "expired_contract":
+      return "This contract has already expired.";
+    case "unknown_contract":
+      return "That contract couldn't be recognized — please refresh the chain and try again.";
+    case "profile_not_found":
+      return "We couldn't find your account.";
+    case "not_signed_in":
+      return "Your session has expired — please sign in again.";
+    default:
+      // Surface Postgres' "…: insufficient_funds" style messages cleanly.
+      for (const key of ["insufficient_funds", "insufficient_contracts", "invalid_contracts", "invalid_premium", "expired_contract"]) {
+        if (token.includes(key)) return friendlyTrade(key);
+      }
+      return "Sorry — that order couldn't be completed. Please try again.";
+  }
+}
+
+// Exported (not just inlined below) so it can be imported and exercised
+// directly in verification — proving, with the REAL schema object rather
+// than a hand-copied reconstruction, that an extra `premium` field a client
+// might try to smuggle in gets silently stripped before the handler runs
+// (z.object()'s default behavior — no `.passthrough()` anywhere here).
+export const executeOptionTradeInputSchema = z.object({
+  accessToken: z.string().min(1),
+  contractId: z.string().min(1),
+  side: z.enum(["buy_to_open", "sell_to_close"]),
+  contracts: z.number().int().positive(),
+});
+
+export const executeOptionTradeFn = createServerFn({ method: "POST" })
+  .inputValidator(executeOptionTradeInputSchema)
+  .handler(async ({ data }): Promise<OptionTradeResponse> => {
+    try {
+      // 1) Identity from the verified JWT.
+      const userId = await verifyUser(data.accessToken);
+
+      // 2) Recover the contract's terms server-side from the id alone.
+      const parsed = parseContractId(data.contractId);
+      if (!parsed) return { ok: false, error: friendlyTrade("unknown_contract") };
+
+      // 3) Reject an expired contract before doing any pricing work — the DB
+      //    function re-checks this too, as a second, independent backstop.
+      const todayIso = new Date().toISOString().slice(0, 10);
+      if (parsed.expiry < todayIso) return { ok: false, error: friendlyTrade("expired_contract") };
+
+      // 4) Server-computed premium (never the client's).
+      const [quote, vol] = await Promise.all([getServerQuote(parsed.symbol), getRealizedVol(parsed.symbol)]);
+      if (!quote || !(quote.price > 0)) return { ok: false, error: friendlyTrade("no_price") };
+      const priced = priceParsedContract(parsed, quote.price, vol);
+
+      // 5) Atomic execution in the DB via the service-role client.
+      const admin = getServiceClient();
+      const { data: rpc, error } = await admin.rpc("execute_option_trade", {
+        p_user_id: userId,
+        p_contract_id: data.contractId.toUpperCase(),
+        p_symbol: parsed.symbol,
+        p_opt_type: parsed.type,
+        p_strike: parsed.strike,
+        p_expiry: parsed.expiry,
+        p_side: data.side,
+        p_contracts: data.contracts,
+        p_premium: priced.premium,
+      });
+
+      if (error) return { ok: false, error: friendlyTrade(error.message) };
+
+      const r = rpc as Record<string, unknown>;
+      return {
+        ok: true,
+        result: {
+          cashBalance: Number(r.cash_balance),
+          contractId: String(r.contract_id),
+          symbol: String(r.symbol),
+          side: r.side as OptionSide,
+          contracts: Number(r.contracts),
+          premium: Number(r.premium),
+          total: Number(r.total),
+          positionContracts: Number(r.position_contracts),
+          positionAvgPremium: r.position_avg_premium != null ? Number(r.position_avg_premium) : null,
+        },
+      };
+    } catch (e) {
+      return { ok: false, error: friendlyTrade(e instanceof Error ? e.message : "error") };
     }
   });

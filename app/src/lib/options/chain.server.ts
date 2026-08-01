@@ -130,6 +130,50 @@ function formatStrikeForId(strike: number): string {
   return String(strike);
 }
 
+export type ParsedContract = {
+  symbol: string;
+  type: OptionType;
+  strike: number;
+  expiry: string; // YYYY-MM-DD
+};
+
+// SYMBOL-YYYY-MM-DD-{C|P}-STRIKE, e.g. "NVDA-2026-09-18-C-200" — the exact
+// format produced by buildContract below. Assumes plain-letter symbols (no
+// hyphens), true of every ticker this app trades (MARKET_UNIVERSE + live
+// search results). Used by the trade engine (O2) to recover the contract's
+// terms from the client-sent contractId — the client NEVER sends strike/
+// expiry/type directly, only this one stable string, so there's nothing to
+// tamper with beyond a string the server independently re-parses and re-prices.
+const CONTRACT_ID_RE = /^([A-Z]+)-(\d{4}-\d{2}-\d{2})-([CP])-(\d+(?:\.\d+)?)$/;
+
+/** Parse a contractId back into its terms. Returns null (never throws) on any
+ *  malformed/unrecognized id — the caller decides how to reject it. */
+export function parseContractId(contractId: string): ParsedContract | null {
+  const m = CONTRACT_ID_RE.exec(contractId.trim().toUpperCase());
+  if (!m) return null;
+  const [, symbol, expiry, cp, strikeStr] = m;
+  const strike = Number(strikeStr);
+  if (!(strike > 0)) return null;
+  // Reject calendar-invalid dates (e.g. "2026-02-30") — Date silently rolls
+  // them forward otherwise, which would price the wrong expiry.
+  const d = new Date(`${expiry}T00:00:00Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== expiry) return null;
+  return { symbol, type: cp === "C" ? "call" : "put", strike, expiry };
+}
+
+/** Price ONE already-known contract (symbol/type/strike/expiry resolved, e.g.
+ *  via parseContractId) against a live spot/vol — the single-contract sibling
+ *  of buildChain's internal per-contract pricing, reused by the O2 trade
+ *  engine so a trade's premium is computed the exact same way a chain would
+ *  quote it. */
+export function priceParsedContract(parsed: ParsedContract, spot: number, vol: number, rate: number = RISK_FREE_RATE, asOf: Date = new Date()): OptionContract {
+  const expiryDate = new Date(`${parsed.expiry}T00:00:00Z`);
+  const today = toUTCDateOnly(asOf);
+  const daysToExpiry = Math.round((expiryDate.getTime() - today.getTime()) / MS_PER_DAY);
+  const timeYears = Math.max(0, daysToExpiry / 365.25);
+  return buildContract(parsed.type, parsed.symbol, expiryDate, parsed.strike, spot, timeYears, vol, rate);
+}
+
 function buildContract(type: OptionType, symbol: string, expiryDate: Date, strike: number, spot: number, timeYears: number, vol: number, rate: number): OptionContract {
   const inputs: BSInputs = { spot, strike, timeYears, vol, rate };
   const premium = round2(priceOption(type, inputs));

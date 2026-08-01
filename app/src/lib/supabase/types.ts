@@ -132,6 +132,36 @@ export type AgentProposal = {
   commentary: string | null;
 };
 
+// ── Options & Margin (O2) ──────────────────────────────────────
+export type OptionType = "call" | "put";
+export type OptionSide = "buy_to_open" | "sell_to_close";
+
+export type OptionPosition = {
+  id: string;
+  user_id: string;
+  contract_id: string; // e.g. "NVDA-2026-09-18-C-200"
+  symbol: string;
+  opt_type: OptionType;
+  strike: number;
+  expiry: string; // date (YYYY-MM-DD)
+  contracts: number;
+  avg_premium: number; // per-contract, not ×100
+  opened_at: string;
+  updated_at: string;
+};
+
+export type OptionTransaction = {
+  id: string;
+  user_id: string;
+  contract_id: string;
+  symbol: string;
+  side: OptionSide;
+  contracts: number;
+  premium: number; // per-contract, at fill
+  total: number; // premium × 100 × contracts
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -333,6 +363,40 @@ export type Database = {
         Update: {
           payload?: unknown;
         };
+        Relationships: [];
+      };
+      option_positions: {
+        Row: OptionPosition;
+        Insert: {
+          id?: string;
+          user_id: string;
+          contract_id: string;
+          symbol: string;
+          opt_type: OptionType;
+          strike: number;
+          expiry: string;
+          contracts: number;
+          avg_premium: number;
+          opened_at?: string;
+          updated_at?: string;
+        };
+        Update: { [_ in never]: never }; // written only by execute_option_trade (service_role)
+        Relationships: [];
+      };
+      option_transactions: {
+        Row: OptionTransaction;
+        Insert: {
+          id?: string;
+          user_id: string;
+          contract_id: string;
+          symbol: string;
+          side: OptionSide;
+          contracts: number;
+          premium: number;
+          total: number;
+          created_at?: string;
+        };
+        Update: { [_ in never]: never }; // append-only
         Relationships: [];
       };
     };

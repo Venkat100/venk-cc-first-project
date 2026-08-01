@@ -88,6 +88,10 @@ export async function runSnapshots(opts: { onlyUserId?: string } = {}): Promise<
     const cash = Number(p.cash_balance);
     let holdingsValue = 0;
     for (const h of byUser.get(p.id) ?? []) holdingsValue += (priceMap.get(h.symbol) ?? 0) * h.quantity;
+    // TODO(O3): total_value doesn't yet include option_positions' market
+    // value (Black-Scholes-repriced, not just cost basis) — options landed
+    // in O2 (trade engine only, no valuation integration). Fold it in when
+    // the options UI ships so the dashboard shows one consistent number.
     const total = cash + holdingsValue;
 
     todayRows.push({ user_id: p.id, total_value: round2(total), cash: round2(cash), holdings_value: round2(holdingsValue), captured_at: today });
