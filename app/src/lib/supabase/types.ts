@@ -134,7 +134,9 @@ export type AgentProposal = {
 
 // ── Options & Margin (O2) ──────────────────────────────────────
 export type OptionType = "call" | "put";
-export type OptionSide = "buy_to_open" | "sell_to_close";
+// O4: 'expired' (worthless, $0 credited) / 'settled' (in-the-money, cash
+// credited) are written only by the daily expiration cron, never a trade.
+export type OptionSide = "buy_to_open" | "sell_to_close" | "expired" | "settled";
 
 export type OptionPosition = {
   id: string;

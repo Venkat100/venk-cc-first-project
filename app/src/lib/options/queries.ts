@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { getOptionChainFn, getOptionPositionsFn } from "./functions";
 import type { OptionChain } from "./chain.server";
 import type { EnrichedOptionPosition } from "./valuation.server";
+import type { OptionTransaction } from "@/lib/supabase/types";
 
 async function token(): Promise<string> {
   const { data } = await supabase.auth.getSession();
@@ -28,6 +29,17 @@ export async function getOptionPositions(): Promise<EnrichedOptionPosition[]> {
   return res.positions;
 }
 
+/** Full options activity ledger, newest first — includes buy/sell fills AND
+ *  O4 expiration events ('expired'/'settled'). Plain RLS-scoped read, same
+ *  pattern as lib/portfolio/queries.ts's getTransactions() — no server
+ *  function needed, RLS already restricts this to the caller's own rows. */
+export async function getOptionTransactions(): Promise<OptionTransaction[]> {
+  const { data, error } = await supabase.from("option_transactions").select("*").order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
 export type { OptionChain, OptionExpiry, StrikeRow, OptionContract } from "./chain.server";
 export type { EnrichedOptionPosition } from "./valuation.server";
 export type { OptionType } from "./blackscholes";
+export type { OptionTransaction } from "@/lib/supabase/types";

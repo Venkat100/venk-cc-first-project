@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
-import { getOptionPositions } from "@/lib/options/queries";
+import { getOptionPositions, getOptionTransactions, type OptionTransaction } from "@/lib/options/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
@@ -24,10 +24,12 @@ function Portfolio() {
   const holdingsQ = useQuery({ queryKey: ["holdings"], queryFn: getHoldings });
   const txQ = useQuery({ queryKey: ["transactions"], queryFn: getTransactions });
   const optionPositionsQ = useQuery({ queryKey: ["optionPositions"], queryFn: getOptionPositions });
+  const optionTxQ = useQuery({ queryKey: ["optionTransactions"], queryFn: getOptionTransactions });
 
   const holdings = holdingsQ.data ?? [];
   const transactions = txQ.data ?? [];
   const optionPositions = optionPositionsQ.data ?? [];
+  const recentOptionActivity = (optionTxQ.data ?? []).slice(0, 5);
   const optionsValue = useMemo(() => optionPositions.reduce((sum, p) => sum + p.marketValue, 0), [optionPositions]);
   const [orderPanel, setOrderPanel] = useState<OrderPanelState>({ open: false });
 
@@ -152,6 +154,19 @@ function Portfolio() {
           ) : (
             <OptionPositionsList positions={optionPositions} onSell={(p) => setOrderPanel({ open: true, mode: "sell", position: p })} showSymbolLink emptyDescription="Buy a call or put from any stock's Options tab — your positions across every symbol show up here." />
           )}
+          {recentOptionActivity.length > 0 && (
+            <div className="border-t border-border px-4 py-3">
+              <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Recent option activity</p>
+              <ul className="space-y-1.5">
+                {recentOptionActivity.map((t) => (
+                  <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">{optionActivityLabel(t)}</span>
+                    <span className="shrink-0 tabular text-xs text-muted-foreground">{new Date(t.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -221,6 +236,28 @@ function Portfolio() {
       <OptionOrderPanel state={orderPanel} onClose={() => setOrderPanel({ open: false })} />
     </div>
   );
+}
+
+// O4: labels an option_transactions row for the "Recent option activity"
+// list — 'expired'/'settled' come from the daily expiration cron
+// (lib/options/expiry.server.ts), buy/sell from a manual trade.
+function optionActivityLabel(t: OptionTransaction): string {
+  const parts = t.contract_id.split("-");
+  const strike = parts[parts.length - 1];
+  const type = parts[parts.length - 2] === "C" ? "Call" : "Put";
+  const label = `${t.symbol} $${strike} ${type}`;
+  switch (t.side) {
+    case "buy_to_open":
+      return `Bought ${t.contracts} ${label}`;
+    case "sell_to_close":
+      return `Sold ${t.contracts} ${label}`;
+    case "settled":
+      return `${label} settled — ${fmtUSD(t.total)} credited`;
+    case "expired":
+      return `${label} expired worthless`;
+    default:
+      return label;
+  }
 }
 
 function DonutCard({

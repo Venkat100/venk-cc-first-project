@@ -36,6 +36,9 @@ export function OptionsExplainer() {
         <p>
           Options are a <span className="text-foreground font-medium">decaying asset</span>: the closer you get to expiry, the less time value they carry, and a contract that finishes out-of-the-money (the wrong side of the strike) expires <span className="text-foreground font-medium">worthless</span> — a complete loss of the premium paid. This simulator lets you feel that risk with zero real money on the line.
         </p>
+        <p>
+          If you don't sell before expiry, we don't leave it hanging: at expiration every position is automatically <span className="text-foreground font-medium">cash-settled</span> — in-the-money contracts are credited their intrinsic value (no shares change hands), and out-of-the-money contracts simply expire worthless. You'll always see it labeled clearly in your activity — "Settled $X" or "Expired worthless."
+        </p>
       </CollapsibleContent>
     </Collapsible>
   );
