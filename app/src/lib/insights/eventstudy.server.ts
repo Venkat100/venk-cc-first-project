@@ -22,7 +22,7 @@
 //     populations); it's excluded from both until it has a full month behind it.
 
 import type { Candle } from "@/lib/marketData/types";
-import { providerSeries } from "@/lib/marketData/provider.server";
+import { getDailyHistory } from "@/lib/marketData/dailyHistory.server";
 import type { MeasuredHistory, ShockDirection } from "./types";
 
 export const TRAILING_WINDOW_DAYS = 60;
@@ -132,10 +132,8 @@ export function computeEventStudy(candles: Candle[]): { up: MeasuredHistory; dow
   };
 }
 
-const HISTORY_YEARS = 5;
-
-// Verification counter: how many times getMeasuredHistory actually fetched
-// candles (i.e. ran, not served from getStockInsight's day-cache early-return).
+// Verification counter: how many times getMeasuredHistory actually ran (i.e.
+// not served from getStockInsight's day-cache early-return).
 let _calls = 0;
 export function measuredHistoryCalls() {
   return _calls;
@@ -145,15 +143,15 @@ export function resetMeasuredHistoryCalls() {
 }
 
 /** Fetch ~5Y of daily history for `symbol` and return the measured stats for
- *  the requested shock `direction`. One Twelve Data candles call — the caller
- *  (getStockInsight) already gates this to at most once per symbol per day via
- *  its own day-cache, so no separate cache is added here. Throws on provider
- *  failure; the caller decides how to degrade (never fabricates numbers). */
+ *  the requested shock `direction`. Candle fetch goes through the shared
+ *  getDailyHistory day-cache (see lib/marketData/dailyHistory.server.ts) —
+ *  also reused by the options engine's volatility estimator, so requesting
+ *  both an insight and an options chain for the same symbol on the same day
+ *  costs at most one Twelve Data call. Throws on provider failure; the caller
+ *  decides how to degrade (never fabricates numbers). */
 export async function getMeasuredHistory(symbol: string, direction: ShockDirection): Promise<MeasuredHistory> {
   _calls++;
-  const start = new Date();
-  start.setFullYear(start.getFullYear() - HISTORY_YEARS);
-  const candles = await providerSeries(symbol, start.toISOString().slice(0, 10));
+  const candles = await getDailyHistory(symbol);
   const { up, down } = computeEventStudy(candles);
   return direction === "up" ? up : down;
 }
