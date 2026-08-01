@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Minus, History, AlertTriangle, Eye } from "lucide-react";
-import type { StockInsight, MarketBrief, InsightLean } from "@/lib/insights/types";
+import { TrendingUp, TrendingDown, Minus, History, AlertTriangle, Eye, BarChart3 } from "lucide-react";
+import { fmtPct } from "@/lib/mockData";
+import type { StockInsight, MarketBrief, InsightLean, MeasuredHistory } from "@/lib/insights/types";
 
 const LEAN: Record<InsightLean, { label: string; cls: string; icon: typeof TrendingUp }> = {
   bullish: { label: "Bullish lean", cls: "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]", icon: TrendingUp },
@@ -44,6 +45,41 @@ function Bullets({ title, items, icon: Icon }: { title: string; items: string[];
   );
 }
 
+/** "Measured history" — the EVENT STUDY block. Deliberately renders the
+ *  MeasuredHistory numbers directly (not anything Claude wrote) so what's on
+ *  screen is exactly what was measured from price history. Degrades honestly
+ *  when there isn't enough same-stock precedent, instead of hiding the block
+ *  or showing a fabricated figure. */
+function MeasuredHistoryBlock({ symbol, mh }: { symbol: string; mh: MeasuredHistory | null }) {
+  if (!mh) return null;
+  const dirWord = mh.direction === "up" ? "gains" : "drops";
+
+  if (mh.events_found === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-surface p-3">
+        <p className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" /> Measured history</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          No comparable single-day {dirWord} found in {symbol}'s available price history ({mh.window_years > 0 ? `~${mh.window_years}y` : "limited history"}) — not enough precedent to measure a forward pattern.
+        </p>
+      </div>
+    );
+  }
+
+  const small = mh.events_found < 5;
+  return (
+    <div className="rounded-lg border border-border bg-surface p-3">
+      <p className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" /> Measured history</p>
+      <p className="text-sm leading-relaxed text-foreground/90">
+        After {mh.events_found} similar single-day {dirWord} in the past {mh.window_years} years, {symbol} was higher a month later{" "}
+        <span className="font-medium text-foreground">{Math.round((mh.pct_positive_1m ?? 0) * 100)}% of the time</span>
+        {" "}(median {fmtPct((mh.median_fwd_1m ?? 0) * 100, 1)}, range {fmtPct((mh.worst_1m ?? 0) * 100, 1)} to {fmtPct((mh.best_1m ?? 0) * 100, 1)}).
+        {small && " Small sample — treat this as a loose pattern, not a strong signal."}
+      </p>
+      <p className="mt-1 text-[11px] text-muted-foreground">Measured directly from {symbol}'s own price history — not AI-recalled.</p>
+    </div>
+  );
+}
+
 export function StockInsightBody({ insight }: { insight: StockInsight }) {
   return (
     <div className="space-y-4">
@@ -58,6 +94,8 @@ export function StockInsightBody({ insight }: { insight: StockInsight }) {
           <p className="text-sm leading-relaxed text-foreground/90">{insight.historical_parallel}</p>
         </div>
       )}
+
+      <MeasuredHistoryBlock symbol={insight.symbol} mh={insight.measured_history} />
 
       <Bullets title="Risks" items={insight.risks} icon={AlertTriangle} />
 

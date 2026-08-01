@@ -14,7 +14,8 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { providerQuotes, fhMetrics, fhCompanyNews, type SymbolMetrics } from "@/lib/marketData/finnhub.server";
 import { cached } from "@/lib/marketData/cache.server";
 import { agentModel } from "@/lib/agent/anthropic.server";
-import type { StockInsight, MarketBrief } from "./types";
+import { getMeasuredHistory } from "./eventstudy.server";
+import type { StockInsight, MarketBrief, MeasuredHistory } from "./types";
 
 // Verification counter: how many Claude calls the insights layer has made.
 let _claudeCalls = 0;
@@ -52,12 +53,13 @@ async function writeInsightRow(admin: Admin, row: InsightRow): Promise<void> {
 
 const INSIGHT_SYSTEM = [
   "You are a research analyst for an EDUCATIONAL paper-trading simulator. You produce ANALYSIS, NOT ADVICE.",
-  "You are given ONE stock's recent news (headlines/summaries) and quantitative signals (price, day change, beta, momentum, 52-week range position).",
+  "You are given ONE stock's recent news (headlines/summaries), quantitative signals (price, day change, beta, momentum, 52-week range position), and — when available — measured_history: REAL statistics WE COMPUTED (not your memory) from this stock's own past price history, showing how it actually moved in the weeks/month after its own similar single-day moves.",
   "Weigh the balance of evidence and characterize the near-term lean.",
   "HARD RULES:",
   "Ground every claim in the provided news or signals — do NOT invent facts, figures, prices, events, or dates.",
   "Do NOT use directive language ('you should', 'buy', 'sell', 'hold') — describe, don't instruct.",
-  "The historical_parallel must be framed as a general historical PATTERN/rhyme (e.g. 'in past supply shocks, energy names often…'), explicitly NOT a prediction of this stock.",
+  "The historical_parallel must be framed as a general historical PATTERN/rhyme, explicitly NOT a prediction of this stock.",
+  "If measured_history is present and events_found >= 5, GROUND historical_parallel in those exact measured numbers — cite events_found (N) and the median forward return — do NOT state different or invented figures. If events_found is 1-4, you may cite the numbers but must explicitly call the sample small. If measured_history is null or events_found is 0, do NOT state any specific numeric forward-return figures for this stock — say plainly that there isn't enough same-stock precedent in the available price history, and either give a purely qualitative, non-numeric note or omit the numeric angle entirely.",
   "If the news is thin, say so and lean 'neutral' with low confidence rather than overreaching.",
   "Keep it concise. Output MUST match the JSON schema exactly.",
 ].join(" ");
@@ -112,12 +114,33 @@ export async function getStockInsight(symbol: string): Promise<StockInsight> {
     const lo = metrics.week52Low ?? q.week52Low ?? q.price;
     const pos52 = hi > lo ? round2(Math.min(1, Math.max(0, (q.price - lo) / (hi - lo)))) : 0.5;
 
+    // EVENT STUDY: measured (not recalled) forward-return stats after this
+    // stock's own past shock days, matching today's move direction. One
+    // Twelve Data candles fetch — same per-day gate as everything else here,
+    // so it costs at most one call per symbol per day. Never blocks the
+    // insight on failure (rate-limit/provider hiccup) — degrades to null,
+    // and the prompt is instructed not to fabricate numbers when it's null.
+    const direction = q.dayChangePct >= 0 ? "up" : "down";
+    const measuredHistory: MeasuredHistory | null = await getMeasuredHistory(sym, direction).catch(() => null);
+
     const userContent = JSON.stringify({
       symbol: sym,
       name: q.name,
       signals: { price: q.price, day_change_pct: round2(q.dayChangePct), beta: metrics.beta ?? null, momentum_pct: momentum, pos_in_52wk_range: pos52 },
       recent_news: news.map((n) => ({ headline: n.headline, summary: n.summary })),
-      task: "Produce the JSON insight. Cite the actual news in drivers/risks. historical_parallel is a general market-history rhyme, not a prediction.",
+      measured_history: measuredHistory && measuredHistory.events_found > 0
+        ? {
+            direction: measuredHistory.direction,
+            window_years: measuredHistory.window_years,
+            events_found: measuredHistory.events_found,
+            median_fwd_1m_pct: round2((measuredHistory.median_fwd_1m ?? 0) * 100),
+            avg_fwd_1m_pct: round2((measuredHistory.avg_fwd_1m ?? 0) * 100),
+            worst_1m_pct: round2((measuredHistory.worst_1m ?? 0) * 100),
+            best_1m_pct: round2((measuredHistory.best_1m ?? 0) * 100),
+            pct_positive_1m: measuredHistory.pct_positive_1m,
+          }
+        : null,
+      task: "Produce the JSON insight. Cite the actual news in drivers/risks. historical_parallel is a general market-history rhyme, not a prediction — ground it in measured_history's real numbers when present (see the system rules), never invented ones.",
     });
 
     _claudeCalls++;
@@ -130,8 +153,11 @@ export async function getStockInsight(symbol: string): Promise<StockInsight> {
     });
     const text = res.content.find((b) => b.type === "text");
     if (!text || text.type !== "text") throw new Error("Claude returned no insight.");
-    const parsed = JSON.parse(text.text) as Omit<StockInsight, "symbol" | "generatedAt" | "usedNews">;
-    const insight: StockInsight = { symbol: sym, ...parsed, generatedAt: new Date().toISOString(), usedNews: news.length };
+    const parsed = JSON.parse(text.text) as Omit<StockInsight, "symbol" | "generatedAt" | "usedNews" | "measured_history">;
+    // measured_history in the PERSISTED/rendered insight is OUR computed
+    // object, verbatim — never Claude's paraphrase — so the UI always shows
+    // exactly the numbers we measured, not a number Claude might restate.
+    const insight: StockInsight = { symbol: sym, ...parsed, generatedAt: new Date().toISOString(), usedNews: news.length, measured_history: measuredHistory };
 
     // 3) Persist so every later request today — in ANY invocation, for ANY user —
     //    is served from the DB without another Claude call.
