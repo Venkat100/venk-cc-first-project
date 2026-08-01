@@ -4,11 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
+import { getOptionPositions } from "@/lib/options/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
-import { Wallet, Receipt, PieChart as PieIcon } from "lucide-react";
+import { OptionPositionsList } from "@/components/options/OptionPositionsList";
+import { OptionOrderPanel, type OrderPanelState } from "@/components/options/OptionOrderPanel";
+import { Wallet, Receipt, PieChart as PieIcon, LineChart } from "lucide-react";
 
 export const Route = createFileRoute("/app/portfolio")({
   head: () => ({ meta: [{ title: "Portfolio · PaperTrader" }] }),
@@ -20,9 +23,13 @@ const COLORS = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-cha
 function Portfolio() {
   const holdingsQ = useQuery({ queryKey: ["holdings"], queryFn: getHoldings });
   const txQ = useQuery({ queryKey: ["transactions"], queryFn: getTransactions });
+  const optionPositionsQ = useQuery({ queryKey: ["optionPositions"], queryFn: getOptionPositions });
 
   const holdings = holdingsQ.data ?? [];
   const transactions = txQ.data ?? [];
+  const optionPositions = optionPositionsQ.data ?? [];
+  const optionsValue = useMemo(() => optionPositions.reduce((sum, p) => sum + p.marketValue, 0), [optionPositions]);
+  const [orderPanel, setOrderPanel] = useState<OrderPanelState>({ open: false });
 
   const symbols = useMemo(() => holdings.map((h) => h.symbol), [holdings]);
   const quotesQ = useQuotes(symbols);
@@ -133,6 +140,24 @@ function Portfolio() {
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2"><LineChart className="h-4 w-4" /> Options</CardTitle>
+            {optionPositions.length > 0 && <span className="text-xs tabular text-muted-foreground">Total value {fmtUSD(optionsValue)}</span>}
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {optionPositionsQ.isLoading ? (
+            <LoadingState label="Pricing your option positions…" />
+          ) : optionPositionsQ.isError ? (
+            <ErrorState message={(optionPositionsQ.error as Error)?.message} />
+          ) : (
+            <OptionPositionsList positions={optionPositions} onSell={(p) => setOrderPanel({ open: true, mode: "sell", position: p })} showSymbolLink emptyDescription="Buy a call or put from any stock's Options tab — your positions across every symbol show up here." />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
             <CardTitle className="text-base">Transaction history</CardTitle>
             {transactions.length > 0 && <span className="text-xs text-muted-foreground">{transactions.length} transaction{transactions.length === 1 ? "" : "s"}</span>}
           </div>
@@ -192,6 +217,8 @@ function Portfolio() {
           )}
         </CardContent>
       </Card>
+
+      <OptionOrderPanel state={orderPanel} onClose={() => setOrderPanel({ open: false })} />
     </div>
   );
 }

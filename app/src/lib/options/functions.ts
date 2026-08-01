@@ -12,6 +12,7 @@ import { getServerQuote } from "@/lib/marketData/quote.server";
 import { cached } from "@/lib/marketData/cache.server";
 import { getRealizedVol } from "./volatility.server";
 import { buildChain, parseContractId, priceParsedContract, type OptionChain } from "./chain.server";
+import { getEnrichedOptionPositions, type EnrichedOptionPosition } from "./valuation.server";
 
 export type OptionChainResponse = { ok: true; chain: OptionChain } | { ok: false; error: string };
 
@@ -178,5 +179,27 @@ export const executeOptionTradeFn = createServerFn({ method: "POST" })
       };
     } catch (e) {
       return { ok: false, error: friendlyTrade(e instanceof Error ? e.message : "error") };
+    }
+  });
+
+// ── Positions (O3) ──────────────────────────────────────────────────────────
+//
+// All of the signed-in user's option positions, LIVE-repriced via the same
+// Black-Scholes path a chain uses (lib/options/valuation.server.ts) — never
+// the stored avg_premium, which is only a cost basis. This is the single
+// query Dashboard, Portfolio, and the Stock Detail Options tab all read
+// through, so they can never disagree about current value/P&L.
+
+export type OptionPositionsResponse = { ok: true; positions: EnrichedOptionPosition[] } | { ok: false; error: string };
+
+export const getOptionPositionsFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
+  .handler(async ({ data }): Promise<OptionPositionsResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      const positions = await getEnrichedOptionPositions(userId);
+      return { ok: true, positions };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Couldn't load your option positions right now." };
     }
   });

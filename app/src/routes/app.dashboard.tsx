@@ -7,6 +7,7 @@ import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { MarketBriefBody, AiDisclaimer } from "@/components/InsightUI";
 import { getHoldings, getWatchlist } from "@/lib/portfolio/queries";
+import { getOptionPositions } from "@/lib/options/queries";
 import { getTodaysBrief } from "@/lib/insights/api";
 import { getSnapshots } from "@/lib/snapshots/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
@@ -28,9 +29,13 @@ function Dashboard() {
 
   const holdingsQ = useQuery({ queryKey: ["holdings"], queryFn: getHoldings });
   const watchlistQ = useQuery({ queryKey: ["watchlist"], queryFn: getWatchlist });
+  // One shared query key — Portfolio and Stock Detail's Options tab read the
+  // exact same live-priced list, so none of the three can disagree.
+  const optionPositionsQ = useQuery({ queryKey: ["optionPositions"], queryFn: getOptionPositions });
 
   const holdings = holdingsQ.data ?? [];
   const watchItems = watchlistQ.data ?? [];
+  const optionPositions = optionPositionsQ.data ?? [];
 
   // One live-quote fetch covers both the holdings table and the watchlist.
   // Real prices flow in through the server function (server-only API key).
@@ -40,7 +45,7 @@ function Dashboard() {
   );
   const quotesQ = useQuotes(symbols);
   const quotes = quotesQ.data;
-  const pricesReady = holdings.length === 0 || quotesQ.isSuccess;
+  const pricesReady = (holdings.length === 0 || quotesQ.isSuccess) && optionPositionsQ.isSuccess;
 
   const snapshotsQ = useQuery({ queryKey: ["snapshots"], queryFn: getSnapshots });
 
@@ -51,17 +56,27 @@ function Dashboard() {
     holdingsValue += q.price * h.quantity;
     dayAbs += q.dayChange * h.quantity;
   }
+  // Options (O3): each position is already live-repriced server-side
+  // (lib/options/valuation.server.ts) — marketValue = current model premium
+  // × 100 × contracts. dayChange there reprices the SAME contract at the
+  // underlying's previous close (documented in that file) as the options
+  // analogue of a stock's price-vs-prior-close delta.
+  let optionsValue = 0;
+  let optionsDayAbs = 0;
+  for (const p of optionPositions) {
+    optionsValue += p.marketValue;
+    optionsDayAbs += p.dayChange;
+  }
   // ── Portfolio math (single source of truth) ──────────────────────────
-  // TODO(O3): doesn't yet include option_positions' market value — options
-  // landed in O2 (trade engine only); fold in once the options UI ships.
-  // total_value      = cash + Σ(qty × live price)
-  // Today's change $ = Σ(qty × dayChange)         (vs prior close; cash is flat intraday)
+  // total_value      = cash + Σ(qty × live price) + Σ(option market value)
+  // Today's change $ = Σ(qty × dayChange) + Σ(option dayChange)     (vs prior close; cash is flat intraday)
   // Today's change % = todayChange$ / (total_value − todayChange$)   (vs prior-close value)
   // Total return $   = total_value − $100,000 starting capital
   // Total return %   = (total_value − 100,000) / 100,000 × 100
-  const total = cash + holdingsValue;
-  const priorCloseValue = total - dayAbs;
-  const dayPct = priorCloseValue > 0 ? (dayAbs / priorCloseValue) * 100 : 0;
+  const total = cash + holdingsValue + optionsValue;
+  const dayAbsTotal = dayAbs + optionsDayAbs;
+  const priorCloseValue = total - dayAbsTotal;
+  const dayPct = priorCloseValue > 0 ? (dayAbsTotal / priorCloseValue) * 100 : 0;
   const retAbs = total - STARTING_CASH;
   const retPct = (retAbs / STARTING_CASH) * 100;
   const dash = "—";
@@ -77,7 +92,7 @@ function Dashboard() {
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Stat label="Portfolio value" value={pricesReady ? fmtUSD(total) : dash} sub={`${holdings.length} holding${holdings.length === 1 ? "" : "s"}`} />
         <Stat label="Buying power" value={fmtUSD(cash)} sub="Virtual cash available" />
-        <Stat label="Today's change" value={pricesReady ? `${dayAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(dayAbs))}` : dash} sub={pricesReady ? fmtPct(dayPct) : ""} tone={dayAbs >= 0 ? "gain" : "loss"} />
+        <Stat label="Today's change" value={pricesReady ? `${dayAbsTotal >= 0 ? "+" : "−"}${fmtUSD(Math.abs(dayAbsTotal))}` : dash} sub={pricesReady ? fmtPct(dayPct) : ""} tone={dayAbsTotal >= 0 ? "gain" : "loss"} />
         <Stat label="Total return" value={pricesReady ? `${retAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(retAbs))}` : dash} sub={pricesReady ? fmtPct(retPct) : ""} tone={retAbs >= 0 ? "gain" : "loss"} />
       </div>
 
@@ -92,8 +107,8 @@ function Dashboard() {
                 <div>
                   <CardTitle className="text-base font-medium text-muted-foreground">Portfolio value</CardTitle>
                   <p className="mt-1 text-3xl font-semibold tabular">{fmtUSD(total)}</p>
-                  <p className={cn("mt-1 text-sm tabular", dayAbs >= 0 ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
-                    {dayAbs >= 0 ? "+" : "−"}{fmtUSD(Math.abs(dayAbs))} ({fmtPct(dayPct)}) today
+                  <p className={cn("mt-1 text-sm tabular", dayAbsTotal >= 0 ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
+                    {dayAbsTotal >= 0 ? "+" : "−"}{fmtUSD(Math.abs(dayAbsTotal))} ({fmtPct(dayPct)}) today
                   </p>
                 </div>
               </div>

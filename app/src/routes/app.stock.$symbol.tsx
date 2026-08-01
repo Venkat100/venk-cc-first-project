@@ -14,10 +14,14 @@ import { getQuote, getCompanyNews, type NewsItem, type Quote } from "@/lib/marke
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
+import { getOptionPositions } from "@/lib/options/queries";
 import { executeTrade } from "@/lib/trading/execute";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct, fmtCompact, fmtQty, fmtRelativeTime } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
+import { OptionChainView } from "@/components/options/OptionChainView";
+import { OptionOrderPanel, type OrderPanelState } from "@/components/options/OptionOrderPanel";
+import { OptionPositionsList } from "@/components/options/OptionPositionsList";
 import { Sparkles, Newspaper, ExternalLink, Globe } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,6 +43,12 @@ function StockDetail() {
   const quote = quoteQ.data;
   const position = (holdingsQ.data ?? []).find((h) => h.symbol === symbol);
   const recent = useMemo(() => (txQ.data ?? []).filter((t) => t.symbol === symbol).slice(0, 8), [txQ.data, symbol]);
+
+  // Options (O3) — one shared query key so Dashboard/Portfolio/Stock Detail
+  // can never disagree about current value/P&L (see lib/options/queries.ts).
+  const optionPositionsQ = useQuery({ queryKey: ["optionPositions"], queryFn: getOptionPositions });
+  const symbolOptionPositions = useMemo(() => (optionPositionsQ.data ?? []).filter((p) => p.symbol === symbol), [optionPositionsQ.data, symbol]);
+  const [orderPanel, setOrderPanel] = useState<OrderPanelState>({ open: false });
 
   // Total portfolio value — same formula as the Dashboard (cash + Σ qty×price)
   // — needed for "% of portfolio" on the position card. Reuses the quote
@@ -130,6 +140,7 @@ function StockDetail() {
                 <div className="overflow-x-auto">
                   <TabsList className="w-max">
                     <TabsTrigger value="position">Your position</TabsTrigger>
+                    <TabsTrigger value="options">Options</TabsTrigger>
                     <TabsTrigger value="news">News</TabsTrigger>
                     <TabsTrigger value="about">About</TabsTrigger>
                     <TabsTrigger value="trades">Recent trades</TabsTrigger>
@@ -166,6 +177,15 @@ function StockDetail() {
                     </div>
                   )}
                 </TabsContent>
+                <TabsContent value="options" className="mt-4 space-y-6">
+                  <OptionChainView symbol={symbol} onSelectContract={(contract, side) => setOrderPanel({ open: true, mode: "buy", contract, side })} />
+                  {symbolOptionPositions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Your option positions in {symbol}</p>
+                      <OptionPositionsList positions={symbolOptionPositions} onSell={(p) => setOrderPanel({ open: true, mode: "sell", position: p })} />
+                    </div>
+                  )}
+                </TabsContent>
                 <TabsContent value="news" className="mt-4">
                   <NewsTab symbol={symbol} />
                 </TabsContent>
@@ -196,6 +216,8 @@ function StockDetail() {
 
         <OrderPanel price={quote?.price ?? 0} symbol={symbol} buyingPower={profile?.cash_balance ?? 0} positionQty={position?.quantity ?? 0} ready={!!quote} />
       </div>
+
+      <OptionOrderPanel state={orderPanel} onClose={() => setOrderPanel({ open: false })} />
     </div>
   );
 }
