@@ -7,11 +7,18 @@
 // generics require each Row to satisfy `Record<string, unknown>`, and a TS
 // `interface` is NOT assignable to that (no implicit index signature), which
 // silently collapses query types to `never`.
+export type MarginStatus = "ok" | "warning" | "call";
+
 export type Profile = {
   id: string; // uuid, references auth.users
   display_name: string | null;
   cash_balance: number; // numeric, defaults to 100000
   created_at: string; // timestamptz (ISO string)
+  // Margin (M1) — opt-in, off by default.
+  margin_enabled: boolean;
+  margin_loan: number;
+  margin_status: MarginStatus;
+  last_interest_accrued_at: string | null; // date (YYYY-MM-DD)
 };
 
 export type Holding = {
@@ -164,6 +171,18 @@ export type OptionTransaction = {
   created_at: string;
 };
 
+// ── Margin (M1) ─────────────────────────────────────────────
+export type MarginEventKind = "enabled" | "disabled" | "borrow" | "repay" | "interest" | "warning" | "call" | "liquidation";
+
+export type MarginEvent = {
+  id: string;
+  user_id: string;
+  kind: MarginEventKind;
+  amount: number;
+  detail: unknown;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -175,9 +194,14 @@ export type Database = {
           cash_balance?: number;
           created_at?: string;
         };
+        // M1: the DB now REVOKEs blanket UPDATE from `authenticated` and
+        // grants UPDATE(display_name) only (0012) — cash_balance/margin_*
+        // are written exclusively by SECURITY DEFINER functions. This type
+        // is deliberately narrowed to match: attempting to update anything
+        // else from client code is now a real DB-level permission error,
+        // not just a convention, so the type should say so too.
         Update: {
           display_name?: string | null;
-          cash_balance?: number;
         };
         Relationships: [];
       };
@@ -399,6 +423,19 @@ export type Database = {
           created_at?: string;
         };
         Update: { [_ in never]: never }; // append-only
+        Relationships: [];
+      };
+      margin_events: {
+        Row: MarginEvent;
+        Insert: {
+          id?: string;
+          user_id: string;
+          kind: MarginEventKind;
+          amount?: number;
+          detail?: unknown;
+          created_at?: string;
+        };
+        Update: { [_ in never]: never }; // append-only, written only by margin SQL functions (service_role)
         Relationships: [];
       };
     };

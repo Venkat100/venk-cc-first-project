@@ -27,3 +27,32 @@ export async function verifyUser(accessToken: string): Promise<string> {
   if (error || !data.user) throw new Error("not_signed_in");
   return data.user.id;
 }
+
+// ── Supabase write-result checking ──────────────────────────────────────────
+// Found during M1 verification: a Postgres/PostgREST error on `.insert()` /
+// `.update()` / `.upsert()` / `.delete()` / `.rpc()` never throws on its own
+// — it comes back as `{ error }` on the result, so a call whose result is
+// awaited-and-discarded silently drops the failure (this is exactly how a
+// real, previously-shipped bug in the margin monitor went undetected — see
+// 0014's migration header). These two helpers make that impossible to do by
+// accident going forward: pass the awaited result through one of them
+// instead of letting it fall on the floor.
+
+type SupabaseResult = { error: { message: string } | null };
+
+/** Correctness-critical write: a silent failure here could leave state
+ *  inconsistent in a way a later step trusts (e.g. a status flag that gates
+ *  "has this already been done"). Throws with `label` + the underlying
+ *  Postgres message so the caller's own error handling takes over. */
+export function mustSucceed(label: string, result: SupabaseResult): void {
+  if (result.error) throw new Error(`${label}: ${result.error.message}`);
+}
+
+/** Best-effort write inside a per-item batch (one row's failure must not
+ *  abort the rest of the batch — matches this codebase's existing cron/
+ *  batch-job convention of collecting failures into an `errors` array
+ *  instead of throwing). Pushes a labeled message into the caller's array
+ *  rather than swallowing the error. */
+export function logIfFailed(label: string, result: SupabaseResult, errors: string[]): void {
+  if (result.error) errors.push(`${label}: ${result.error.message}`);
+}

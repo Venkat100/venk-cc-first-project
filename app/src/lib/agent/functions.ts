@@ -8,7 +8,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
+import { getServiceClient, verifyUser, mustSucceed } from "@/lib/supabase/admin.server";
 import { runThinker, type ThinkerResult } from "./thinker.server";
 import { runWatchdog, type WatchdogResult } from "./watchdog.server";
 import { executeProposal, rejectProposal, supersedePending, type ApproveResult } from "./proposals.server";
@@ -18,7 +18,7 @@ type Admin = ReturnType<typeof getServiceClient>;
 
 async function readConfig(admin: Admin, userId: string): Promise<AgentConfig> {
   // Create the row on first access, then read it back.
-  await admin.from("agent_config").upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true });
+  mustSucceed("create agent_config row", await admin.from("agent_config").upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true }));
   const { data, error } = await admin.from("agent_config").select("*").eq("user_id", userId).single();
   if (error) throw new Error(error.message);
   return data as AgentConfig;
@@ -43,7 +43,7 @@ export const updateAgentConfigFn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<AgentConfig> => {
     const userId = await verifyUser(data.accessToken);
     const admin = getServiceClient();
-    await admin.from("agent_config").upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true });
+    mustSucceed("create agent_config row", await admin.from("agent_config").upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true }));
 
     const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (data.enabled !== undefined) patch.enabled = data.enabled;

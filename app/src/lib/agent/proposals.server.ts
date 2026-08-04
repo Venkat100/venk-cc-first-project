@@ -5,7 +5,7 @@
 // never stale proposal-time prices — re-validating every guardrail) or rejects
 // it. Autonomous mode is unaffected.
 
-import { getServiceClient } from "@/lib/supabase/admin.server";
+import { getServiceClient, mustSucceed } from "@/lib/supabase/admin.server";
 import { providerQuotes } from "@/lib/marketData/finnhub.server";
 import { planRebalance, COOLDOWN_DAYS, type PlanTarget, type PlanHolding } from "./rebalance";
 import { GUARDRAILS, round2, executePlan, type ThinkerExecution } from "./execute.server";
@@ -19,7 +19,7 @@ export async function writeProposal(
   userId: string,
   p: { target: AgentProposalTarget[]; trades: AgentProposalTrade[]; rationale: string; commentary: string },
 ): Promise<string> {
-  await admin.from("agent_proposals").update({ status: "superseded" }).eq("user_id", userId).eq("status", "pending");
+  mustSucceed("supersede prior pending proposal", await admin.from("agent_proposals").update({ status: "superseded" }).eq("user_id", userId).eq("status", "pending"));
   const { data, error } = await admin
     .from("agent_proposals")
     .insert({ user_id: userId, status: "pending", target: p.target, trades: p.trades, rationale: p.rationale, commentary: p.commentary })
@@ -81,7 +81,12 @@ export async function executeProposal(userId: string, proposalId: string): Promi
   const betaBySym = new Map(targetRaw.map((t) => [t.symbol, t.beta]));
   const { executed, agentCashAfter, errors } = await executePlan(admin, userId, risk, plan, agentCashBefore, betaBySym, true);
 
-  await admin.from("agent_proposals").update({ status: "approved" }).eq("id", proposalId);
+  // Correctness-critical: if this write silently failed, the proposal would
+  // stay 'pending' even though the trades above already executed — a second
+  // approval attempt would re-execute them (executeProposal's only guard
+  // against double-execution is `prop.status !== "pending"`). Must throw so
+  // approveAgentProposalFn surfaces the failure instead of reporting success.
+  mustSucceed("mark proposal approved (post-execution)", await admin.from("agent_proposals").update({ status: "approved" }).eq("id", proposalId));
   await admin.from("agent_decisions").insert({
     user_id: userId,
     action: "rebalance",
@@ -109,10 +114,10 @@ export async function rejectProposal(userId: string, proposalId: string): Promis
   const { data: prop } = await admin.from("agent_proposals").select("status").eq("id", proposalId).eq("user_id", userId).single();
   if (!prop) throw new Error("Proposal not found.");
   if (prop.status !== "pending") throw new Error("This proposal is no longer pending.");
-  await admin.from("agent_proposals").update({ status: "rejected" }).eq("id", proposalId).eq("user_id", userId);
+  mustSucceed("mark proposal rejected", await admin.from("agent_proposals").update({ status: "rejected" }).eq("id", proposalId).eq("user_id", userId));
 }
 
 /** Supersede any pending proposal (used when switching to autonomous mode). */
 export async function supersedePending(admin: Admin, userId: string): Promise<void> {
-  await admin.from("agent_proposals").update({ status: "superseded" }).eq("user_id", userId).eq("status", "pending");
+  mustSucceed("supersede pending proposal (mode switch)", await admin.from("agent_proposals").update({ status: "superseded" }).eq("user_id", userId).eq("status", "pending"));
 }

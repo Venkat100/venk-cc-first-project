@@ -13,9 +13,11 @@ import { z } from "zod";
 
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { getServerQuote } from "@/lib/marketData/quote.server";
+import { getPositionsValue } from "@/lib/margin/valuation.server";
 
 export type TradeResult = {
   cashBalance: number;
+  marginLoan: number;
   symbol: string;
   side: "buy" | "sell";
   quantity: number;
@@ -80,6 +82,14 @@ export const executeTradeFn = createServerFn({ method: "POST" })
       const admin = getServiceClient();
       const sym = data.symbol.toUpperCase();
 
+      // 2b) Margin (M1): only compute positions_value (a live-priced pass
+      // over ALL of the user's stock + option positions) when margin is
+      // actually enabled — a cheap single-row read decides this, so a
+      // margin-off trade does zero extra provider calls, preserving today's
+      // performance/behavior exactly when margin is off.
+      const { data: marginProfile } = await admin.from("profiles").select("margin_enabled").eq("id", userId).single();
+      const positionsValue = marginProfile?.margin_enabled ? await getPositionsValue(userId) : 0;
+
       // 3) Resolve the actual share quantity to execute, server-side.
       let quantity: number;
       if (data.sellAll) {
@@ -114,6 +124,7 @@ export const executeTradeFn = createServerFn({ method: "POST" })
         p_side: data.side,
         p_quantity: quantity,
         p_price: quote.price,
+        p_positions_value: positionsValue,
       });
 
       if (error) return { ok: false, error: friendly(error.message) };
@@ -123,6 +134,7 @@ export const executeTradeFn = createServerFn({ method: "POST" })
         ok: true,
         result: {
           cashBalance: Number(r.cash_balance),
+          marginLoan: Number(r.margin_loan ?? 0),
           symbol: String(r.symbol),
           side: r.side as "buy" | "sell",
           quantity: Number(r.quantity),

@@ -20,7 +20,7 @@
 // Reads ALL data server-side; prices are fetched server-side, never trusted
 // from the client. Manual trigger for now (cron wiring is 10.5).
 
-import { getServiceClient } from "@/lib/supabase/admin.server";
+import { getServiceClient, logIfFailed } from "@/lib/supabase/admin.server";
 import { getQuotes } from "@/lib/marketData";
 import { fhMetrics } from "@/lib/marketData/finnhub.server";
 import type { RiskLevel } from "@/lib/supabase/types";
@@ -190,13 +190,13 @@ export async function runWatchdog(userId: string, sources: WatchdogSources = {})
       agentCashAfter = Number((rpc as Record<string, unknown>).agent_cash);
       sells += 1;
       const proceeds = qty * price;
-      await admin.from("agent_decisions").insert({
+      logIfFailed(`log protective-sell decision for ${symbol}`, await admin.from("agent_decisions").insert({
         user_id: userId,
         action: "sell",
         symbol,
         rationale: reason,
         signals: { price: round2(price), stop: round2(newStop), peak: round2(peak), drawdown_pct: round2(drawdownPct), beta: round2(beta), stop_pct: round2(pct), proceeds: round2(proceeds), risk },
-      });
+      }), errors);
       actions.push({ symbol, price, beta: round2(beta), stopPct: round2(pct), prevStop, newStop, action: "sold", peak: round2(peak), drawdownPct: round2(drawdownPct), proceeds: round2(proceeds), reason });
       continue;
     }
@@ -204,7 +204,15 @@ export async function runWatchdog(userId: string, sources: WatchdogSources = {})
     // No breach → initialize or ratchet the stop UP (never down). A dip that
     // didn't breach leaves the stop unchanged ("held") — no trade, no whipsaw.
     if (prevStop == null || newStop > prevStop + 1e-9) {
-      await admin.from("agent_holdings").update({ trailing_stop_price: newStop, updated_at: new Date().toISOString() }).eq("user_id", userId).eq("symbol", symbol);
+      // The actual protection mechanism — if this write silently failed, the
+      // action log below would claim a higher stop than what's really
+      // persisted, understating real downside risk. Must be checked.
+      const stopWrite = await admin.from("agent_holdings").update({ trailing_stop_price: newStop, updated_at: new Date().toISOString() }).eq("user_id", userId).eq("symbol", symbol);
+      logIfFailed(`persist ratcheted stop for ${symbol}`, stopWrite, errors);
+      if (stopWrite.error) {
+        actions.push({ symbol, price, beta: round2(beta), stopPct: round2(pct), prevStop, newStop: prevStop, action: "skipped", reason: `stop ratchet to $${newStop.toFixed(2)} failed to persist — real stop is still $${prevStop?.toFixed(2) ?? "unset"}` });
+        continue;
+      }
       if (prevStop != null) ratchets += 1;
       actions.push({ symbol, price, beta: round2(beta), stopPct: round2(pct), prevStop, newStop: round2(newStop), action: prevStop == null ? "initialized" : "ratcheted" });
     } else {
@@ -213,13 +221,13 @@ export async function runWatchdog(userId: string, sources: WatchdogSources = {})
   }
 
   // Brief run summary entry.
-  await admin.from("agent_decisions").insert({
+  logIfFailed("log watchdog run summary", await admin.from("agent_decisions").insert({
     user_id: userId,
     action: "watchdog",
     symbol: null,
     rationale: `Watchdog checked ${holdings.length} holding(s): ${sells} protective sell(s), ${ratchets} stop(s) raised.`,
     signals: { risk, checked: holdings.length, sells, ratchets, agent_cash_before: round2(agentCashBefore), agent_cash_after: round2(agentCashAfter) },
-  });
+  }), errors);
 
   return { ran: true, riskLevel: risk, checked: holdings.length, sells, ratchets, agentCashBefore: round2(agentCashBefore), agentCashAfter: round2(agentCashAfter), actions, errors };
 }

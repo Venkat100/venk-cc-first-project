@@ -9,7 +9,7 @@
 // Manual trigger for now (10.5 wires it to cron). Reads ALL data server-side;
 // prices are fetched server-side and never trusted from the client.
 
-import { getServiceClient } from "@/lib/supabase/admin.server";
+import { getServiceClient, logIfFailed } from "@/lib/supabase/admin.server";
 import { fhCompanyNews, providerQuotes } from "@/lib/marketData/finnhub.server";
 import { scoreCandidates, type Candidate, type UniverseData } from "./quant.server";
 import { claudeReason, agentModel, type ClaudeReasoning } from "./anthropic.server";
@@ -231,13 +231,13 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
 
   // Transparent "didn't fight the watchdog" log for each cooldown-skipped name.
   for (const s of cooldownSkipped) {
-    await admin.from("agent_decisions").insert({
+    logIfFailed(`log cooldown-skip decision for ${s}`, await admin.from("agent_decisions").insert({
       user_id: userId,
       action: "hold",
       symbol: s,
       rationale: `Skipped ${s}: re-entry cooldown — the watchdog protective-sold it within the last ${COOLDOWN_DAYS} days.`,
       signals: { reason: "cooldown", days: COOLDOWN_DAYS },
-    });
+    }), errors);
   }
 
   // 6) overall rebalance decision entry
@@ -245,7 +245,7 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
     executed.length === 0
       ? `Portfolio within drift bands — no trades needed.${cooldownSkipped.length ? ` (${cooldownSkipped.length} name(s) on re-entry cooldown.)` : ""}`
       : `${reasoning.commentary} — Adjusted ${executed.length} position(s); held ${plan.held.length} within the ±${(DRIFT_BAND * 100).toFixed(0)}pp drift band.`;
-  await admin.from("agent_decisions").insert({
+  logIfFailed("log overall rebalance decision", await admin.from("agent_decisions").insert({
     user_id: userId,
     action: "rebalance",
     symbol: null,
@@ -261,7 +261,7 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
       agent_cash_before: round2(agentCashBefore),
       agent_cash_after: round2(agentCashAfter),
     },
-  });
+  }), errors);
 
   return {
     ran: true,

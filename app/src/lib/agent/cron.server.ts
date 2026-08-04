@@ -36,6 +36,7 @@ import { runDailyBriefs } from "@/lib/insights/insights.server";
 import { prefetchUniverse, type UniverseData } from "./quant.server";
 import { runThinker } from "./thinker.server";
 import { runWatchdog, type WatchdogSources } from "./watchdog.server";
+import { runMarginMonitor } from "@/lib/margin/monitor.server";
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -220,7 +221,28 @@ export async function handleAgentWatchdogRequest(request: Request): Promise<Resp
   const denied = authorizeCron(request);
   if (denied) return denied;
   try {
-    return json({ ok: true, summary: await runWatchdogForAllAgents() }, 200);
+    const summary = await runWatchdogForAllAgents();
+    // M1: also run the margin monitor on this INTRADAY cadence (GitHub
+    // Actions, every 30m during market hours), not just the once-daily
+    // snapshot cron — prices move intraday, so a mid-day drop can push a
+    // margin-enabled account into a call hours before the next daily run
+    // would otherwise notice it. Reuses the watchdog's OWN market-open
+    // result (rather than checking again) so both loops agree on "is the
+    // market open right now"; skips cleanly off-hours, same as the watchdog
+    // already does, to avoid wasted price fetches on off-hours pings.
+    // Isolated in its own try/catch so a margin-monitor failure can't fail
+    // the agent watchdog's own response.
+    let margin: Awaited<ReturnType<typeof runMarginMonitor>> | { skipped: true } | { error: string };
+    if (!summary.marketOpen) {
+      margin = { skipped: true };
+    } else {
+      try {
+        margin = await runMarginMonitor();
+      } catch (e) {
+        margin = { error: e instanceof Error ? e.message : "Margin monitor failed." };
+      }
+    }
+    return json({ ok: true, summary, margin }, 200);
   } catch (e) {
     return json({ ok: false, error: e instanceof Error ? e.message : "Agent watchdog batch failed." }, 500);
   }

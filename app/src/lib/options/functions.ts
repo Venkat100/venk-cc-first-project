@@ -13,6 +13,7 @@ import { cached } from "@/lib/marketData/cache.server";
 import { getRealizedVol } from "./volatility.server";
 import { buildChain, parseContractId, priceParsedContract, type OptionChain } from "./chain.server";
 import { getEnrichedOptionPositions, type EnrichedOptionPosition } from "./valuation.server";
+import { getPositionsValue } from "@/lib/margin/valuation.server";
 
 export type OptionChainResponse = { ok: true; chain: OptionChain } | { ok: false; error: string };
 
@@ -69,6 +70,7 @@ export type OptionSide = "buy_to_open" | "sell_to_close";
 
 export type OptionTradeResult = {
   cashBalance: number;
+  marginLoan: number;
   contractId: string;
   symbol: string;
   side: OptionSide;
@@ -146,8 +148,15 @@ export const executeOptionTradeFn = createServerFn({ method: "POST" })
       if (!quote || !(quote.price > 0)) return { ok: false, error: friendlyTrade("no_price") };
       const priced = priceParsedContract(parsed, quote.price, vol);
 
-      // 5) Atomic execution in the DB via the service-role client.
+      // 5) Margin (M1): only compute positions_value (a live-priced pass over
+      // ALL of the user's stock + option positions) when margin is actually
+      // enabled — same cheap-check-first discipline as the equity trade path,
+      // so an option trade with margin off costs zero extra provider calls.
       const admin = getServiceClient();
+      const { data: marginProfile } = await admin.from("profiles").select("margin_enabled").eq("id", userId).single();
+      const positionsValue = marginProfile?.margin_enabled ? await getPositionsValue(userId) : 0;
+
+      // 6) Atomic execution in the DB via the service-role client.
       const { data: rpc, error } = await admin.rpc("execute_option_trade", {
         p_user_id: userId,
         p_contract_id: data.contractId.toUpperCase(),
@@ -158,6 +167,7 @@ export const executeOptionTradeFn = createServerFn({ method: "POST" })
         p_side: data.side,
         p_contracts: data.contracts,
         p_premium: priced.premium,
+        p_positions_value: positionsValue,
       });
 
       if (error) return { ok: false, error: friendlyTrade(error.message) };
@@ -167,6 +177,7 @@ export const executeOptionTradeFn = createServerFn({ method: "POST" })
         ok: true,
         result: {
           cashBalance: Number(r.cash_balance),
+          marginLoan: Number(r.margin_loan ?? 0),
           contractId: String(r.contract_id),
           symbol: String(r.symbol),
           side: r.side as OptionSide,

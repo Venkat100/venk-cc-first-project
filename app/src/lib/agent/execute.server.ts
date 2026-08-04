@@ -5,7 +5,7 @@
 // per-action decision. Shared by the autonomous thinker AND the approve-mode
 // proposal executor, so both paths enforce identical guardrails and behaviour.
 
-import { getServiceClient } from "@/lib/supabase/admin.server";
+import { getServiceClient, logIfFailed } from "@/lib/supabase/admin.server";
 import { stopPct } from "./watchdog.server";
 import type { RebalancePlan } from "./rebalance";
 import type { RiskLevel } from "@/lib/supabase/types";
@@ -60,16 +60,16 @@ export async function executePlan(
     // (already ratcheted) stop when adding to a held position.
     if (a.side === "buy" && a.isNewPosition) {
       const seedStop = round2(a.price * (1 - stopPct(betaBySym.get(a.symbol), risk)));
-      await admin.from("agent_holdings").update({ trailing_stop_price: seedStop }).eq("user_id", userId).eq("symbol", a.symbol);
+      logIfFailed(`seed trailing stop for ${a.symbol}`, await admin.from("agent_holdings").update({ trailing_stop_price: seedStop }).eq("user_id", userId).eq("symbol", a.symbol), errors);
     }
 
-    await admin.from("agent_decisions").insert({
+    logIfFailed(`log decision for ${a.symbol}`, await admin.from("agent_decisions").insert({
       user_id: userId,
       action: a.kind === "buy" ? "buy" : "trim", // 'trim' covers trims + exits (distinct from watchdog 'sell')
       symbol: a.symbol,
       rationale: a.reason,
       signals: { side: a.side, kind: a.kind, quantity: a.quantity, price: round2(a.price), source: aiUsed ? "quant+ai" : "quant" },
-    });
+    }), errors);
   }
 
   return { executed, agentCashAfter, errors };
