@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { OptionChainView } from "@/components/options/OptionChainView";
 import { OptionOrderPanel, type OrderPanelState } from "@/components/options/OptionOrderPanel";
 import { OptionPositionsList } from "@/components/options/OptionPositionsList";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Sparkles, Newspaper, ExternalLink, Globe } from "lucide-react";
 import { toast } from "sonner";
 
@@ -388,6 +389,7 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
   const [amountInput, setAmountInput] = useState("50");
   const [limit, setLimit] = useState(price);
   const [sellAll, setSellAll] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const execPrice = type === "market" ? price : limit;
   const qtyNum = Number(qtyInput) || 0;
@@ -422,11 +424,18 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
         { description: `${r.side === "buy" ? "Cost" : "Proceeds"} ${fmtUSD(r.total)} · Buying power now ${fmtUSD(r.cashBalance)}` },
       );
       setSellAll(false);
+      setConfirmOpen(false);
     },
-    onError: (e: Error) => toast.error(e.message || "That order couldn't be completed."),
+    onError: (e: Error) => {
+      toast.error(e.message || "That order couldn't be completed.");
+      setConfirmOpen(false);
+    },
   });
 
-  function onConfirm() {
+  // Validates the current form, then OPENS the confirm dialog — the actual
+  // trade.mutate() only fires from the dialog's own Confirm button, so
+  // Cancel/Escape/backdrop are guaranteed no-ops (nothing has been sent yet).
+  function onOpenConfirm() {
     if (type === "limit") {
       // TODO(Phase 6+): real limit-order handling (rest the order until the
       // market crosses the limit). For now only market orders execute.
@@ -438,7 +447,7 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
         toast.error("You don't own any shares to sell.");
         return;
       }
-      trade.mutate();
+      setConfirmOpen(true);
       return;
     }
     if (mode === "shares") {
@@ -454,7 +463,7 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
         return;
       }
     }
-    trade.mutate();
+    setConfirmOpen(true);
   }
 
   const pending = trade.isPending;
@@ -463,6 +472,17 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
     : mode === "dollars"
       ? `Confirm ${side} · ${fmtUSD(amountNum || 0)} of ${symbol}`
       : `Confirm ${side} · ${qtyInput || 0} ${symbol}`;
+
+  const dialogTitle = isSellAll ? `Close ${symbol} position` : side === "buy" ? "Confirm buy" : "Confirm sell";
+  const dialogConsequence = isSellAll
+    ? `Close your entire ${symbol} position (${fmtQty(positionQty)} shares)? This sells everything for an estimated ${fmtUSD(est)}.`
+    : side === "buy"
+      ? mode === "dollars"
+        ? `Buy ${fmtUSD(amountNum)} of ${symbol} (≈${fmtQty(estQtyForDollars, 4)} shares)? This uses ${fmtUSD(est)} of your ${fmtUSD(buyingPower)} buying power.`
+        : `Buy ${fmtQty(qtyNum)} ${symbol} for about ${fmtUSD(est)}? This uses ${fmtUSD(est)} of your ${fmtUSD(buyingPower)} buying power.`
+      : mode === "dollars"
+        ? `Sell about ${fmtUSD(amountNum)} of ${symbol} (≈${fmtQty(estQtyForDollars, 4)} shares)?`
+        : `Sell ${fmtQty(qtyNum)} ${symbol} for an estimated ${fmtUSD(est)}?`;
 
   return (
     <Card className="h-fit">
@@ -542,12 +562,43 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
         <Button
           disabled={!ready || pending}
           className={cn("h-12 w-full text-base", side === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)] hover:opacity-90" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)] hover:opacity-90")}
-          onClick={onConfirm}
+          onClick={onOpenConfirm}
         >
           {pending ? "Placing…" : confirmLabel}
         </Button>
         <p className="text-[11px] text-muted-foreground">All orders are simulated paper trades. No real money is used.</p>
       </CardContent>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={dialogTitle}
+        consequence={dialogConsequence}
+        detail={
+          <div className="space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{isSellAll ? "Shares × price" : mode === "dollars" ? "Amount" : "Shares × price"}</span>
+              <span className="tabular font-medium">
+                {isSellAll
+                  ? `${fmtQty(positionQty)} × ${fmtUSD(execPrice)} = ${fmtUSD(est)}`
+                  : mode === "dollars"
+                    ? fmtUSD(amountNum)
+                    : `${fmtQty(qtyNum)} × ${fmtUSD(execPrice)} = ${fmtUSD(est)}`}
+              </span>
+            </div>
+            {side === "buy" && (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Buying power after</span>
+                <span className="tabular">{fmtUSD(buyingPower - est)}</span>
+              </div>
+            )}
+          </div>
+        }
+        confirmLabel={confirmLabel}
+        variant={isSellAll ? "destructive" : "default"}
+        loading={pending}
+        onConfirm={() => trade.mutate()}
+      />
     </Card>
   );
 }

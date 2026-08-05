@@ -6,7 +6,7 @@ PaperTrader is a full-stack paper-trading platform with an autonomous AI portfol
 
 It is an **educational simulation** — no real money, no brokerage connection, nothing executed against real markets. All cash and holdings are virtual.
 
-🔗 **Live:** https://venk-cc-first-project.vercel.app
+🔗 **Live:** https://mypapertrader.com
 
 ---
 

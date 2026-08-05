@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker, runAgentWatchdog, approveAgentProposal, rejectAgentProposal } from "@/lib/agent/api";
 import { getAgentHoldings, getAgentDecisions, getAgentSnapshots, getPendingProposal } from "@/lib/agent/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
@@ -80,6 +81,7 @@ function Agent() {
     onError: (e: Error) => toast.error(e.message || "Couldn't save that setting."),
   });
 
+  const [confirmRunOpen, setConfirmRunOpen] = useState(false);
   const runMut = useMutation({
     mutationFn: runAgentThinker,
     onSuccess: async (r) => {
@@ -90,6 +92,7 @@ function Agent() {
         qc.invalidateQueries({ queryKey: ["agentDecisions"] }),
         qc.invalidateQueries({ queryKey: ["agentProposal"] }),
       ]);
+      setConfirmRunOpen(false);
       if (!r.ran) {
         toast.message("Agent didn't trade", { description: r.reason });
         return;
@@ -103,9 +106,13 @@ function Agent() {
         description: n > 0 ? `${n} trade${n === 1 ? "" : "s"} · held ${r.held?.length ?? 0} within drift bands.` : "No trades needed — portfolio within drift bands.",
       });
     },
-    onError: (e: Error) => toast.error(e.message || "The agent run failed."),
+    onError: (e: Error) => {
+      toast.error(e.message || "The agent run failed.");
+      setConfirmRunOpen(false);
+    },
   });
 
+  const [proposalAction, setProposalAction] = useState<"approve" | "reject" | null>(null);
   const proposalMut = useMutation({
     mutationFn: (v: { id: string; approve: boolean }) => (v.approve ? approveAgentProposal(v.id) : rejectAgentProposal(v.id).then(() => undefined)),
     onSuccess: async (res, v) => {
@@ -116,13 +123,17 @@ function Agent() {
         qc.invalidateQueries({ queryKey: ["agentDecisions"] }),
         qc.invalidateQueries({ queryKey: ["agentProposal"] }),
       ]);
+      setProposalAction(null);
       if (!v.approve) toast.message("Proposal rejected", { description: "No trades were made." });
       else {
         const n = (res as { executed?: unknown[] })?.executed?.length ?? 0;
         toast.success("Proposal approved", { description: n > 0 ? `Executed ${n} trade${n === 1 ? "" : "s"} at current prices.` : "No trades needed at current prices." });
       }
     },
-    onError: (e: Error) => toast.error(e.message || "Couldn't update the proposal."),
+    onError: (e: Error) => {
+      toast.error(e.message || "Couldn't update the proposal.");
+      setProposalAction(null);
+    },
   });
 
   const watchdogMut = useMutation({
@@ -150,15 +161,20 @@ function Agent() {
   });
 
   const [amount, setAmount] = useState(1000);
+  const [fundAction, setFundAction] = useState<"fund" | "withdraw" | null>(null);
   const fundMut = useMutation({
     mutationFn: (amt: number) => fundAgent(amt),
     onSuccess: async (r, amt) => {
       await Promise.all([refreshProfile(), qc.invalidateQueries({ queryKey: ["agentConfig"] })]);
+      setFundAction(null);
       toast.success(amt >= 0 ? `Funded ${fmtUSD(amt)} to the agent` : `Withdrew ${fmtUSD(-amt)} to your main account`, {
         description: `Agent cash now ${fmtUSD(r.agentCash)} · Main cash ${fmtUSD(r.cashBalance)}`,
       });
     },
-    onError: (e: Error) => toast.error(e.message || "That transfer couldn't be completed."),
+    onError: (e: Error) => {
+      toast.error(e.message || "That transfer couldn't be completed.");
+      setFundAction(null);
+    },
   });
 
   if (configQ.isLoading) {
@@ -233,10 +249,10 @@ function Agent() {
             {proposalQ.data.commentary && <p className="text-xs italic text-muted-foreground">{proposalQ.data.commentary}</p>}
             <p className="text-[11px] text-muted-foreground">On approve, trades execute toward this target at <span className="font-medium text-foreground">current live prices</span> (not the indicative prices above), with all guardrails re-checked.</p>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button className="gap-2" disabled={proposalMut.isPending} onClick={() => proposalMut.mutate({ id: proposalQ.data!.id, approve: true })}>
-                <Check className="h-4 w-4" /> {proposalMut.isPending ? "Working…" : "Approve & execute"}
+              <Button className="gap-2" disabled={proposalMut.isPending} onClick={() => setProposalAction("approve")}>
+                <Check className="h-4 w-4" /> {proposalMut.isPending && proposalAction === "approve" ? "Working…" : "Approve & execute"}
               </Button>
-              <Button variant="outline" className="gap-2" disabled={proposalMut.isPending} onClick={() => proposalMut.mutate({ id: proposalQ.data!.id, approve: false })}>
+              <Button variant="outline" className="gap-2" disabled={proposalMut.isPending} onClick={() => setProposalAction("reject")}>
                 <X className="h-4 w-4" /> Reject
               </Button>
             </div>
@@ -258,7 +274,7 @@ function Agent() {
           <Button
             className="gap-2"
             disabled={runMut.isPending || !config.enabled || config.agent_cash <= 0}
-            onClick={() => runMut.mutate()}
+            onClick={() => (config.mode === "autonomous" ? setConfirmRunOpen(true) : runMut.mutate())}
           >
             <Bot className="h-4 w-4" /> {runMut.isPending ? (config.mode === "approve" ? "Proposing…" : "Thinking…") : config.mode === "approve" ? "Propose changes" : "Run agent now"}
           </Button>
@@ -377,10 +393,10 @@ function Agent() {
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-              <Button className="gap-2" disabled={fundDisabled} onClick={() => fundMut.mutate(amt)}>
+              <Button className="gap-2" disabled={fundDisabled} onClick={() => setFundAction("fund")}>
                 <ArrowDownToLine className="h-4 w-4" /> Fund agent
               </Button>
-              <Button variant="outline" className="gap-2" disabled={withdrawDisabled} onClick={() => fundMut.mutate(-amt)}>
+              <Button variant="outline" className="gap-2" disabled={withdrawDisabled} onClick={() => setFundAction("withdraw")}>
                 <ArrowUpFromLine className="h-4 w-4" /> Withdraw to main
               </Button>
             </div>
@@ -510,6 +526,57 @@ function Agent() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={confirmRunOpen}
+        onOpenChange={setConfirmRunOpen}
+        title="Run the agent now"
+        consequence="The agent will review the market and may buy or sell in its sub-portfolio."
+        confirmLabel="Run agent now"
+        loading={runMut.isPending}
+        onConfirm={() => runMut.mutate()}
+      />
+
+      <ConfirmDialog
+        open={proposalAction !== null}
+        onOpenChange={(v) => !v && setProposalAction(null)}
+        title={proposalAction === "approve" ? "Approve proposal" : "Reject proposal"}
+        consequence={
+          proposalAction === "approve"
+            ? `Execute ${(proposalQ.data?.trades ?? []).length} trade${(proposalQ.data?.trades ?? []).length === 1 ? "" : "s"} at current market prices?`
+            : "Reject this proposal? No trades will be made."
+        }
+        confirmLabel={proposalAction === "approve" ? "Confirm approve" : "Confirm reject"}
+        variant={proposalAction === "reject" ? "destructive" : "default"}
+        loading={proposalMut.isPending}
+        onConfirm={() => proposalQ.data && proposalMut.mutate({ id: proposalQ.data.id, approve: proposalAction === "approve" })}
+      />
+
+      <ConfirmDialog
+        open={fundAction !== null}
+        onOpenChange={(v) => !v && setFundAction(null)}
+        title={fundAction === "fund" ? "Fund the agent" : "Withdraw to main"}
+        consequence={
+          fundAction === "fund"
+            ? `Move ${fmtUSD(amt)} from your main account to the AI agent?`
+            : `Move ${fmtUSD(amt)} from the AI agent back to your main account?`
+        }
+        detail={
+          <div className="space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Main cash</span>
+              <span className="tabular">{fmtUSD(cash)} → {fmtUSD(fundAction === "fund" ? cash - amt : cash + amt)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Agent cash</span>
+              <span className="tabular">{fmtUSD(config.agent_cash)} → {fmtUSD(fundAction === "fund" ? config.agent_cash + amt : config.agent_cash - amt)}</span>
+            </div>
+          </div>
+        }
+        confirmLabel={fundAction === "fund" ? "Confirm fund" : "Confirm withdraw"}
+        loading={fundMut.isPending}
+        onConfirm={() => fundMut.mutate(fundAction === "fund" ? amt : -amt)}
+      />
     </div>
   );
 }

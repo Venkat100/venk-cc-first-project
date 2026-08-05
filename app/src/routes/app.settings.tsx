@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { STARTING_CASH, fmtUSD } from "@/lib/mockData";
 import { applyTheme, getTheme } from "@/lib/theme";
 import { supabase } from "@/lib/supabase/client";
@@ -25,6 +26,7 @@ function Settings() {
   const { user, profile, signOut, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
 
   // Seed the name field from the loaded profile.
   useEffect(() => { setName(profile?.display_name ?? ""); }, [profile?.display_name]);
@@ -106,10 +108,23 @@ function Settings() {
               <p className="text-sm font-medium">Reset paper account</p>
               <p className="text-xs text-muted-foreground">Clears all positions and resets virtual balance to {fmtUSD(STARTING_CASH)}.</p>
             </div>
-            <Button variant="destructive" onClick={() => toast.success("Paper account reset to $100,000")}>Reset account</Button>
+            <Button variant="destructive" onClick={() => setConfirmResetOpen(true)}>Reset account</Button>
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmResetOpen}
+        onOpenChange={setConfirmResetOpen}
+        title="Reset paper account"
+        consequence="This permanently clears every holding and your entire trade history, and resets your virtual balance back to $100,000. This cannot be undone."
+        confirmLabel="Reset account"
+        variant="destructive"
+        onConfirm={() => {
+          setConfirmResetOpen(false);
+          toast.success("Paper account reset to $100,000");
+        }}
+      />
     </div>
   );
 }

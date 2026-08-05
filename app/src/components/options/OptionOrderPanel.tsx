@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { executeOptionTrade } from "@/lib/options/execute";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD } from "@/lib/mockData";
@@ -41,6 +42,7 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
   const maxContracts = state.open && state.mode === "sell" ? state.position.contracts : Infinity;
 
   const [contracts, setContracts] = useState(1);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   useEffect(() => {
     if (state.open) setContracts(1); // reset whenever a new contract/position opens
   }, [state.open, contractId]);
@@ -56,9 +58,13 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
       toast.success(`${verb} ${r.contracts} ${symbol} $${strike} ${optType === "call" ? "Call" : "Put"} · ${expiryLabel(expiry)}`, {
         description: `${r.side === "buy_to_open" ? "Cost" : "Proceeds"} ${fmtUSD(r.total)} @ ${fmtUSD(r.premium)}/share · Buying power now ${fmtUSD(r.cashBalance)}`,
       });
+      setConfirmOpen(false);
       onClose();
     },
-    onError: (e: Error) => toast.error(e.message || "That order couldn't be completed."),
+    onError: (e: Error) => {
+      toast.error(e.message || "That order couldn't be completed.");
+      setConfirmOpen(false);
+    },
   });
 
   const dateLabel = expiry ? expiryLabel(expiry) : "";
@@ -144,7 +150,7 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
                   ? "h-12 w-full bg-[color:var(--color-gain)] text-base text-[color:var(--color-gain-foreground)] hover:opacity-90"
                   : "h-12 w-full bg-[color:var(--color-loss)] text-base text-[color:var(--color-loss-foreground)] hover:opacity-90"
               }
-              onClick={() => trade.mutate()}
+              onClick={() => setConfirmOpen(true)}
             >
               {trade.isPending ? "Placing…" : mode === "buy" ? `Confirm buy · ${contracts} contract${contracts === 1 ? "" : "s"}` : `Confirm sell · ${contracts} contract${contracts === 1 ? "" : "s"}`}
             </Button>
@@ -152,6 +158,34 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
           </div>
         )}
       </DialogContent>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        title={mode === "buy" ? "Confirm buy to open" : "Confirm sell to close"}
+        consequence={
+          mode === "buy"
+            ? `Buy ${contracts} contract${contracts === 1 ? "" : "s"} of ${symbol} $${strike} ${optType === "call" ? "Call" : "Put"} · ${dateLabel} for about ${fmtUSD(cost)}? This uses ${fmtUSD(cost)} of your ${fmtUSD(buyingPower)} buying power.`
+            : `Sell ${contracts} contract${contracts === 1 ? "" : "s"} of ${symbol} $${strike} ${optType === "call" ? "Call" : "Put"} · ${dateLabel} for an estimated ${fmtUSD(cost)}?`
+        }
+        detail={
+          <div className="space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{mode === "buy" ? "Cost" : "Proceeds"} math</span>
+              <span className="tabular font-medium">{fmtUSD(premium)} × 100 × {contracts} = {fmtUSD(cost)}</span>
+            </div>
+            {mode === "buy" && (
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Buying power after</span>
+                <span className="tabular">{fmtUSD(buyingPower - cost)}</span>
+              </div>
+            )}
+          </div>
+        }
+        confirmLabel={mode === "buy" ? "Confirm buy" : "Confirm sell"}
+        loading={trade.isPending}
+        onConfirm={() => trade.mutate()}
+      />
     </Dialog>
   );
 }
