@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +12,25 @@ import { STARTING_CASH, fmtUSD } from "@/lib/mockData";
 import { applyTheme, getTheme } from "@/lib/theme";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/auth-context";
+import { resetPaperAccount } from "@/lib/account/reset";
 import { toast } from "sonner";
+
+// Every react-query key touched by a reset — everything financial, deliberately
+// EXCLUDING watchlist (a preference, not a position — explicitly kept, see
+// 0015's header) and market-data/insights keys (quote/candles/news/insight/…,
+// unrelated to any one account's state).
+const RESET_AFFECTED_QUERY_KEYS = [
+  "holdings",
+  "transactions",
+  "optionPositions",
+  "optionTransactions",
+  "snapshots",
+  "agentConfig",
+  "agentHoldings",
+  "agentDecisions",
+  "agentProposal",
+  "agentSnapshots",
+] as const;
 
 export const Route = createFileRoute("/app/settings")({
   head: () => ({ meta: [{ title: "Settings · PaperTrader" }] }),
@@ -24,9 +43,32 @@ function Settings() {
 
   const navigate = useNavigate();
   const { user, profile, signOut, refreshProfile } = useAuth();
+  const qc = useQueryClient();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+
+  const resetMut = useMutation({
+    mutationFn: resetPaperAccount,
+    onSuccess: async (r) => {
+      await Promise.all([
+        refreshProfile(),
+        ...RESET_AFFECTED_QUERY_KEYS.map((k) => qc.invalidateQueries({ queryKey: [k] })),
+      ]);
+      setConfirmResetOpen(false);
+      const cleared = r.holdingsCleared + r.optionPositionsCleared + r.agentHoldingsCleared;
+      toast.success("Paper account reset to $100,000.00", {
+        description:
+          cleared > 0 || r.marginLoanForgiven > 0
+            ? `Cleared ${cleared} position${cleared === 1 ? "" : "s"}${r.marginLoanForgiven > 0 ? ` and forgave a ${fmtUSD(r.marginLoanForgiven)} margin loan` : ""}. Your watchlist and trade history are unchanged.`
+            : "Your watchlist and trade history are unchanged.",
+      });
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "The reset couldn't be completed.");
+      setConfirmResetOpen(false);
+    },
+  });
 
   // Seed the name field from the loaded profile.
   useEffect(() => { setName(profile?.display_name ?? ""); }, [profile?.display_name]);
@@ -106,9 +148,9 @@ function Settings() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-medium">Reset paper account</p>
-              <p className="text-xs text-muted-foreground">Clears all positions and resets virtual balance to {fmtUSD(STARTING_CASH)}.</p>
+              <p className="text-xs text-muted-foreground">Clears your positions and AI agent, and resets your virtual balance to {fmtUSD(STARTING_CASH)}. Keeps your login, watchlist, and trade history.</p>
             </div>
-            <Button variant="destructive" onClick={() => setConfirmResetOpen(true)}>Reset account</Button>
+            <Button variant="destructive" disabled={resetMut.isPending} onClick={() => setConfirmResetOpen(true)}>Reset account</Button>
           </div>
         </CardContent>
       </Card>
@@ -117,13 +159,21 @@ function Settings() {
         open={confirmResetOpen}
         onOpenChange={setConfirmResetOpen}
         title="Reset paper account"
-        consequence="This permanently clears every holding and your entire trade history, and resets your virtual balance back to $100,000. This cannot be undone."
+        consequence="Reset your paper account back to a clean $100,000 start? This closes every stock and option position and clears your AI agent's holdings and settings. This cannot be undone."
+        detail={
+          <div className="space-y-1.5">
+            <div className="flex justify-between"><span className="text-muted-foreground">Cash balance</span><span className="tabular font-medium">→ {fmtUSD(STARTING_CASH)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Stock &amp; option positions</span><span className="font-medium">Closed</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">AI agent</span><span className="font-medium">Deactivated, cleared</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Outstanding margin loan, if any</span><span className="font-medium">Forgiven</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Your watchlist</span><span className="font-medium">Kept</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Your past trade history</span><span className="font-medium">Stays visible</span></div>
+          </div>
+        }
         confirmLabel="Reset account"
         variant="destructive"
-        onConfirm={() => {
-          setConfirmResetOpen(false);
-          toast.success("Paper account reset to $100,000");
-        }}
+        loading={resetMut.isPending}
+        onConfirm={() => resetMut.mutate()}
       />
     </div>
   );
