@@ -149,7 +149,12 @@ if (buy1.ok) {
   const total1 = Number(buy1.result.total);
   const expectedTotal1 = premium1 * 100 * 2;
   console.log(`  server-computed premium: ${money(premium1)}  → total = premium×100×2 = ${money(expectedTotal1)}`);
-  assert("total === premium × 100 × 2 exactly", total1 === expectedTotal1, `${total1} vs ${expectedTotal1}`);
+  // Tolerance, not strict ===: total1 comes back through Postgres numeric
+  // arithmetic while expectedTotal1 is recomputed in JS float — these can
+  // differ by IEEE754 epsilon (e.g. 872 vs 872.0000000000001) depending on
+  // the day's real live premium, unrelated to correctness (hardening pass:
+  // this was flaky-failing on a real run with no code-path regression).
+  assert("total === premium × 100 × 2 (within float epsilon)", closeTo(total1, expectedTotal1, 1e-6), `${total1} vs ${expectedTotal1}`);
   const cashAfter1 = await cash(userAId);
   console.log(`  cash after: ${money(cashAfter1)} (expected ${money(cashBefore1 - total1)})`);
   assert("cash decreased by EXACTLY total", cashAfter1 === round2(cashBefore1 - total1), `${cashAfter1} vs ${round2(cashBefore1 - total1)}`);
