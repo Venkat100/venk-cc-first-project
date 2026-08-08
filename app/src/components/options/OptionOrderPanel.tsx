@@ -7,11 +7,12 @@
 // separate mobile codebase — same convention as the rest of the app).
 
 import { useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { executeOptionTrade } from "@/lib/options/execute";
+import { getMarginState } from "@/lib/margin/api";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD } from "@/lib/mockData";
 import type { OptionContract, OptionType, EnrichedOptionPosition } from "@/lib/options/queries";
@@ -29,7 +30,15 @@ const SHEET_CONTENT_CLASS =
 
 export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; onClose: () => void }) {
   const { profile, refreshProfile } = useAuth();
-  const buyingPower = profile?.cash_balance ?? 0;
+  // Margin-aware buying power — same gated pattern as the dashboard/stock
+  // order panel: only fetches getMarginState() when margin is on.
+  const marginStateQ = useQuery({
+    queryKey: ["marginState"],
+    queryFn: getMarginState,
+    enabled: !!profile?.margin_enabled,
+    staleTime: 10_000,
+  });
+  const buyingPower = profile?.margin_enabled && marginStateQ.data ? marginStateQ.data.buyingPower : (profile?.cash_balance ?? 0);
   const qc = useQueryClient();
 
   const mode = state.open ? state.mode : "buy";
@@ -53,7 +62,11 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
   const trade = useMutation({
     mutationFn: () => executeOptionTrade({ contractId, side: mode === "buy" ? "buy_to_open" : "sell_to_close", contracts }),
     onSuccess: async (r) => {
-      await Promise.all([refreshProfile(), qc.invalidateQueries({ queryKey: ["optionPositions"] })]);
+      await Promise.all([
+        refreshProfile(),
+        qc.invalidateQueries({ queryKey: ["optionPositions"] }),
+        qc.invalidateQueries({ queryKey: ["marginState"] }),
+      ]);
       const verb = r.side === "buy_to_open" ? "Bought" : "Sold";
       toast.success(`${verb} ${r.contracts} ${symbol} $${strike} ${optType === "call" ? "Call" : "Put"} · ${expiryLabel(expiry)}`, {
         description: `${r.side === "buy_to_open" ? "Cost" : "Proceeds"} ${fmtUSD(r.total)} @ ${fmtUSD(r.premium)}/share · Buying power now ${fmtUSD(r.cashBalance)}`,

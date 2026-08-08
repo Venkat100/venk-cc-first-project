@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { getPositionsValue } from "./valuation.server";
-import { MARGIN_MAINTENANCE_PCT, MARGIN_MAX_LEVERAGE } from "./config.server";
+import { MARGIN_INTEREST_RATE, MARGIN_MAINTENANCE_PCT, MARGIN_MAX_LEVERAGE, MARGIN_WARNING_BUFFER_PCT } from "./config.server";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -44,6 +44,12 @@ export type MarginState = {
    *  second definition of the formula. */
   buyingPower: number;
   maintenanceRequirement: number;
+  /** M2 addition (display-only — these are the SAME constants execute_trade
+   *  and the monitor already use server-side; exposing them here so the UI
+   *  never hardcodes/re-derives "8%"/"30%"/"10%" as a second source of truth). */
+  interestRate: number;
+  maintenancePct: number;
+  warningBufferPct: number;
 };
 
 export type MarginStateResponse = { ok: true; state: MarginState } | { ok: false; error: string };
@@ -83,6 +89,9 @@ export const getMarginStateFn = createServerFn({ method: "POST" })
           equity,
           buyingPower,
           maintenanceRequirement,
+          interestRate: MARGIN_INTEREST_RATE,
+          maintenancePct: MARGIN_MAINTENANCE_PCT,
+          warningBufferPct: MARGIN_WARNING_BUFFER_PCT,
         },
       };
     } catch (e) {

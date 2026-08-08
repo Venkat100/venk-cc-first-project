@@ -10,6 +10,7 @@ import { getHoldings, getWatchlist } from "@/lib/portfolio/queries";
 import { getOptionPositions } from "@/lib/options/queries";
 import { getTodaysBrief } from "@/lib/insights/api";
 import { getSnapshots } from "@/lib/snapshots/queries";
+import { getMarginState } from "@/lib/margin/api";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useAuth } from "@/lib/auth/auth-context";
 import { topMovers, fmtUSD, fmtPct, fmtQty, sparkline, STARTING_CASH } from "@/lib/mockData";
@@ -26,6 +27,18 @@ export const Route = createFileRoute("/app/dashboard")({
 function Dashboard() {
   const { profile } = useAuth();
   const cash = profile?.cash_balance ?? 0;
+  // Margin-aware buying power: the extra live-priced getMarginState() call
+  // only fires when the user has actually opted into margin (a free check
+  // via profile, already fetched by useAuth()) — everyone else falls back
+  // to cash, which is exactly what M1's own buying_power formula reduces to
+  // when margin is off, so this is zero behavior change for most users.
+  const marginStateQ = useQuery({
+    queryKey: ["marginState"],
+    queryFn: getMarginState,
+    enabled: !!profile?.margin_enabled,
+    staleTime: 10_000,
+  });
+  const buyingPower = profile?.margin_enabled && marginStateQ.data ? marginStateQ.data.buyingPower : cash;
 
   const holdingsQ = useQuery({ queryKey: ["holdings"], queryFn: getHoldings });
   const watchlistQ = useQuery({ queryKey: ["watchlist"], queryFn: getWatchlist });
@@ -91,7 +104,7 @@ function Dashboard() {
       {/* Stat row — 2×2 on phones/tablets (Robinhood-style compact), 4-across on wide screens */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <Stat label="Portfolio value" value={pricesReady ? fmtUSD(total) : dash} sub={`${holdings.length} holding${holdings.length === 1 ? "" : "s"}`} />
-        <Stat label="Buying power" value={fmtUSD(cash)} sub="Virtual cash available" />
+        <Stat label="Buying power" value={fmtUSD(buyingPower)} sub={profile?.margin_enabled ? "Cash + available margin" : "Virtual cash available"} />
         <Stat label="Today's change" value={pricesReady ? `${dayAbsTotal >= 0 ? "+" : "−"}${fmtUSD(Math.abs(dayAbsTotal))}` : dash} sub={pricesReady ? fmtPct(dayPct) : ""} tone={dayAbsTotal >= 0 ? "gain" : "loss"} />
         <Stat label="Total return" value={pricesReady ? `${retAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(retAbs))}` : dash} sub={pricesReady ? fmtPct(retPct) : ""} tone={retAbs >= 0 ? "gain" : "loss"} />
       </div>

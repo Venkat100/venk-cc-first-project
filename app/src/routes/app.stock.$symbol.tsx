@@ -15,6 +15,7 @@ import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { getOptionPositions } from "@/lib/options/queries";
+import { getMarginState } from "@/lib/margin/api";
 import { executeTrade } from "@/lib/trading/execute";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct, fmtCompact, fmtQty, fmtRelativeTime } from "@/lib/mockData";
@@ -40,6 +41,15 @@ function StockDetail() {
   const holdingsQ = useQuery({ queryKey: ["holdings"], queryFn: getHoldings });
   const txQ = useQuery({ queryKey: ["transactions"], queryFn: getTransactions });
   const { profile } = useAuth();
+  // Margin-aware buying power — see app.dashboard.tsx for the same gated
+  // pattern: only fetches getMarginState() when the user has margin on.
+  const marginStateQ = useQuery({
+    queryKey: ["marginState"],
+    queryFn: getMarginState,
+    enabled: !!profile?.margin_enabled,
+    staleTime: 10_000,
+  });
+  const buyingPower = profile?.margin_enabled && marginStateQ.data ? marginStateQ.data.buyingPower : (profile?.cash_balance ?? 0);
 
   const quote = quoteQ.data;
   const position = (holdingsQ.data ?? []).find((h) => h.symbol === symbol);
@@ -215,7 +225,7 @@ function StockDetail() {
           </Card>
         </div>
 
-        <OrderPanel price={quote?.price ?? 0} symbol={symbol} buyingPower={profile?.cash_balance ?? 0} positionQty={position?.quantity ?? 0} ready={!!quote} />
+        <OrderPanel price={quote?.price ?? 0} symbol={symbol} buyingPower={buyingPower} positionQty={position?.quantity ?? 0} ready={!!quote} />
       </div>
 
       <OptionOrderPanel state={orderPanel} onClose={() => setOrderPanel({ open: false })} />
@@ -415,6 +425,7 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
         refreshProfile(),
         qc.invalidateQueries({ queryKey: ["holdings"] }),
         qc.invalidateQueries({ queryKey: ["transactions"] }),
+        qc.invalidateQueries({ queryKey: ["marginState"] }),
       ]);
       const verb = r.side === "buy" ? "Bought" : "Sold";
       toast.success(

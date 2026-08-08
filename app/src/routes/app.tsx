@@ -57,6 +57,7 @@ function AppLayout() {
             { to: "/app/simulator", label: "Simulator" },
             { to: "/app/agent", label: "AI Agent" },
             { to: "/app/portfolio", label: "Portfolio" },
+            { to: "/app/margin", label: "Margin" },
             { to: "/app/watchlist", label: "Watchlist" },
             { to: "/app/settings", label: "Settings" },
           ]}
