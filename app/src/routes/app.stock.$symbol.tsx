@@ -16,6 +16,7 @@ import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { getOptionPositions } from "@/lib/options/queries";
 import { getMarginState } from "@/lib/margin/api";
+import { computeBorrowSplit, borrowSplitSentence } from "@/lib/margin/borrowSplit";
 import { executeTrade } from "@/lib/trading/execute";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct, fmtCompact, fmtQty, fmtRelativeTime } from "@/lib/mockData";
@@ -49,7 +50,14 @@ function StockDetail() {
     enabled: !!profile?.margin_enabled,
     staleTime: 10_000,
   });
-  const buyingPower = profile?.margin_enabled && marginStateQ.data ? marginStateQ.data.buyingPower : (profile?.cash_balance ?? 0);
+  const marginEnabled = !!profile?.margin_enabled;
+  const buyingPower = marginEnabled && marginStateQ.data ? marginStateQ.data.buyingPower : (profile?.cash_balance ?? 0);
+  // For the buy ConfirmDialog's borrow-vs-cash disclosure (hardening-pass
+  // follow-up): the SAME getMarginState() call above already carries cash/
+  // loan/rate, so this is free — no extra fetch, no re-derived margin math.
+  const cashBalance = marginEnabled && marginStateQ.data ? marginStateQ.data.cashBalance : (profile?.cash_balance ?? 0);
+  const marginLoan = marginEnabled && marginStateQ.data ? marginStateQ.data.marginLoan : 0;
+  const interestRate = marginEnabled ? marginStateQ.data?.interestRate : undefined;
 
   const quote = quoteQ.data;
   const position = (holdingsQ.data ?? []).find((h) => h.symbol === symbol);
@@ -229,7 +237,17 @@ function StockDetail() {
           </Card>
         </div>
 
-        <OrderPanel price={quote?.price ?? 0} symbol={symbol} buyingPower={buyingPower} positionQty={position?.quantity ?? 0} ready={!!quote} />
+        <OrderPanel
+          price={quote?.price ?? 0}
+          symbol={symbol}
+          buyingPower={buyingPower}
+          positionQty={position?.quantity ?? 0}
+          ready={!!quote}
+          cashBalance={cashBalance}
+          marginLoan={marginLoan}
+          marginEnabled={marginEnabled}
+          interestRate={interestRate}
+        />
       </div>
 
       <OptionOrderPanel state={orderPanel} onClose={() => setOrderPanel({ open: false })} />
@@ -395,7 +413,27 @@ function validateDollarAmount(raw: string): { ok: true; amount: number } | { ok:
   return { ok: true, amount: n };
 }
 
-function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price: number; symbol: string; buyingPower: number; positionQty: number; ready: boolean }) {
+function OrderPanel({
+  price,
+  symbol,
+  buyingPower,
+  positionQty,
+  ready,
+  cashBalance,
+  marginLoan,
+  marginEnabled,
+  interestRate,
+}: {
+  price: number;
+  symbol: string;
+  buyingPower: number;
+  positionQty: number;
+  ready: boolean;
+  cashBalance: number;
+  marginLoan: number;
+  marginEnabled: boolean;
+  interestRate?: number;
+}) {
   const [side, setSide] = useState<"buy" | "sell">("buy");
   const [type, setType] = useState<"market" | "limit">("market");
   const [mode, setMode] = useState<"shares" | "dollars">("shares");
@@ -413,6 +451,10 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
   const hasPosition = positionQty > 0;
 
   const est = isSellAll ? positionQty * execPrice : mode === "shares" ? qtyNum * execPrice : amountNum;
+  // Borrow-vs-cash disclosure (hardening-pass follow-up) — buys only; sells
+  // never draw on the loan. Computed from cashBalance/marginLoan straight
+  // from getMarginState, never a re-derivation of buying power/equity.
+  const borrowSplit = computeBorrowSplit(est, cashBalance, marginEnabled, marginLoan);
 
   const qc = useQueryClient();
   const { refreshProfile } = useAuth();
@@ -492,9 +534,10 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
   const dialogConsequence = isSellAll
     ? `Close your entire ${symbol} position (${fmtQty(positionQty)} shares)? This sells everything for an estimated ${fmtUSD(est)}.`
     : side === "buy"
-      ? mode === "dollars"
-        ? `Buy ${fmtUSD(amountNum)} of ${symbol} (≈${fmtQty(estQtyForDollars, 4)} shares)? This uses ${fmtUSD(est)} of your ${fmtUSD(buyingPower)} buying power.`
-        : `Buy ${fmtQty(qtyNum)} ${symbol} for about ${fmtUSD(est)}? This uses ${fmtUSD(est)} of your ${fmtUSD(buyingPower)} buying power.`
+      ? (mode === "dollars"
+          ? `Buy ${fmtUSD(amountNum)} of ${symbol} (≈${fmtQty(estQtyForDollars, 4)} shares)? This uses ${fmtUSD(est)} of your ${fmtUSD(buyingPower)} buying power.`
+          : `Buy ${fmtQty(qtyNum)} ${symbol} for about ${fmtUSD(est)}? This uses ${fmtUSD(est)} of your ${fmtUSD(buyingPower)} buying power.`) +
+        borrowSplitSentence(borrowSplit, interestRate)
       : mode === "dollars"
         ? `Sell about ${fmtUSD(amountNum)} of ${symbol} (≈${fmtQty(estQtyForDollars, 4)} shares)?`
         : `Sell ${fmtQty(qtyNum)} ${symbol} for an estimated ${fmtUSD(est)}?`;
@@ -606,6 +649,22 @@ function OrderPanel({ price, symbol, buyingPower, positionQty, ready }: { price:
                 <span>Buying power after</span>
                 <span className="tabular">{fmtUSD(buyingPower - est)}</span>
               </div>
+            )}
+            {side === "buy" && borrowSplit.willBorrow && (
+              <>
+                <div className="mt-1.5 flex justify-between border-t border-border pt-1.5 text-xs text-muted-foreground">
+                  <span>From cash</span>
+                  <span className="tabular">{fmtUSD(borrowSplit.cashPortion)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-[color:var(--color-loss)]">
+                  <span>Borrowed on margin</span>
+                  <span className="tabular">{fmtUSD(borrowSplit.borrowedPortion)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Margin loan</span>
+                  <span className="tabular">{fmtUSD(borrowSplit.loanBefore)} → {fmtUSD(borrowSplit.loanAfter)}</span>
+                </div>
+              </>
             )}
           </div>
         }

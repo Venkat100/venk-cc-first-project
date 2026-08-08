@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { executeOptionTrade } from "@/lib/options/execute";
 import { getMarginState } from "@/lib/margin/api";
+import { computeBorrowSplit, borrowSplitSentence } from "@/lib/margin/borrowSplit";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD } from "@/lib/mockData";
 import type { OptionContract, OptionType, EnrichedOptionPosition } from "@/lib/options/queries";
@@ -38,7 +39,14 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
     enabled: !!profile?.margin_enabled,
     staleTime: 10_000,
   });
-  const buyingPower = profile?.margin_enabled && marginStateQ.data ? marginStateQ.data.buyingPower : (profile?.cash_balance ?? 0);
+  const marginEnabled = !!profile?.margin_enabled;
+  const buyingPower = marginEnabled && marginStateQ.data ? marginStateQ.data.buyingPower : (profile?.cash_balance ?? 0);
+  // For the buy-to-open ConfirmDialog's borrow-vs-cash disclosure
+  // (hardening-pass follow-up) — the same getMarginState() call above
+  // already carries cash/loan/rate, so this is free.
+  const cashBalance = marginEnabled && marginStateQ.data ? marginStateQ.data.cashBalance : (profile?.cash_balance ?? 0);
+  const marginLoan = marginEnabled && marginStateQ.data ? marginStateQ.data.marginLoan : 0;
+  const interestRate = marginEnabled ? marginStateQ.data?.interestRate : undefined;
   const qc = useQueryClient();
 
   const mode = state.open ? state.mode : "buy";
@@ -58,6 +66,8 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
 
   const cost = premium * 100 * contracts;
   const overBudget = mode === "buy" && cost > buyingPower;
+  // Buy-to-open only — sell-to-close never draws on the loan.
+  const borrowSplit = computeBorrowSplit(cost, cashBalance, marginEnabled, marginLoan);
 
   const trade = useMutation({
     mutationFn: () => executeOptionTrade({ contractId, side: mode === "buy" ? "buy_to_open" : "sell_to_close", contracts }),
@@ -178,7 +188,8 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
         title={mode === "buy" ? "Confirm buy to open" : "Confirm sell to close"}
         consequence={
           mode === "buy"
-            ? `Buy ${contracts} contract${contracts === 1 ? "" : "s"} of ${symbol} $${strike} ${optType === "call" ? "Call" : "Put"} · ${dateLabel} for about ${fmtUSD(cost)}? This uses ${fmtUSD(cost)} of your ${fmtUSD(buyingPower)} buying power.`
+            ? `Buy ${contracts} contract${contracts === 1 ? "" : "s"} of ${symbol} $${strike} ${optType === "call" ? "Call" : "Put"} · ${dateLabel} for about ${fmtUSD(cost)}? This uses ${fmtUSD(cost)} of your ${fmtUSD(buyingPower)} buying power.` +
+              borrowSplitSentence(borrowSplit, interestRate)
             : `Sell ${contracts} contract${contracts === 1 ? "" : "s"} of ${symbol} $${strike} ${optType === "call" ? "Call" : "Put"} · ${dateLabel} for an estimated ${fmtUSD(cost)}?`
         }
         detail={
@@ -192,6 +203,22 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
                 <span>Buying power after</span>
                 <span className="tabular">{fmtUSD(buyingPower - cost)}</span>
               </div>
+            )}
+            {mode === "buy" && borrowSplit.willBorrow && (
+              <>
+                <div className="mt-1.5 flex justify-between border-t border-border pt-1.5 text-xs text-muted-foreground">
+                  <span>From cash</span>
+                  <span className="tabular">{fmtUSD(borrowSplit.cashPortion)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-[color:var(--color-loss)]">
+                  <span>Borrowed on margin</span>
+                  <span className="tabular">{fmtUSD(borrowSplit.borrowedPortion)}</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Margin loan</span>
+                  <span className="tabular">{fmtUSD(borrowSplit.loanBefore)} → {fmtUSD(borrowSplit.loanAfter)}</span>
+                </div>
+              </>
             )}
           </div>
         }
