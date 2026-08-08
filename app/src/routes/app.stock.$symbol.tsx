@@ -61,14 +61,18 @@ function StockDetail() {
   const symbolOptionPositions = useMemo(() => (optionPositionsQ.data ?? []).filter((p) => p.symbol === symbol), [optionPositionsQ.data, symbol]);
   const [orderPanel, setOrderPanel] = useState<OrderPanelState>({ open: false });
 
-  // Total portfolio value — same formula as the Dashboard (cash + Σ qty×price)
-  // — needed for "% of portfolio" on the position card. Reuses the quote
-  // already loaded for THIS symbol; only fetches the OTHER held symbols.
+  // Total portfolio value — same EQUITY formula as the Dashboard (cash + Σ
+  // qty×price + options value − margin loan; hardening-pass fix: this used
+  // to be cash + stock holdings only, silently excluding options value and
+  // never netting a margin loan, which understated "% of portfolio" for
+  // anyone using either feature). Reuses the quote already loaded for THIS
+  // symbol; only fetches the OTHER held symbols.
   const otherSymbols = useMemo(() => (holdingsQ.data ?? []).map((h) => h.symbol).filter((s) => s !== symbol), [holdingsQ.data, symbol]);
   const otherQuotesQ = useQuotes(otherSymbols);
   const portfolioPricesReady = otherSymbols.length === 0 || otherQuotesQ.isSuccess;
   const holdingsValue = (holdingsQ.data ?? []).reduce((sum, h) => sum + (h.symbol === symbol ? (quote?.price ?? 0) : quoteOf(otherQuotesQ.data, h.symbol).price) * h.quantity, 0);
-  const totalPortfolio = (profile?.cash_balance ?? 0) + holdingsValue;
+  const allOptionsValue = (optionPositionsQ.data ?? []).reduce((sum, p) => sum + p.marketValue, 0);
+  const totalPortfolio = (profile?.cash_balance ?? 0) + holdingsValue + allOptionsValue - (profile?.margin_loan ?? 0);
 
   // Invalid ticker or provider failure → friendly card, never a crash.
   if (quoteQ.isError) {

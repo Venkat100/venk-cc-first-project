@@ -81,12 +81,18 @@ function Dashboard() {
     optionsDayAbs += p.dayChange;
   }
   // ── Portfolio math (single source of truth) ──────────────────────────
-  // total_value      = cash + Σ(qty × live price) + Σ(option market value)
-  // Today's change $ = Σ(qty × dayChange) + Σ(option dayChange)     (vs prior close; cash is flat intraday)
+  // total_value      = cash + Σ(qty × live price) + Σ(option market value) − margin loan
+  //                    (hardening-pass fix: this is EQUITY, not gross assets —
+  //                    a margin loan is a liability against this account and
+  //                    must be netted out, exactly like Margin page equity /
+  //                    lib/margin/functions.ts's getMarginStateFn. Without
+  //                    this, a margin account would show inflated "portfolio
+  //                    value"/"total return" by exactly its borrowed amount.)
+  // Today's change $ = Σ(qty × dayChange) + Σ(option dayChange)     (vs prior close; cash is flat intraday — loan is also flat intraday, so it cancels out of the delta)
   // Today's change % = todayChange$ / (total_value − todayChange$)   (vs prior-close value)
   // Total return $   = total_value − $100,000 starting capital
   // Total return %   = (total_value − 100,000) / 100,000 × 100
-  const total = cash + holdingsValue + optionsValue;
+  const total = cash + holdingsValue + optionsValue - (profile?.margin_loan ?? 0);
   const dayAbsTotal = dayAbs + optionsDayAbs;
   const priorCloseValue = total - dayAbsTotal;
   const dayPct = priorCloseValue > 0 ? (dayAbsTotal / priorCloseValue) * 100 : 0;

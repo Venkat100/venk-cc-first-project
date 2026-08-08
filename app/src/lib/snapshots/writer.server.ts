@@ -41,7 +41,7 @@ export async function runSnapshots(opts: { onlyUserId?: string } = {}): Promise<
   // don't fan out a price fetch across the whole user base.
   const one = opts.onlyUserId;
 
-  const profilesQ = admin.from("profiles").select("id, cash_balance, created_at");
+  const profilesQ = admin.from("profiles").select("id, cash_balance, margin_loan, created_at");
   const { data: profiles, error: pErr } = await (one ? profilesQ.eq("id", one) : profilesQ);
   if (pErr) throw new Error("read profiles: " + pErr.message);
 
@@ -101,8 +101,14 @@ export async function runSnapshots(opts: { onlyUserId?: string } = {}): Promise<
     for (const h of byUser.get(p.id) ?? []) holdingsValue += (priceMap.get(h.symbol) ?? 0) * h.quantity;
     // total_value includes options' live market value; holdings_value stays
     // equities-only (its established meaning elsewhere) — see file header.
+    // hardening-pass fix: total_value is EQUITY, so an outstanding margin
+    // loan (a liability against this account) must be netted out here too,
+    // matching the Dashboard fix and Margin page's own equity formula —
+    // otherwise the value chart/snapshot history overstates a margin
+    // account's net worth by exactly its borrowed amount.
     const optionsValue = optionsValueByUser.get(p.id) ?? 0;
-    const total = cash + holdingsValue + optionsValue;
+    const marginLoan = Number(p.margin_loan ?? 0);
+    const total = cash + holdingsValue + optionsValue - marginLoan;
 
     todayRows.push({ user_id: p.id, total_value: round2(total), cash: round2(cash), holdings_value: round2(holdingsValue), captured_at: today });
 
