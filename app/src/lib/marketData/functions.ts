@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import { providerCandles } from "./provider.server";
 import { providerQuotes, providerSearch, fhCompanyNews } from "./finnhub.server";
-import { cached, cachePeek, cachePut, TTL } from "./cache.server";
+import { durableCached, durablePeekMany, durablePutMany, TTL } from "./cache.server";
 import type { Candle, Quote, SymbolMatch, NewsItem } from "./types";
 
 const RANGES = ["1D", "1W", "1M", "3M", "1Y", "ALL"] as const;
@@ -19,21 +19,23 @@ export const getQuotesFn = createServerFn({ method: "POST" })
   .inputValidator(z.object({ symbols: z.array(z.string().min(1)).min(1).max(50) }))
   .handler(async ({ data }): Promise<Quote[]> => {
     const wanted = data.symbols.map((s) => s.toUpperCase());
+    const uniqueWanted = [...new Set(wanted)];
 
-    const result = new Map<string, Quote>();
-    const missing: string[] = [];
-    for (const sym of wanted) {
-      const hit = cachePeek<Quote>(`quote:${sym}`);
-      if (hit) result.set(sym, hit);
-      else if (!missing.includes(sym)) missing.push(sym);
-    }
+    // L1+L2 peek in one batch (not one L2 round trip per symbol) — the
+    // capacity win: a cold invocation still finds symbols another
+    // invocation warmed moments ago, via Postgres instead of the provider.
+    const result = await durablePeekMany<Quote>("quote", uniqueWanted, "", TTL.quote);
+    const missing = uniqueWanted.filter((sym) => !result.has(sym));
 
     if (missing.length > 0) {
       const fetched = await providerQuotes(missing);
-      for (const q of fetched) {
-        cachePut(`quote:${q.symbol}`, q, TTL.quote);
-        result.set(q.symbol, q);
-      }
+      await durablePutMany(
+        "quote",
+        "",
+        fetched.map((q) => ({ symbol: q.symbol, value: q })),
+        TTL.quote,
+      );
+      for (const q of fetched) result.set(q.symbol, q);
     }
 
     // Preserve request order; guarantee a (zeroed) entry for every symbol.
@@ -46,14 +48,14 @@ export const getCandlesFn = createServerFn({ method: "POST" })
   .inputValidator(z.object({ symbol: z.string().min(1), range: z.enum(RANGES) }))
   .handler(async ({ data }): Promise<Candle[]> => {
     const symbol = data.symbol.toUpperCase();
-    return cached(`candles:${symbol}:${data.range}`, TTL.candles, () => providerCandles(symbol, data.range));
+    return durableCached("candles", symbol, data.range, TTL.candles, () => providerCandles(symbol, data.range));
   });
 
 export const searchSymbolsFn = createServerFn({ method: "POST" })
   .inputValidator(z.object({ query: z.string().min(1) }))
   .handler(async ({ data }): Promise<SymbolMatch[]> => {
     const q = data.query.trim().toLowerCase();
-    return cached(`search:${q}`, TTL.search, () => providerSearch(q));
+    return durableCached("search", q, "", TTL.search, () => providerSearch(q));
   });
 
 export type CompanyNewsResponse = { ok: true; items: NewsItem[] } | { ok: false; error: string };

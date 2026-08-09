@@ -10,17 +10,19 @@
 // days, which it slices from the same cached series.
 
 import { providerSeries } from "./provider.server";
-import { cached } from "./cache.server";
+import { durableCached } from "./cache.server";
 import type { Candle } from "./types";
 
 const HISTORY_YEARS = 5;
 const TTL = 24 * 60 * 60_000; // 1 day — matches the "≤1 fetch/symbol/day" budget
 
-/** ~5Y of ascending daily candles for `symbol`, cached per symbol per day. */
+/** ~5Y of ascending daily candles for `symbol`, durably cached per symbol
+ *  per day — the heaviest single payload in the market-data layer, and now
+ *  shared across every serverless invocation instead of refetched by each. */
 export async function getDailyHistory(symbol: string): Promise<Candle[]> {
   const sym = symbol.toUpperCase();
   const day = new Date().toISOString().slice(0, 10);
-  return cached(`daily5y:${sym}:${day}`, TTL, async () => {
+  return durableCached("daily5y", sym, day, TTL, async () => {
     const start = new Date();
     start.setFullYear(start.getFullYear() - HISTORY_YEARS);
     return providerSeries(sym, start.toISOString().slice(0, 10));

@@ -12,7 +12,7 @@
 
 import { requireServerEnv } from "./env.server";
 import { ProviderError, num } from "./provider.server";
-import { cachePeek, cachePut } from "./cache.server";
+import { durableCached } from "./cache.server";
 import { RateLimiter, withRetry, withTimeout } from "./ratelimit.server";
 import type { Quote, SymbolMatch, NewsItem } from "./types";
 
@@ -76,48 +76,44 @@ async function fhGet(path: string): Promise<any> {
 type Profile = { name?: string; sector?: string; marketCap?: number; logo?: string; exchange?: string; weburl?: string; country?: string; ipo?: string };
 
 async function fhProfile(symbol: string): Promise<Profile> {
-  const key = `fh:profile:${symbol}`;
-  const hit = cachePeek<Profile>(key);
-  if (hit) return hit;
-  let p: Profile = {};
-  try {
-    const raw = await fhGet(`/stock/profile2?symbol=${encodeURIComponent(symbol)}`);
-    p = {
-      name: raw?.name || undefined,
-      sector: raw?.finnhubIndustry || undefined,
-      // Finnhub marketCapitalization is in millions USD.
-      marketCap: raw?.marketCapitalization ? num(raw.marketCapitalization) * 1e6 : undefined,
-      logo: raw?.logo || undefined,
-      exchange: raw?.exchange || undefined,
-      // Same response, no extra call — empty for ETFs like everything above.
-      weburl: raw?.weburl || undefined,
-      country: raw?.country || undefined,
-      ipo: raw?.ipo || undefined,
-    };
-  } catch {
-    // Profile is best-effort enrichment; never fail a quote because of it.
-  }
-  cachePut(key, p, PROFILE_TTL);
-  return p;
+  return durableCached("profile", symbol, "", PROFILE_TTL, async () => {
+    let p: Profile = {};
+    try {
+      const raw = await fhGet(`/stock/profile2?symbol=${encodeURIComponent(symbol)}`);
+      p = {
+        name: raw?.name || undefined,
+        sector: raw?.finnhubIndustry || undefined,
+        // Finnhub marketCapitalization is in millions USD.
+        marketCap: raw?.marketCapitalization ? num(raw.marketCapitalization) * 1e6 : undefined,
+        logo: raw?.logo || undefined,
+        exchange: raw?.exchange || undefined,
+        // Same response, no extra call — empty for ETFs like everything above.
+        weburl: raw?.weburl || undefined,
+        country: raw?.country || undefined,
+        ipo: raw?.ipo || undefined,
+      };
+    } catch {
+      // Profile is best-effort enrichment; never fail a quote because of it.
+    }
+    return p;
+  });
 }
 
 async function fh52Week(symbol: string): Promise<{ high?: number; low?: number }> {
-  const key = `fh:metric:${symbol}`;
-  const hit = cachePeek<{ high?: number; low?: number }>(key);
-  if (hit) return hit;
-  let out: { high?: number; low?: number } = {};
-  try {
-    const raw = await fhGet(`/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all`);
-    const m = raw?.metric ?? {};
-    out = {
-      high: m["52WeekHigh"] != null ? num(m["52WeekHigh"]) : undefined,
-      low: m["52WeekLow"] != null ? num(m["52WeekLow"]) : undefined,
-    };
-  } catch {
-    // best-effort
-  }
-  cachePut(key, out, METRIC_TTL);
-  return out;
+  return durableCached("metric52w", symbol, "", METRIC_TTL, async () => {
+    let out: { high?: number; low?: number } = {};
+    try {
+      const raw = await fhGet(`/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all`);
+      const m = raw?.metric ?? {};
+      out = {
+        high: m["52WeekHigh"] != null ? num(m["52WeekHigh"]) : undefined,
+        low: m["52WeekLow"] != null ? num(m["52WeekLow"]) : undefined,
+      };
+    } catch {
+      // best-effort
+    }
+    return out;
+  });
 }
 
 // Finnhub's /stock/profile2 is empty for ETFs (no name). Fall back to the
@@ -125,20 +121,21 @@ async function fh52Week(symbol: string): Promise<{ high?: number; low?: number }
 // (e.g. "Vanguard S&P 500 ETF" instead of "VOO"). Cached so we don't re-search.
 async function resolveSymbolName(symbol: string): Promise<string | undefined> {
   const sym = symbol.toUpperCase();
-  const key = `fh:name:${sym}`;
-  const hit = cachePeek<string>(key);
-  if (hit !== undefined) return hit || undefined; // "" cached = searched, no name
-  let name: string | undefined;
-  try {
-    const json = await fhGet(`/search?q=${encodeURIComponent(sym)}`);
-    const result: any[] = Array.isArray(json?.result) ? json.result : [];
-    const exact = result.find((d) => String(d.symbol).toUpperCase() === sym);
-    name = (exact?.description as string) || undefined;
-  } catch {
-    // best-effort; fall through to symbol
-  }
-  cachePut(key, name ?? "", PROFILE_TTL);
-  return name;
+  // "" cached = searched, no name — a valid, distinct-from-absent value that
+  // durableCached round-trips fine (both tiers key on presence, not truthiness).
+  const resolved = await durableCached("name", sym, "", PROFILE_TTL, async () => {
+    let name: string | undefined;
+    try {
+      const json = await fhGet(`/search?q=${encodeURIComponent(sym)}`);
+      const result: any[] = Array.isArray(json?.result) ? json.result : [];
+      const exact = result.find((d) => String(d.symbol).toUpperCase() === sym);
+      name = (exact?.description as string) || undefined;
+    } catch {
+      // best-effort; fall through to symbol
+    }
+    return name ?? "";
+  });
+  return resolved || undefined;
 }
 
 async function fhQuote(symbol: string): Promise<Quote> {
@@ -206,29 +203,27 @@ const METRICS_TTL = 6 * 60 * 60_000; // 6h
 /** Basic financials / momentum metrics for a symbol (Finnhub /stock/metric). */
 export async function fhMetrics(symbol: string): Promise<SymbolMetrics> {
   const sym = symbol.toUpperCase();
-  const key = `fh:metricsfull:${sym}`;
-  const hit = cachePeek<SymbolMetrics>(key);
-  if (hit) return hit;
-  let out: SymbolMetrics = { symbol: sym };
-  try {
-    const raw = await fhGet(`/stock/metric?symbol=${encodeURIComponent(sym)}&metric=all`);
-    const m = raw?.metric ?? {};
-    const g = (k: string) => (m[k] != null ? num(m[k]) : undefined);
-    out = {
-      symbol: sym,
-      week52High: g("52WeekHigh"),
-      week52Low: g("52WeekLow"),
-      beta: g("beta"),
-      return4w: g("4WeekPriceReturnDaily") ?? g("monthToDatePriceReturnDaily"),
-      return13w: g("13WeekPriceReturnDaily"),
-      return26w: g("26WeekPriceReturnDaily"),
-      return52w: g("52WeekPriceReturnDaily"),
-    };
-  } catch {
-    // best-effort — quant degrades gracefully if metrics are missing
-  }
-  cachePut(key, out, METRICS_TTL);
-  return out;
+  return durableCached("metricsfull", sym, "", METRICS_TTL, async () => {
+    let out: SymbolMetrics = { symbol: sym };
+    try {
+      const raw = await fhGet(`/stock/metric?symbol=${encodeURIComponent(sym)}&metric=all`);
+      const m = raw?.metric ?? {};
+      const g = (k: string) => (m[k] != null ? num(m[k]) : undefined);
+      out = {
+        symbol: sym,
+        week52High: g("52WeekHigh"),
+        week52Low: g("52WeekLow"),
+        beta: g("beta"),
+        return4w: g("4WeekPriceReturnDaily") ?? g("monthToDatePriceReturnDaily"),
+        return13w: g("13WeekPriceReturnDaily"),
+        return26w: g("26WeekPriceReturnDaily"),
+        return52w: g("52WeekPriceReturnDaily"),
+      };
+    } catch {
+      // best-effort — quant degrades gracefully if metrics are missing
+    }
+    return out;
+  });
 }
 
 /** Recent company news (Finnhub /company-news), last `days` days, top `limit`.
@@ -238,26 +233,28 @@ export async function fhMetrics(symbol: string): Promise<SymbolMetrics> {
  *  already wrap this in `.catch(() => [])`. */
 export async function fhCompanyNews(symbol: string, days = 7, limit = 5): Promise<NewsItem[]> {
   const sym = symbol.toUpperCase();
-  const key = `fh:news:${sym}:${limit}`;
-  const hit = cachePeek<NewsItem[]>(key);
-  if (hit) return hit;
-  const to = new Date();
-  const from = new Date(to.getTime() - days * 86_400_000);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  const json = await fhGet(`/company-news?symbol=${encodeURIComponent(sym)}&from=${fmt(from)}&to=${fmt(to)}`);
-  const arr: any[] = Array.isArray(json) ? json : [];
-  const out: NewsItem[] = arr
-    .filter((n) => n?.headline)
-    .slice(0, limit)
-    .map((n) => ({
-      headline: String(n.headline),
-      summary: n.summary ? String(n.summary).slice(0, 280) : undefined,
-      datetime: n.datetime,
-      source: n.source,
-      url: n.url ? String(n.url) : undefined,
-    }));
-  cachePut(key, out, 60 * 60_000); // 1h
-  return out;
+  // Note: `fn` here can THROW (unlike the best-effort helpers above) — that's
+  // deliberate (see the file-header note on this function) and durableCached
+  // preserves it exactly: an error propagates without writing L1 or L2, so a
+  // rate-limited/failed fetch never gets cached as "no news".
+  return durableCached("news", sym, String(limit), 60 * 60_000, async () => {
+    const to = new Date();
+    const from = new Date(to.getTime() - days * 86_400_000);
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const json = await fhGet(`/company-news?symbol=${encodeURIComponent(sym)}&from=${fmt(from)}&to=${fmt(to)}`);
+    const arr: any[] = Array.isArray(json) ? json : [];
+    const out: NewsItem[] = arr
+      .filter((n) => n?.headline)
+      .slice(0, limit)
+      .map((n) => ({
+        headline: String(n.headline),
+        summary: n.summary ? String(n.summary).slice(0, 280) : undefined,
+        datetime: n.datetime,
+        source: n.source,
+        url: n.url ? String(n.url) : undefined,
+      }));
+    return out;
+  });
 }
 
 /** Symbol search (Finnhub /search). */

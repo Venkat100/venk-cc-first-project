@@ -19,6 +19,8 @@
 //      on an actual call) — must run before the snapshot write so any
 //      liquidation's cash/position changes land in the SAME day's snapshot.
 //   4. Portfolio snapshot write.
+//   5. price_cache prune (housekeeping, unrelated to the money steps above —
+//      appended last deliberately; order relative to 1-4 doesn't matter).
 // Each step is isolated in its own try/catch — a failure in any one must
 // never block the ones after it (most importantly, snapshots always run).
 
@@ -26,6 +28,7 @@ import { serverEnv } from "@/lib/marketData/env.server";
 import { runExpiryProcessing } from "@/lib/options/expiry.server";
 import { runInterestAccrual } from "@/lib/margin/interest.server";
 import { runMarginMonitor } from "@/lib/margin/monitor.server";
+import { runPriceCachePrune } from "@/lib/marketData/pruneCache.server";
 import { runSnapshots } from "./writer.server";
 
 function json(body: unknown, status: number): Response {
@@ -67,10 +70,22 @@ export async function handleSnapshotRequest(request: Request): Promise<Response>
     margin = { error: e instanceof Error ? e.message : "Margin monitor failed." };
   }
 
+  let snapshotResult: { ok: true; summary: unknown } | { ok: false; error: string };
   try {
-    const summary = await runSnapshots();
-    return json({ ok: true, summary, expiry, interest, margin }, 200);
+    snapshotResult = { ok: true, summary: await runSnapshots() };
   } catch (e) {
-    return json({ ok: false, error: e instanceof Error ? e.message : "Snapshot run failed.", expiry, interest, margin }, 500);
+    snapshotResult = { ok: false, error: e instanceof Error ? e.message : "Snapshot run failed." };
   }
+
+  let priceCachePrune;
+  try {
+    priceCachePrune = await runPriceCachePrune();
+  } catch (e) {
+    priceCachePrune = { error: e instanceof Error ? e.message : "price_cache prune failed." };
+  }
+
+  if (snapshotResult.ok) {
+    return json({ ok: true, summary: snapshotResult.summary, expiry, interest, margin, priceCachePrune }, 200);
+  }
+  return json({ ok: false, error: snapshotResult.error, expiry, interest, margin, priceCachePrune }, 500);
 }

@@ -13,7 +13,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { providerSeries } from "@/lib/marketData/provider.server";
-import { cached } from "@/lib/marketData/cache.server";
+import { durableCached } from "@/lib/marketData/cache.server";
 import { getStock } from "@/lib/mockData";
 
 const SPY = "SPY";
@@ -44,8 +44,13 @@ export type SimResult = {
 
 export type SimResponse = { ok: true; result: SimResult } | { ok: false; error: string };
 
+// Durable: the simulator is PUBLIC (no auth) and explicitly the intended
+// viral/high-traffic surface (PLAN.md §3 — "never paywall it"), reading raw
+// Twelve Data series (the sharper-constrained provider, ~8 credits/min
+// shared across ALL users) — squarely the capacity problem this cache exists
+// to solve, same as the dashboard/chart's own daily-history helper.
 function seriesCached(symbol: string, startDate: string) {
-  return cached(`series:${symbol.toUpperCase()}:${startDate}`, SERIES_TTL, () => providerSeries(symbol, startDate));
+  return durableCached("series", symbol.toUpperCase(), startDate, SERIES_TTL, () => providerSeries(symbol, startDate));
 }
 
 function daysBetween(a: string, b: string): number {
