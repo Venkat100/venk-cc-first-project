@@ -15,13 +15,18 @@ type ChartRange = "1W" | "1M" | "3M" | "1Y" | "ALL";
 const RANGES: ChartRange[] = ["1W", "1M", "3M", "1Y", "ALL"];
 const RANGE_DAYS: Record<ChartRange, number> = { "1W": 7, "1M": 30, "3M": 90, "1Y": 365, ALL: Infinity };
 
-const STARTING_CAPITAL = 100000;
+// Fallback only — callers for the main account now always pass an explicit
+// `baseline` (the user's real profile.starting_capital, since that varies
+// per account — see 0016_starting_capital.sql); the agent passes its own
+// allocated amount. This constant only matters if a caller forgets to.
+const STARTING_CAPITAL = 25000;
 
 /**
  * Real portfolio-value chart from daily snapshots, with a live "now" point so
  * the end of the chart matches the headline value. Builds up day by day.
- * `baseline` is the dashed reference line (default $100k for the main account;
- * the agent passes its allocated amount).
+ * `baseline` is the dashed reference line — callers MUST pass the account's
+ * actual starting point explicitly (main account: profile.starting_capital;
+ * agent: its allocated amount) rather than relying on the module default.
  */
 export function PortfolioValueChart({
   snapshots,

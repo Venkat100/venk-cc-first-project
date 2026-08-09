@@ -13,7 +13,7 @@ It is an **educational simulation** — no real money, no brokerage connection, 
 ## Features
 
 **Trading & portfolio**
-- **Virtual portfolio** — every user starts with $100,000 in virtual cash and trades real tickers at live prices.
+- **Virtual portfolio** — every new user starts with $25,000 in virtual cash and trades real tickers at live prices (accounts created before 2026-08-09 keep their original $100,000).
 - **Real-time trading** — buy/sell validated server-side against buying power and holdings; weighted-average cost basis; immutable transaction ledger.
 - **Live tracking** — portfolio value, day change, and total return against near-real-time quotes, with a value-history chart.
 - **Markets & watchlists** — search and follow any stock or ETF with live quotes and sparkline previews.

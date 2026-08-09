@@ -29,8 +29,11 @@ supabase db push
 
 ## What `0001_init_profiles.sql` does
 
-- Creates `public.profiles` (id → auth.users, display_name, `cash_balance` default **100000**, created_at).
+- Creates `public.profiles` (id → auth.users, display_name, `cash_balance`, created_at).
 - Enables **Row-Level Security** with owner-only `select` and `update` policies.
 - Adds `handle_new_user()` + an `on_auth_user_created` trigger so every new
-  signup automatically gets a profile row seeded with **$100,000** — no client
-  involvement, so the starting balance can't be tampered with.
+  signup automatically gets a profile row seeded with virtual cash — no
+  client involvement, so the starting balance can't be tampered with.
+  **Current default: $25,000** (`0016_starting_capital.sql`; was $100,000
+  at launch — see that migration's header for the reasoning and how
+  `profiles.starting_capital` keeps older accounts' return math correct).

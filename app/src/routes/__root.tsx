@@ -69,7 +69,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "PaperTrader — Practice investing risk-free" },
-      { name: "description", content: "Simulate portfolios, test what-if scenarios, and learn investing with $100,000 in virtual cash. No real money, no risk." },
+      { name: "description", content: "Simulate portfolios, test what-if scenarios, and learn investing with $25,000 in virtual cash. No real money, no risk." },
       { name: "author", content: "PaperTrader" },
       { property: "og:title", content: "PaperTrader — Practice investing risk-free" },
       { property: "og:description", content: "Trade with virtual money. Run what-if simulations against real market history." },

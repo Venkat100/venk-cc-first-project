@@ -3,7 +3,7 @@
 You are the implementation agent for **PaperTrader**, a full-stack paper-trading web app. **Read `HANDOFF.md` FIRST** (it's the living memory of the project — current state, decisions, where we left off), then `README.md`, `ARCHITECTURE.md`, and `ROADMAP.md` before starting work. This file is the quick-reference.
 
 ## What this project is
-A paper-trading platform: users trade real tickers at live prices with $100,000 of virtual money, track a live portfolio, and run "what-if I had invested back then" simulations. No real money, no real brokerage — it's a simulation/education tool.
+A paper-trading platform: users trade real tickers at live prices with virtual money (new accounts start with $25,000; accounts created before 2026-08-09 keep their original $100,000 — see `profiles.starting_capital`), track a live portfolio, and run "what-if I had invested back then" simulations. No real money, no real brokerage — it's a simulation/education tool.
 
 ## Stack
 - **Frontend:** React + **TanStack Start** + TypeScript, Tailwind CSS, shadcn/ui, Recharts. (Generated in Lovable; lives in `app/`.) NOTE: it's TanStack Start (full-stack React w/ a server layer), NOT a plain Vite SPA. It has its own server functions, which may host backend logic instead of/alongside Supabase Edge Functions — TBD at backend phase.
@@ -18,7 +18,7 @@ A paper-trading platform: users trade real tickers at live prices with $100,000 
 5. **It's a simulation.** No code that connects to a real brokerage or moves real money.
 
 ## Data model (see ARCHITECTURE.md §3 for full detail)
-`profiles` (cash_balance starts 100000), `holdings` (qty + avg_cost per symbol), `transactions` (immutable ledger), `watchlist`, `portfolio_snapshots` (daily value history), plus `instruments` and `price_cache` caches.
+`profiles` (cash_balance, starting_capital — new-signup default 25000), `holdings` (qty + avg_cost per symbol), `transactions` (immutable ledger), `watchlist`, `portfolio_snapshots` (daily value history), plus `instruments` and `price_cache` caches.
 
 ## Trading logic
 - **Buy:** reject if cost > cash; deduct cash; upsert holding with weighted-average avg_cost; log transaction.

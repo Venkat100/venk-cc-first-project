@@ -90,14 +90,19 @@ function Dashboard() {
   //                    value"/"total return" by exactly its borrowed amount.)
   // Today's change $ = Σ(qty × dayChange) + Σ(option dayChange)     (vs prior close; cash is flat intraday — loan is also flat intraday, so it cancels out of the delta)
   // Today's change % = todayChange$ / (total_value − todayChange$)   (vs prior-close value)
-  // Total return $   = total_value − $100,000 starting capital
-  // Total return %   = (total_value − 100,000) / 100,000 × 100
+  // Total return $   = total_value − this account's ACTUAL starting capital
+  // Total return %   = total return $ / starting capital × 100
+  // starting capital is per-user (profiles.starting_capital, 0016) — NOT a
+  // shared constant. $100,000 for every pre-2026-08-09 account, $25,000 for
+  // every account created or reset since; mixing them up would silently
+  // misstate returns for whichever cohort doesn't match the constant.
+  const startingCapital = profile?.starting_capital ?? STARTING_CASH;
   const total = cash + holdingsValue + optionsValue - (profile?.margin_loan ?? 0);
   const dayAbsTotal = dayAbs + optionsDayAbs;
   const priorCloseValue = total - dayAbsTotal;
   const dayPct = priorCloseValue > 0 ? (dayAbsTotal / priorCloseValue) * 100 : 0;
-  const retAbs = total - STARTING_CASH;
-  const retPct = (retAbs / STARTING_CASH) * 100;
+  const retAbs = total - startingCapital;
+  const retPct = (retAbs / startingCapital) * 100;
   const dash = "—";
 
   return (
@@ -139,6 +144,7 @@ function Dashboard() {
                 loading={snapshotsQ.isLoading}
                 error={snapshotsQ.isError ? (snapshotsQ.error as Error)?.message : undefined}
                 height={300}
+                baseline={startingCapital}
               />
             </CardContent>
           </Card>

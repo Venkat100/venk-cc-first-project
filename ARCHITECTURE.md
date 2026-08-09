@@ -50,7 +50,8 @@ All tables protected by Row-Level Security so a user can only ever see their own
 **`profiles`** — one row per user (extends Supabase `auth.users`)
 - `id` (uuid, FK → auth.users)
 - `display_name`, `created_at`
-- `cash_balance` (numeric) — virtual buying power, starts at 100000
+- `cash_balance` (numeric) — virtual buying power
+- `starting_capital` (numeric) — this account's true starting point: 25000 for accounts created/reset since 2026-08-09, 100000 for accounts before that (never a shared constant — see `0016_starting_capital.sql`)
 
 **`holdings`** — current positions (one row per user per symbol)
 - `id`, `user_id`

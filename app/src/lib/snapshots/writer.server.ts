@@ -8,8 +8,10 @@
 // portfolio_snapshots row (re-running the same day overwrites — never
 // duplicates, thanks to unique(user_id,captured_at)).
 //
-// Also ensures a chart ORIGIN: a $100k snapshot on each user's account-creation
-// day (insert-if-absent), so the value chart has a sensible starting point.
+// Also ensures a chart ORIGIN: a snapshot at this account's OWN
+// starting_capital on its account-creation day (insert-if-absent), so the
+// value chart has a sensible starting point — per-user, not a shared
+// constant (0016_starting_capital.sql).
 //
 // Runs as the service-role client (bypasses RLS; granted table access in 0004).
 // Triggered by the token-protected /api/cron/snapshot endpoint (Vercel Cron in
@@ -19,7 +21,6 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { providerQuotes } from "@/lib/marketData/finnhub.server";
 import { getOptionsValueByUser } from "@/lib/options/valuation.server";
 
-const STARTING_CAPITAL = 100000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export type SnapshotSummary = {
@@ -41,7 +42,7 @@ export async function runSnapshots(opts: { onlyUserId?: string } = {}): Promise<
   // don't fan out a price fetch across the whole user base.
   const one = opts.onlyUserId;
 
-  const profilesQ = admin.from("profiles").select("id, cash_balance, margin_loan, created_at");
+  const profilesQ = admin.from("profiles").select("id, cash_balance, margin_loan, starting_capital, created_at");
   const { data: profiles, error: pErr } = await (one ? profilesQ.eq("id", one) : profilesQ);
   if (pErr) throw new Error("read profiles: " + pErr.message);
 
@@ -114,7 +115,10 @@ export async function runSnapshots(opts: { onlyUserId?: string } = {}): Promise<
 
     const created = String(p.created_at).slice(0, 10);
     if (created !== today) {
-      baselineRows.push({ user_id: p.id, total_value: STARTING_CAPITAL, cash: STARTING_CAPITAL, holdings_value: 0, captured_at: created });
+      // Per-user, not a shared constant — 0016_starting_capital.sql: each
+      // account's true starting point (100000 pre-2026-08-09, 25000 since).
+      const startingCapital = Number(p.starting_capital);
+      baselineRows.push({ user_id: p.id, total_value: startingCapital, cash: startingCapital, holdings_value: 0, captured_at: created });
     }
   }
 

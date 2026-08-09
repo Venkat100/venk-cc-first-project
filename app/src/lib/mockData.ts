@@ -34,7 +34,13 @@ export type Transaction = {
   price: number;
 };
 
-export const STARTING_CASH = 100000;
+// Fallback only, for the brief instant before profile.starting_capital has
+// loaded — matches the CURRENT signup default (25000, since 0016). The
+// actual per-account truth (100000 for pre-2026-08-09 accounts, 25000 for
+// newer ones) always lives in profiles.starting_capital; nothing that needs
+// to be correct (total-return math) should rely on this constant once the
+// profile is loaded.
+export const STARTING_CASH = 25000;
 
 export const STOCKS: Stock[] = [
   { symbol: "AAPL", name: "Apple Inc.", sector: "Technology", price: 228.42, dayChange: 2.31, dayChangePct: 1.02, marketCap: 3.45e12, open: 226.5, high: 229.1, low: 225.8, volume: 54_321_000, week52High: 237.49, week52Low: 164.08, about: "Designs, manufactures and sells smartphones, personal computers, tablets, wearables and accessories." },

@@ -6,7 +6,7 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "PaperTrader — Practice investing risk-free" },
-      { name: "description", content: "Trade stocks with $100,000 in virtual cash. Run what-if simulations against real market history. No real money, no risk." },
+      { name: "description", content: "Trade stocks with $25,000 in virtual cash. Run what-if simulations against real market history. No real money, no risk." },
       { property: "og:title", content: "PaperTrader — Practice investing risk-free" },
       { property: "og:description", content: "Test what-if scenarios and learn investing with virtual money." },
     ],
@@ -57,7 +57,7 @@ function Landing() {
                 <span className="text-[color:var(--color-gain)]">risk-free.</span>
               </h1>
               <p className="mt-5 max-w-xl text-balance text-base text-muted-foreground md:text-lg">
-                Start with $100,000 in virtual cash. Trade real-feeling markets, build a portfolio, and run
+                Start with $25,000 in virtual cash. Trade real-feeling markets, build a portfolio, and run
                 <span className="text-foreground"> "what if I had invested" </span>
                 simulations against real market history.
               </p>
@@ -128,7 +128,7 @@ function Landing() {
               { icon: FlaskConical, title: "What-if simulator", body: "Backtest any amount, any date, any stock — compare vs. the S&P 500." },
               { icon: BarChart3, title: "Portfolio analytics", body: "Allocation by stock and sector. Full transaction history. P&L tracking." },
               { icon: TrendingUp, title: "Watchlists & movers", body: "Curate tickers and track today's biggest movers at a glance." },
-              { icon: ShieldCheck, title: "Risk-free by design", body: "$100,000 virtual cash. Reset to start fresh whenever you want." },
+              { icon: ShieldCheck, title: "Risk-free by design", body: "$25,000 virtual cash. Reset to start fresh whenever you want." },
               { icon: Sparkles, title: "Built for learning", body: "Market & limit orders, position sizing, average cost — all the real concepts." },
             ].map((f) => (
               <div key={f.title} className="rounded-xl border border-border bg-card p-5 transition-colors hover:border-[color:var(--color-primary)]/40">
@@ -146,7 +146,7 @@ function Landing() {
       {/* CTA */}
       <section id="how" className="mx-auto max-w-7xl px-6 py-20">
         <div className="rounded-2xl border border-border bg-gradient-to-br from-surface to-surface-2 p-10 text-center">
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Start with $100,000 of virtual cash.</h2>
+          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">Start with $25,000 of virtual cash.</h2>
           <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
             No real money, ever. Just a great way to practice strategies, learn how markets behave, and see your decisions play out.
           </p>

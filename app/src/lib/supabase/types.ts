@@ -12,7 +12,12 @@ export type MarginStatus = "ok" | "warning" | "call";
 export type Profile = {
   id: string; // uuid, references auth.users
   display_name: string | null;
-  cash_balance: number; // numeric, defaults to 100000
+  cash_balance: number; // numeric, current virtual buying power
+  // The ACTUAL amount this account started with (or was last reset to) —
+  // 100000 for every pre-2026-08-09 account (historical fact), 25000 for
+  // every account created or reset since (0016_starting_capital.sql).
+  // Dashboard total-return math reads THIS, never a hardcoded constant.
+  starting_capital: number;
   created_at: string; // timestamptz (ISO string)
   // Margin (M1) — opt-in, off by default.
   margin_enabled: boolean;
