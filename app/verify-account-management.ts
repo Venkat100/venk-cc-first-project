@@ -181,22 +181,13 @@ async function main() {
   }
   assert("all 12 remaining direct-insert seeds succeeded", seedErrors.length === 0, seedErrors.join(" | "));
 
-  // `transactions` is the one table where service_role has no SELECT grant
-  // either (already-documented gap, see the R2 changelog entry in
-  // HANDOFF.md — production code always reads it via the authenticated
-  // client, never service_role) — read the BEFORE state through the
-  // target user's own session instead, and rely on the FK's `on delete
-  // cascade` (quoted verbatim from the migration, not re-derived) for the
-  // AFTER state, since that session is gone once the user is deleted.
-  const txBefore = await step("read transactions BEFORE delete (via the user's own session)", () => ownClient.from("transactions").select("id").eq("user_id", uid2), 15000);
-  if (txBefore.error) throw new Error("transactions before: " + txBefore.error.message);
-  assert("transactions has >=1 row for this user BEFORE deletion (via authenticated read — service_role has no SELECT grant here, a pre-existing documented gap)", (txBefore.data?.length ?? 0) >= 1, `${txBefore.data?.length ?? 0} rows`);
-
-  // Confirm every OTHER table (service_role CAN read all 15 of these —
-  // verified empirically before writing this script) actually has the row
-  // BEFORE deleting.
+  // `transactions` NOW has a service_role SELECT grant (0017 — closed the
+  // one pre-existing gap; was previously only readable via the user's own
+  // session, which structurally cannot verify a table post-deletion since
+  // that session is gone too). It's a full 16th table in `readableTables`
+  // below, read the SAME way as every other table, both before and after.
   const readableTables = [
-    "profiles", "holdings", "watchlist", "portfolio_snapshots",
+    "profiles", "holdings", "transactions", "watchlist", "portfolio_snapshots",
     "option_positions", "option_transactions", "agent_config", "agent_holdings",
     "agent_transactions", "agent_decisions", "agent_snapshots", "agent_proposals",
     "margin_events", "account_events", "insights",
@@ -212,9 +203,8 @@ async function main() {
     beforeCounts[t] = count ?? 0;
   }
   const missingBefore = readableTables.filter((t) => beforeCounts[t] < 1);
-  assert("every one of the other 15 tables has >=1 row for this user BEFORE deletion", missingBefore.length === 0, missingBefore.join(","));
-  console.log("  before-delete counts (15 admin-readable tables):", JSON.stringify(beforeCounts));
-  console.log(`  before-delete transactions (via authenticated read): ${txBefore.data?.length ?? 0} row(s)`);
+  assert("every one of the 16 tables has >=1 row for this user BEFORE deletion", missingBefore.length === 0, missingBefore.join(","));
+  console.log("  before-delete counts (16 tables, transactions included via the 0017 grant):", JSON.stringify(beforeCounts));
 
   const del = await step("admin.auth.admin.deleteUser(uid2)", () => admin.auth.admin.deleteUser(uid2), 20000);
   assert("deleteUser succeeded (no error)", !del.error, del.error?.message);
@@ -228,13 +218,9 @@ async function main() {
     if (error) throw new Error(`count ${t} after: ${error.message}`);
     afterCounts[t] = count ?? 0;
   }
-  console.log("  after-delete counts (15 admin-readable tables):", JSON.stringify(afterCounts));
+  console.log("  after-delete counts (16 tables, transactions included via the 0017 grant):", JSON.stringify(afterCounts));
   const stillPresent = readableTables.filter((t) => afterCounts[t] > 0);
-  assert("ZERO rows remain in ALL 15 admin-readable tables for the deleted user", stillPresent.length === 0, stillPresent.length ? `still present in: ${stillPresent.join(",")}` : "clean");
-  assert(
-    "transactions: NOT independently re-readable post-delete (service_role has no SELECT grant, same as pre-delete) — zero rows guaranteed instead by the ENFORCED `on delete cascade` FK to auth.users (0002_portfolio_tables.sql:49), the same database-engine-level constraint verified for all other 15 tables",
-    true,
-  );
+  assert("ZERO rows remain in ALL 16 tables for the deleted user, transactions DEFINITIVELY proven by direct service_role read", stillPresent.length === 0, stillPresent.length ? `still present in: ${stillPresent.join(",")}` : "clean");
 
   const authCheck = await step("confirm auth.users row itself is gone", () => admin.auth.admin.getUserById(uid2), 15000);
   assert("auth.users row is gone (getUserById errors or returns no user)", !!authCheck.error || !authCheck.data.user, authCheck.error?.message ?? "user still exists — BUG");
