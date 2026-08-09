@@ -49,3 +49,31 @@ export const resetPaperAccountFn = createServerFn({ method: "POST" })
       return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };
     }
   });
+
+// ── Delete account (product-phase kickoff, Part 2) ─────────────────────────
+// Deletes the auth.users row via the Supabase Admin API. No custom SQL wipe
+// function needed: every user-scoped table in this schema already has
+// `references auth.users (id) on delete cascade` (profiles, holdings,
+// transactions, watchlist, portfolio_snapshots, agent_config,
+// agent_holdings, agent_transactions, agent_decisions, agent_snapshots,
+// agent_proposals, option_positions, option_transactions, margin_events,
+// account_events; `insights` rows with a non-null user_id too — the
+// kind='stock' shared rows have user_id NULL and are correctly untouched,
+// they don't belong to any one user) — deleting the auth user cascades
+// through all of it atomically at the database level. Verified live with a
+// full DB read-back across every table; see verify-account-management.ts.
+export type DeleteAccountResponse = { ok: true } | { ok: false; error: string };
+
+export const deleteAccountFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
+  .handler(async ({ data }): Promise<DeleteAccountResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      const admin = getServiceClient();
+      const { error } = await admin.auth.admin.deleteUser(userId);
+      if (error) return { ok: false, error: "Sorry — we couldn't delete your account. Please try again." };
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };
+    }
+  });

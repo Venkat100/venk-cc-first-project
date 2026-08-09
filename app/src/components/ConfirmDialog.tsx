@@ -13,9 +13,11 @@
 // same-tick double-click that could otherwise race ahead of React's
 // isPending re-render.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export type ConfirmDialogProps = {
   open: boolean;
@@ -31,6 +33,12 @@ export type ConfirmDialogProps = {
   variant?: "default" | "destructive";
   /** In-flight state — pass the caller's mutation.isPending. */
   loading?: boolean;
+  /** When set (e.g. "DELETE"), the Confirm button stays disabled until the
+   *  user types this exact text into a field rendered just above it — the
+   *  strongest tier of confirmation, for the handful of truly unrecoverable
+   *  actions (account deletion) where even a destructive-red button isn't
+   *  enough friction. */
+  requireTypedConfirmation?: string;
   onConfirm: () => void;
 };
 
@@ -49,16 +57,26 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   variant = "default",
   loading = false,
+  requireTypedConfirmation,
   onConfirm,
 }: ConfirmDialogProps) {
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const typedInputRef = useRef<HTMLInputElement>(null);
   const firingRef = useRef(false);
+  const [typedValue, setTypedValue] = useState("");
   useEffect(() => {
     if (!loading) firingRef.current = false;
   }, [loading]);
+  // Reset the typed-confirmation field every time the dialog opens, so a
+  // prior "DELETE" doesn't silently carry over to a different dialog use.
+  useEffect(() => {
+    if (open) setTypedValue("");
+  }, [open]);
+
+  const typedMismatch = requireTypedConfirmation != null && typedValue !== requireTypedConfirmation;
 
   function handleConfirm() {
-    if (loading || firingRef.current) return;
+    if (loading || firingRef.current || typedMismatch) return;
     firingRef.current = true;
     onConfirm();
   }
@@ -75,7 +93,9 @@ export function ConfirmDialog({
         className={SHEET_CONTENT_CLASS}
         onOpenAutoFocus={(e) => {
           e.preventDefault();
-          confirmRef.current?.focus();
+          // With a typed-confirmation gate, focus that field first — the
+          // Confirm button starts disabled anyway. Otherwise, Confirm.
+          (requireTypedConfirmation ? typedInputRef.current : confirmRef.current)?.focus();
         }}
       >
         <DialogHeader className="border-b border-border px-4 py-3 text-left sm:px-5">
@@ -85,6 +105,26 @@ export function ConfirmDialog({
         <div className="space-y-4 px-4 py-4 sm:px-5">
           <DialogDescription className="text-sm text-foreground">{consequence}</DialogDescription>
           {detail && <div className="rounded-md border border-border bg-surface p-3 text-sm">{detail}</div>}
+          {requireTypedConfirmation != null && (
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-typed-input">
+                Type <span className="font-semibold text-foreground">{requireTypedConfirmation}</span> to confirm
+              </Label>
+              <Input
+                id="confirm-typed-input"
+                ref={typedInputRef}
+                value={typedValue}
+                onChange={(e) => setTypedValue(e.target.value)}
+                disabled={loading}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                placeholder={requireTypedConfirmation}
+                className="tabular"
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 border-t border-border px-4 py-3 sm:px-5">
@@ -94,7 +134,7 @@ export function ConfirmDialog({
           <Button
             ref={confirmRef}
             variant={variant}
-            disabled={loading}
+            disabled={loading || typedMismatch}
             onClick={handleConfirm}
             className="sm:w-auto"
           >

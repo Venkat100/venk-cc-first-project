@@ -20,7 +20,9 @@ export const Route = createFileRoute("/auth")({
 });
 
 // Turn Supabase's raw error text into something a human wants to read.
-function friendlyError(message: string): string {
+// Exported so /reset-password (and other auth-adjacent pages) share the
+// exact same phrasing rather than drifting.
+export function friendlyError(message: string): string {
   const m = message.toLowerCase();
   if (m.includes("invalid login credentials")) return "Wrong email or password.";
   if (m.includes("already registered") || m.includes("already been registered"))
@@ -40,6 +42,8 @@ function Auth() {
   const navigate = useNavigate();
   const { session, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
 
   // Shared form state.
   const [name, setName] = useState("");
@@ -69,6 +73,26 @@ function Auth() {
     navigate({ to: "/app/dashboard", replace: true });
   }
 
+  async function handleForgotPassword() {
+    if (!email) {
+      toast.error("Enter your email first.");
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    // Supabase itself doesn't reveal whether the email is registered (an
+    // anti-enumeration protection) — errors here are real problems (rate
+    // limit, malformed address), never "no such account".
+    if (error) {
+      toast.error(friendlyError(error.message));
+      return;
+    }
+    setForgotSent(true);
+  }
+
   async function handleSignUp() {
     if (!email || !password) {
       toast.error("Enter your email and a password.");
@@ -91,7 +115,7 @@ function Auth() {
     }
     // If email confirmation is enabled, there's no session yet.
     if (data.session) {
-      toast.success("Account created — $100,000 funded");
+      toast.success("Account created — $25,000 funded");
       navigate({ to: "/app/dashboard", replace: true });
     } else {
       toast.success("Account created — check your email to confirm, then sign in.");
@@ -139,14 +163,55 @@ function Auth() {
               <TabsTrigger value="signup">Create account</TabsTrigger>
             </TabsList>
             <TabsContent value="signin" className="mt-4 space-y-4">
-              <form
-                onSubmit={(e) => { e.preventDefault(); void handleSignIn(); }}
-                className="space-y-4"
-              >
-                <Field id="si-email" label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                <Field id="si-pass" label="Password" type="password" autoComplete="current-password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
-                <Button type="submit" disabled={loading} className="w-full">{loading ? "Signing in…" : "Sign in"}</Button>
-              </form>
+              {forgotMode ? (
+                forgotSent ? (
+                  <div className="space-y-4 text-sm">
+                    <p className="text-foreground">
+                      If an account exists for <span className="font-medium">{email}</span>, we've sent a password reset link. Check your inbox (and spam folder) — the link expires after a while, so use it soon.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => { setForgotMode(false); setForgotSent(false); }}
+                    >
+                      Back to sign in
+                    </Button>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={(e) => { e.preventDefault(); void handleForgotPassword(); }}
+                    className="space-y-4"
+                  >
+                    <p className="text-sm text-muted-foreground">Enter your email and we'll send you a link to reset your password.</p>
+                    <Field id="fp-email" label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                    <Button type="submit" disabled={loading} className="w-full">{loading ? "Sending…" : "Send reset link"}</Button>
+                    <button
+                      type="button"
+                      onClick={() => setForgotMode(false)}
+                      className="w-full text-center text-xs text-muted-foreground hover:text-foreground hover:underline"
+                    >
+                      Back to sign in
+                    </button>
+                  </form>
+                )
+              ) : (
+                <form
+                  onSubmit={(e) => { e.preventDefault(); void handleSignIn(); }}
+                  className="space-y-4"
+                >
+                  <Field id="si-email" label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <Field id="si-pass" label="Password" type="password" autoComplete="current-password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+                  <button
+                    type="button"
+                    onClick={() => setForgotMode(true)}
+                    className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                  <Button type="submit" disabled={loading} className="w-full">{loading ? "Signing in…" : "Sign in"}</Button>
+                </form>
+              )}
             </TabsContent>
             <TabsContent value="signup" className="mt-4 space-y-4">
               <form
@@ -158,7 +223,7 @@ function Auth() {
                 <Field id="su-pass" label="Password" type="password" autoComplete="new-password" placeholder="Min 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} />
                 <Button type="submit" disabled={loading} className="w-full">{loading ? "Creating account…" : "Create account"}</Button>
                 <p className="text-center text-xs text-muted-foreground">
-                  You'll start with $100,000 in virtual cash.
+                  You'll start with $25,000 in virtual cash.
                 </p>
               </form>
             </TabsContent>
