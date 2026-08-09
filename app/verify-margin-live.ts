@@ -251,12 +251,17 @@ async function main() {
     assert("'enabled' event logged", events.length === 1 && events[0].kind === "enabled", JSON.stringify(events));
   }
 
-  console.log("\n████ (2) Buy ~$150k of NVDA on $100k equity ████");
+  console.log("\n████ (2) Buy 1.5× starting equity of NVDA on margin ████");
   let nvdaHeldQty = 0;
   {
     const p0 = await profileRow(uid);
     const quote = await step("quote NVDA", 15000, () => getServerQuote("NVDA"));
-    const targetDollars = 150000;
+    // 1.5× actual starting cash — NOT a hardcoded $150k (that assumed the
+    // pre-2026-08-09 $100k signup default; new accounts start at $25k since
+    // PLAN.md §6 step 1). Safely under the 2×equity buying-power ceiling
+    // (no positions yet) while still forcing a real borrow of ~0.5× cash,
+    // whatever the account's actual starting balance is.
+    const targetDollars = round2(p0.cash * 1.5);
     const qty = Math.round((targetDollars / quote.price) * 1e6) / 1e6;
     console.log(`  cash=${money(p0.cash)}, positions_value=$0.00 (no positions yet) → buying_power = 2×equity−positions = 2×${money(p0.cash)} = ${money(buyingPowerJs(p0.cash, 0, true, 0))}`);
     const buy = await step("buy ~$150k NVDA on margin", 25000, () => buyStock(uid, "NVDA", qty));
@@ -276,8 +281,8 @@ async function main() {
       assert("margin_loan increased by exactly borrowed (sub-cent float noise tolerated — v_total isn't rounded to the cent in execute_trade, unchanged from pre-M1)", closeTo(after.marginLoan, round2(borrowed)), `${after.marginLoan} vs ${round2(borrowed)}`);
       const positionsValueAfter = await step("getPositionsValue after buy", 20000, () => getPositionsValue(uid));
       const equityAfter = round2(after.cash + positionsValueAfter - after.marginLoan);
-      console.log(`  positions_value≈${money(positionsValueAfter)}, equity = cash+positions_value−loan = ${money(after.cash)}+${money(positionsValueAfter)}−${money(after.marginLoan)} = ${money(equityAfter)} (should still ≈ starting equity $100,000 — leverage doesn't change equity)`);
-      assert("equity unchanged by borrowing (within a few cents of $100,000 — small drift = real price ticks)", Math.abs(equityAfter - 100000) < 200, `${equityAfter}`);
+      console.log(`  positions_value≈${money(positionsValueAfter)}, equity = cash+positions_value−loan = ${money(after.cash)}+${money(positionsValueAfter)}−${money(after.marginLoan)} = ${money(equityAfter)} (should still ≈ starting equity ${money(p0.cash)} — leverage doesn't change equity)`);
+      assert(`equity unchanged by borrowing (within a few cents of starting equity ${money(p0.cash)} — small drift = real price ticks)`, Math.abs(equityAfter - p0.cash) < 200, `${equityAfter}`);
       const borrowEvents = (await marginEvents(uid)).filter((e) => e.kind === "borrow");
       assert("'borrow' event logged with correct amount", borrowEvents.length === 1 && closeTo(Number(borrowEvents[0].amount), borrowed), JSON.stringify(borrowEvents));
     }

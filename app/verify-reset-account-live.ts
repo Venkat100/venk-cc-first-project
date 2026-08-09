@@ -16,6 +16,7 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
+import { STARTING_CASH } from "@/lib/mockData";
 
 let failures = 0;
 function assert(name: string, cond: boolean, detail = "") {
@@ -199,14 +200,14 @@ async function main() {
 
   // ── Assertions: user A ──────────────────────────────────────────────
   console.log("\n████ Assertions — user A ████");
-  assert("RPC returned cash_balance=100000", Number((resetResult.data as any).cash_balance) === 100000);
+  assert(`RPC returned cash_balance=${STARTING_CASH} (the current default)`, Number((resetResult.data as any).cash_balance) === STARTING_CASH);
   assert("RPC returned holdings_cleared=1", Number((resetResult.data as any).holdings_cleared) === 1);
   assert("RPC returned option_positions_cleared=1", Number((resetResult.data as any).option_positions_cleared) === 1);
   assert("RPC returned agent_holdings_cleared=1", Number((resetResult.data as any).agent_holdings_cleared) === 1);
   assert("RPC returned pending_proposals_cleared=1", Number((resetResult.data as any).pending_proposals_cleared) === 1);
   assert("RPC returned margin_loan_forgiven=5000", Number((resetResult.data as any).margin_loan_forgiven) === 5000);
 
-  assert("cash_balance is EXACTLY $100,000.00", afterA.profile.cash_balance === 100000, `${afterA.profile.cash_balance}`);
+  assert(`cash_balance is EXACTLY the current default $${STARTING_CASH}.00`, afterA.profile.cash_balance === STARTING_CASH, `${afterA.profile.cash_balance}`);
   assert("margin_enabled reset to false", afterA.profile.margin_enabled === false);
   assert("margin_loan reset to exactly 0 (the $5,000 loan was forgiven)", afterA.profile.margin_loan === 0, `${afterA.profile.margin_loan}`);
   assert("margin_status reset to 'ok'", afterA.profile.margin_status === "ok");
@@ -232,7 +233,7 @@ async function main() {
   if (afterA.snapshots.length === 1) {
     const s = afterA.snapshots[0];
     const today = new Date().toISOString().slice(0, 10);
-    assert(`fresh snapshot is dated TODAY (${today}) at exactly $100,000/$100,000/$0`, s.captured_at === today && s.total_value === 100000 && s.cash === 100000 && s.holdings_value === 0, JSON.stringify(s));
+    assert(`fresh snapshot is dated TODAY (${today}) at exactly $${STARTING_CASH}/$${STARTING_CASH}/$0`, s.captured_at === today && s.total_value === STARTING_CASH && s.cash === STARTING_CASH && s.holdings_value === 0, JSON.stringify(s));
   }
   assert("agent_snapshots: DELETED, no replacement", afterA.agentSnaps.length === 0, `${afterA.agentSnaps.length}`);
 
@@ -252,7 +253,7 @@ async function main() {
   console.log("\n████ Login/session still works post-reset ████");
   const sessionCheck = await step("authenticated read via the SAME anon session used before reset", 15000, () => clientA.from("profiles").select("cash_balance, margin_loan").eq("id", uidA).single());
   assert("post-reset authenticated read succeeds (session never invalidated)", !sessionCheck.error, sessionCheck.error?.message);
-  assert("post-reset authenticated read shows the NEW state ($100,000, no loan)", sessionCheck.data?.cash_balance === 100000 && sessionCheck.data?.margin_loan === 0, JSON.stringify(sessionCheck.data));
+  assert(`post-reset authenticated read shows the NEW state ($${STARTING_CASH}, no loan)`, sessionCheck.data?.cash_balance === STARTING_CASH && sessionCheck.data?.margin_loan === 0, JSON.stringify(sessionCheck.data));
   const reSignIn = await step("fresh sign-in (a real NEW login) after reset", 15000, () => createClient(anonUrl, anonKey).auth.signInWithPassword({ email: emailA, password: PASSWORD }));
   assert("a fresh login with the same credentials still works after reset", !reSignIn.error && !!reSignIn.data.session, reSignIn.error?.message);
 

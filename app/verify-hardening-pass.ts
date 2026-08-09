@@ -28,6 +28,7 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
+import { STARTING_CASH } from "@/lib/mockData";
 import { getPositionsValue } from "@/lib/margin/valuation.server";
 import { getEnrichedOptionPositions } from "@/lib/options/valuation.server";
 import { runExpiryProcessing } from "@/lib/options/expiry.server";
@@ -123,10 +124,15 @@ async function main() {
   const afterEnable = await profileRow(uid);
   assert("margin enabled, loan starts at 0", afterEnable.marginEnabled && afterEnable.marginLoan === 0);
 
-  // Buy enough MORE AAPL to force real borrowing (cash is ~$99.4k at this point).
-  const buy2 = await step("buy $150,000 of AAPL on margin (forces borrowing)", 25000, async () => {
+  // Buy enough MORE AAPL to force real borrowing. 1.5× ACTUAL current cash
+  // (not a hardcoded $150k, which assumed the pre-2026-08-09 $100k signup
+  // default) — safely under the 2×equity buying-power ceiling while still
+  // guaranteeing a real borrow, whatever the account's current balance is.
+  const p0BeforeBigBuy = await profileRow(uid);
+  const buy2 = await step(`buy 1.5× current cash (${money(round2(p0BeforeBigBuy.cash * 1.5))}) of AAPL on margin (forces borrowing)`, 25000, async () => {
     const quote = await getServerQuote("AAPL");
-    const qty = Math.round((150000 / quote.price) * 1e6) / 1e6;
+    const targetDollars = round2(p0BeforeBigBuy.cash * 1.5);
+    const qty = Math.round((targetDollars / quote.price) * 1e6) / 1e6;
     return buyStock(uid, "AAPL", qty);
   });
   const afterBigBuy = await profileRow(uid);
@@ -278,7 +284,9 @@ async function main() {
     try { expiryStep = await step("runExpiryProcessing({onlyUserId})", 25000, () => runExpiryProcessing({ onlyUserId: uid })); } catch (e) { expiryStep = { error: String(e) }; }
     try { interestStep = await step("runInterestAccrual({onlyUserId})", 20000, () => runInterestAccrual({ onlyUserId: uid })); } catch (e) { interestStep = { error: String(e) }; }
     try { marginStep = await step("runMarginMonitor({onlyUserId})", 25000, () => runMarginMonitor({ onlyUserId: uid })); } catch (e) { marginStep = { error: String(e) }; }
-    const finalSnap = await step("runSnapshots({onlyUserId})", 25000, () => runSnapshots({ onlyUserId: uid }));
+    const snapStart = Date.now();
+    const finalSnap = await step("runSnapshots({onlyUserId})", 60000, () => runSnapshots({ onlyUserId: uid }));
+    console.log(`  runSnapshots wall-clock: ${Date.now() - snapStart}ms`);
     console.log(`     expiry=${JSON.stringify(expiryStep)}`);
     console.log(`     interest=${JSON.stringify(interestStep)}`);
     console.log(`     margin=${JSON.stringify(marginStep)}`);
@@ -309,9 +317,11 @@ async function main() {
     // option position (still on margin, so a fresh loan too) so THIS test
     // genuinely exercises all four surfaces active at once, as asked.
     await step("rebuild: buy 1 AAPL", 20000, () => buyStock(uid, "AAPL", 1));
-    await step("rebuild: buy $30,000 more AAPL (forces a fresh loan)", 20000, async () => {
+    const p0Rebuild = await profileRow(uid);
+    await step(`rebuild: buy 1.5× current cash (${money(round2(p0Rebuild.cash * 1.5))}) more AAPL (forces a fresh loan)`, 20000, async () => {
       const quote = await getServerQuote("AAPL");
-      const qty = Math.round((30000 / quote.price) * 1e6) / 1e6;
+      const targetDollars = round2(p0Rebuild.cash * 1.5);
+      const qty = Math.round((targetDollars / quote.price) * 1e6) / 1e6;
       return buyStock(uid, "AAPL", qty);
     });
     await step("rebuild: buy 1 NVDA call", 20000, () => tradeOption(uid, optionContract.contractId, "buy_to_open", 1));
@@ -328,7 +338,10 @@ async function main() {
     console.log(`  reset returned: ${JSON.stringify(rpcResult)}`);
 
     const after = await profileRow(uid);
-    assert("cash reset to exactly $100,000.00", after.cash === 100000, money(after.cash));
+    // Reset targets the CURRENT default (STARTING_CASH, $25,000 since
+    // PLAN.md §6 step 1 — was $100,000 when this script was first written),
+    // never a hardcoded figure, per 0016_starting_capital.sql's own design.
+    assert(`cash reset to exactly the current default ${money(STARTING_CASH)}`, after.cash === STARTING_CASH, money(after.cash));
     assert("margin fully reset (disabled, 0 loan, ok status)", !after.marginEnabled && after.marginLoan === 0 && after.marginStatus === "ok", JSON.stringify(after));
     const { data: holdingsAfter } = await admin.from("holdings").select("*").eq("user_id", uid);
     const { data: optPosAfter } = await admin.from("option_positions").select("*").eq("user_id", uid);
@@ -349,7 +362,7 @@ async function main() {
     const postResetSnap = await step("runSnapshots post-reset", 20000, () => runSnapshots({ onlyUserId: uid }));
     const today = new Date().toISOString().slice(0, 10);
     const { data: postSnapRow } = await admin.from("portfolio_snapshots").select("total_value").eq("user_id", uid).eq("captured_at", today).single();
-    assert("post-reset snapshot total_value === $100,000.00 exactly (loan=0, so the fix is a no-op here)", Number(postSnapRow?.total_value) === 100000, `${postSnapRow?.total_value}`);
+    assert(`post-reset snapshot total_value === the current default ${money(STARTING_CASH)} exactly (loan=0, so the fix is a no-op here)`, Number(postSnapRow?.total_value) === STARTING_CASH, `${postSnapRow?.total_value}`);
     void postResetSnap;
   }
 
