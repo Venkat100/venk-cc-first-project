@@ -4,6 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 import { cn } from "@/lib/utils";
 import { fmtUSD } from "@/lib/mockData";
 import { getCandles } from "@/lib/marketData";
+import { useMarketLive } from "@/lib/marketData/useMarketLive";
 import type { Range, Quote } from "@/lib/marketData/types";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { RangeChangeReadout } from "@/components/ChartReadout";
@@ -21,10 +22,23 @@ export function LivePriceChart({ symbol, height = 320, defaultRange = "3M", quot
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   useEffect(() => setHoverIdx(null), [range, symbol]);
 
+  // 1D only: the chart extends through the trading day as new 5-min bars
+  // arrive server-side. Poll 60s (client) against the candles' 5-min server
+  // TTL (cache.server.ts's TTL.candles) — at most 1 provider call per 5min
+  // per (symbol,1D) combination, however many clients are polling it; the
+  // 60s client cadence just controls how promptly a NEW bar (once the
+  // provider has actually produced one) shows up here, not how often the
+  // provider itself gets hit — most 60s ticks land within the same 5min
+  // cache window and cost nothing extra. Other ranges never poll (candles
+  // TTL=5m either way, but "does 3M drift mid-view" isn't the problem this
+  // step exists to solve). Gated by useMarketLive, same as quotes.
+  const CANDLE_POLL_MS = 60_000;
+  const { isLive } = useMarketLive();
   const candlesQ = useQuery({
     queryKey: ["candles", symbol, range],
     queryFn: () => getCandles(symbol, range),
     staleTime: 5 * 60_000,
+    refetchInterval: range === "1D" && isLive ? CANDLE_POLL_MS : false,
   });
 
   const rawData = useMemo(() => (candlesQ.data ?? []).map((c) => ({ t: c.t, price: c.close })), [candlesQ.data]);

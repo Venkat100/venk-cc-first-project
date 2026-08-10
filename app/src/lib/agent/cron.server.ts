@@ -37,6 +37,13 @@ import { prefetchUniverse, type UniverseData } from "./quant.server";
 import { runThinker } from "./thinker.server";
 import { runWatchdog, type WatchdogSources } from "./watchdog.server";
 import { runMarginMonitor } from "@/lib/margin/monitor.server";
+import { isUsMarketOpen } from "@/lib/marketData/marketHours";
+
+// Re-exported for backward compatibility — the actual definition moved to
+// lib/marketData/marketHours.ts (PLAN.md §6 step 3) so the client-side live-
+// price polling gate can share the SAME DST-aware check as this cron, rather
+// than risking two copies drifting apart.
+export { isUsMarketOpen };
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -54,25 +61,6 @@ function authorizeCron(request: Request): Response | null {
   const provided = bearer || request.headers.get("x-cron-secret") || new URL(request.url).searchParams.get("secret") || "";
   if (provided !== expected) return json({ ok: false, error: "Unauthorized." }, 401);
   return null;
-}
-
-/** US equity regular session: Mon–Fri, 9:30–16:00 America/New_York (DST-aware
- *  via Intl). Holidays are not excluded — off-day pings just no-op cheaply. */
-export function isUsMarketOpen(now: Date = new Date()): boolean {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-  let hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  if (hour === 24) hour = 0; // some runtimes render midnight as "24"
-  if (weekday === "Sat" || weekday === "Sun") return false;
-  const mins = hour * 60 + minute;
-  return mins >= 9 * 60 + 30 && mins < 16 * 60;
 }
 
 export type ThinkerBatchSummary = {

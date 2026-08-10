@@ -10,8 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { LivePriceChart } from "@/components/LivePriceChart";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { StockInsightBody, AiDisclaimer } from "@/components/InsightUI";
-import { getQuote, getCompanyNews, type NewsItem, type Quote } from "@/lib/marketData";
+import { MarketStatusBadge } from "@/components/MarketStatusBadge";
+import { getCompanyNews, type NewsItem, type Quote } from "@/lib/marketData";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
+import { useTickFlash } from "@/lib/marketData/useTickFlash";
 import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { getOptionPositions } from "@/lib/options/queries";
@@ -38,7 +40,6 @@ export const Route = createFileRoute("/app/stock/$symbol")({
 
 function StockDetail() {
   const { symbol } = Route.useLoaderData();
-  const quoteQ = useQuery({ queryKey: ["quote", symbol], queryFn: () => getQuote(symbol), staleTime: 15_000, refetchInterval: 30_000, retry: 1 });
   const holdingsQ = useQuery({ queryKey: ["holdings"], queryFn: getHoldings });
   const txQ = useQuery({ queryKey: ["transactions"], queryFn: getTransactions });
   const { profile } = useAuth();
@@ -59,7 +60,6 @@ function StockDetail() {
   const marginLoan = marginEnabled && marginStateQ.data ? marginStateQ.data.marginLoan : 0;
   const interestRate = marginEnabled ? marginStateQ.data?.interestRate : undefined;
 
-  const quote = quoteQ.data;
   const position = (holdingsQ.data ?? []).find((h) => h.symbol === symbol);
   const recent = useMemo(() => (txQ.data ?? []).filter((t) => t.symbol === symbol).slice(0, 8), [txQ.data, symbol]);
 
@@ -69,21 +69,26 @@ function StockDetail() {
   const symbolOptionPositions = useMemo(() => (optionPositionsQ.data ?? []).filter((p) => p.symbol === symbol), [optionPositionsQ.data, symbol]);
   const [orderPanel, setOrderPanel] = useState<OrderPanelState>({ open: false });
 
-  // Total portfolio value — same EQUITY formula as the Dashboard (cash + Σ
-  // qty×price + options value − margin loan; hardening-pass fix: this used
-  // to be cash + stock holdings only, silently excluding options value and
-  // never netting a margin loan, which understated "% of portfolio" for
-  // anyone using either feature). Reuses the quote already loaded for THIS
-  // symbol; only fetches the OTHER held symbols.
+  // ONE combined useQuotes call for THIS symbol + every OTHER held symbol
+  // (needed for the "% of portfolio" stat below) — deliberately NOT two
+  // separate queries (a lone ["quote",symbol] here + a Dashboard-side
+  // ["quotes",...] elsewhere), which is how a price shown in two places
+  // could disagree: different query keys mean different cache entries,
+  // fetched independently, possibly at different moments. One shared
+  // ["quotes", sortedSymbols] key means the SAME symbol on Dashboard,
+  // Portfolio, and here always reads the same react-query cache entry.
   const otherSymbols = useMemo(() => (holdingsQ.data ?? []).map((h) => h.symbol).filter((s) => s !== symbol), [holdingsQ.data, symbol]);
-  const otherQuotesQ = useQuotes(otherSymbols);
-  const portfolioPricesReady = otherSymbols.length === 0 || otherQuotesQ.isSuccess;
-  const holdingsValue = (holdingsQ.data ?? []).reduce((sum, h) => sum + (h.symbol === symbol ? (quote?.price ?? 0) : quoteOf(otherQuotesQ.data, h.symbol).price) * h.quantity, 0);
+  const allSymbols = useMemo(() => [symbol, ...otherSymbols], [symbol, otherSymbols]);
+  const quotesQ = useQuotes(allSymbols);
+  const quote = quotesQ.data?.get(symbol);
+  const priceFlash = useTickFlash(quote?.price);
+  const portfolioPricesReady = quotesQ.isSuccess;
+  const holdingsValue = (holdingsQ.data ?? []).reduce((sum, h) => sum + quoteOf(quotesQ.data, h.symbol).price * h.quantity, 0);
   const allOptionsValue = (optionPositionsQ.data ?? []).reduce((sum, p) => sum + p.marketValue, 0);
   const totalPortfolio = (profile?.cash_balance ?? 0) + holdingsValue + allOptionsValue - (profile?.margin_loan ?? 0);
 
   // Invalid ticker or provider failure → friendly card, never a crash.
-  if (quoteQ.isError) {
+  if (quotesQ.isError) {
     return (
       <div className="rounded-lg border border-border bg-card p-8 text-center">
         <h2 className="text-lg font-semibold">Couldn't load {symbol}</h2>
@@ -118,10 +123,11 @@ function StockDetail() {
         <div className="text-right">
           {quote ? (
             <>
-              <p className="text-3xl font-semibold tabular">{fmtUSD(quote.price)}</p>
+              <p className={cn("rounded px-1 text-3xl font-semibold tabular", priceFlash)}>{fmtUSD(quote.price)}</p>
               <p className={cn("text-sm tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
                 {up ? "+" : "−"}{fmtUSD(Math.abs(quote.dayChange))} ({fmtPct(quote.dayChangePct)}) today
               </p>
+              <MarketStatusBadge className="mt-1 justify-end" />
             </>
           ) : (
             <div className="h-10 w-32 animate-pulse rounded bg-surface-2" />
