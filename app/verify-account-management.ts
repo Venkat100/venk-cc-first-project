@@ -72,7 +72,7 @@ async function main() {
   console.log("\n████ 1. Fresh signup starts at exactly $25,000.00 ████");
   const email1 = `pt-acct-fresh-${Date.now()}@example.org`;
   const u1 = await step("create user (via admin.createUser -> handle_new_user trigger)", () =>
-    admin.auth.admin.createUser({ email: email1, password: PASSWORD_A, email_confirm: true }),
+    admin.auth.admin.createUser({ email: email1, password: PASSWORD_A, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }),
   );
   if (u1.error || !u1.data.user) throw new Error("createUser: " + u1.error?.message);
   const uid1 = u1.data.user.id;
@@ -128,7 +128,7 @@ async function main() {
 
   console.log("\n████ 4. Delete account — seed all 16 user-scoped tables, delete, prove zero rows remain everywhere ████");
   const email2 = `pt-acct-delete-${Date.now()}@example.org`;
-  const u2 = await step("create the account to be deleted", () => admin.auth.admin.createUser({ email: email2, password: PASSWORD_A, email_confirm: true }), 15000);
+  const u2 = await step("create the account to be deleted", () => admin.auth.admin.createUser({ email: email2, password: PASSWORD_A, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }), 15000);
   if (u2.error || !u2.data.user) throw new Error("createUser (delete target): " + u2.error?.message);
   const uid2 = u2.data.user.id;
   // NOT pushed to `created` — this account is the thing under test; if
@@ -227,7 +227,7 @@ async function main() {
 
   console.log("\n████ 5. Reset targets the CURRENT default ($25,000), independent of an account's original starting_capital ████");
   const email3 = `pt-acct-oldstyle-${Date.now()}@example.org`;
-  const u3 = await step("create a fresh account (starts at 25000, per item 1)", () => admin.auth.admin.createUser({ email: email3, password: PASSWORD_A, email_confirm: true }), 15000);
+  const u3 = await step("create a fresh account (starts at 25000, per item 1)", () => admin.auth.admin.createUser({ email: email3, password: PASSWORD_A, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }), 15000);
   if (u3.error || !u3.data.user) throw new Error("createUser (reset target): " + u3.error?.message);
   const uid3 = u3.data.user.id;
   created.push(uid3);

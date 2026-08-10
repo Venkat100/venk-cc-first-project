@@ -72,7 +72,7 @@ async function main() {
   const stamp = Date.now();
   const email = `pt-cascade-v2-${stamp}@example.org`;
   const password = "Test1234!pw";
-  const created = await step("create test user", () => admin.auth.admin.createUser({ email, password, email_confirm: true }));
+  const created = await step("create test user", () => admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
   if (created.error || !created.data.user) throw new Error(`user creation failed: ${created.error?.message}`);
   const userId = created.data.user.id;
   console.log(`  test user: ${email} (${userId})`);

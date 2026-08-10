@@ -130,7 +130,7 @@ async function main() {
 
   console.log("\n████ 4. Daily market brief — real user with a watchlist ████");
   const email = `pt-insight-${Date.now()}@example.org`;
-  const { data: u, error: uErr } = await step("create test user", () => admin.auth.admin.createUser({ email, password: "Test1234!pw", email_confirm: true }), 15000);
+  const { data: u, error: uErr } = await step("create test user", () => admin.auth.admin.createUser({ email, password: "Test1234!pw", email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }), 15000);
   if (uErr || !u.user) throw new Error("createUser: " + uErr?.message);
   const uid = u.user.id;
   created.push(uid);
@@ -163,7 +163,7 @@ async function main() {
 
   console.log("\n████ 5. Users with nothing tracked are skipped ████");
   const { data: u2 } = await step("create second (empty) test user", () =>
-    admin.auth.admin.createUser({ email: `pt-insight-empty-${Date.now()}@example.org`, password: "Test1234!pw", email_confirm: true }),
+    admin.auth.admin.createUser({ email: `pt-insight-empty-${Date.now()}@example.org`, password: "Test1234!pw", email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }),
     15000,
   );
   if (u2?.user) {

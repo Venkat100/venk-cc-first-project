@@ -48,7 +48,7 @@ console.log("\n████ Setup ████");
 const stamp = Date.now();
 const email = `pt-o4-verify-${stamp}@example.org`;
 const password = "O4VerifyPass!234";
-const { data: created, error: createErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+const { data: created, error: createErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } });
 if (createErr || !created.user) throw new Error(`user creation failed: ${createErr?.message}`);
 const userId = created.user.id;
 console.log(`  test user: ${email} (${userId})`);

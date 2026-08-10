@@ -58,8 +58,8 @@ const userBEmail = `pt-o2-verify-b-${stamp}@example.org`;
 const PASSWORD = "O2VerifyPass!234";
 
 console.log("\n████ Setup: two throwaway test users ████");
-const { data: userA, error: errA } = await admin.auth.admin.createUser({ email: userAEmail, password: PASSWORD, email_confirm: true });
-const { data: userB, error: errB } = await admin.auth.admin.createUser({ email: userBEmail, password: PASSWORD, email_confirm: true });
+const { data: userA, error: errA } = await admin.auth.admin.createUser({ email: userAEmail, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } });
+const { data: userB, error: errB } = await admin.auth.admin.createUser({ email: userBEmail, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } });
 if (errA || errB || !userA.user || !userB.user) throw new Error(`user creation failed: ${errA?.message} ${errB?.message}`);
 const userAId = userA.user.id;
 const userBId = userB.user.id;
