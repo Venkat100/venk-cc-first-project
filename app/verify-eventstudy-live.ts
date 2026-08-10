@@ -52,7 +52,24 @@ try {
   console.log("historical_parallel:", voo.historical_parallel);
   assert("VOO insight well-formed", ["bullish", "bearish", "neutral"].includes(voo.lean) && voo.summary.length > 20);
   assert("VOO measured_history present", voo.measured_history !== null);
-  assert("VOO (calm) has FEWER shock events than NVDA (plausible vs. the chart)", (voo.measured_history?.events_found ?? 999) <= (nvda.measured_history?.events_found ?? 0), `VOO=${voo.measured_history?.events_found} NVDA=${nvda.measured_history?.events_found}`);
+  // NOTE: this used to assert "VOO (calm) has FEWER shock events than NVDA",
+  // on the assumption that a visually-calmer ETF should cross fewer shock
+  // thresholds than a visually-volatile stock. Root-caused 2026-08-10: that
+  // premise doesn't hold under this file's own shock definition (see
+  // eventstudy.server.ts) — a shock is |r_i| > 2 x sigma where sigma is that
+  // SAME symbol's own trailing 60-day stdev, i.e. a self-relative,
+  // volatility-normalized threshold. NVDA gets flagged relative to NVDA's own
+  // typical day, VOO relative to VOO's own typical day, so absolute
+  // volatility doesn't predict which crosses ITS OWN bar more often. Each
+  // symbol's 5-year rolling window also advances daily, so even if the
+  // NVDA>VOO comparison happened to hold when this was last verified, it was
+  // never a stable invariant - it can flip as real trading days enter/exit
+  // the window, with zero code change involved. Replaced with a structural
+  // invariant that doesn't decay: VOO independently finds a non-trivial
+  // number of events too (same floor NVDA gets above), proving the
+  // event-study logic works on a real calm ETF's history without betting on
+  // which of two live symbols has more.
+  assert("VOO (calm ETF) also found a non-trivial number of shock events", (voo.measured_history?.events_found ?? 0) >= 3, `${voo.measured_history?.events_found}`);
   assert("2 total event-study candle fetches so far", measuredHistoryCalls() === 2, `${measuredHistoryCalls()}`);
   assert("2 total Claude calls so far", insightClaudeCalls() === 2, `${insightClaudeCalls()}`);
 

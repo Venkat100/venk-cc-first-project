@@ -140,10 +140,20 @@ async function main() {
     providerCallsB >= SYMBOLS_B.length * 3 && providerCallsB <= SYMBOLS_B.length * 6,
     `beforeB=${JSON.stringify(beforeB)} afterB=${JSON.stringify(afterB)}`,
   );
-  assert(
-    `provider calls (${providerCallsB}) did NOT scale with total user count (${totalUsersB})`,
-    providerCallsB < totalUsersB,
-  );
+  // NOTE: a "providerCallsB < totalUsersB" check used to live here too, but it
+  // was a redundant, boundary-fragile proxy for the same claim the two
+  // assertions above/below already prove robustly. With 5 symbols × 4
+  // users/symbol = 20 total users, and an expected-healthy cost of ~4 TTL
+  // crossings/symbol × 5 symbols ≈ 20 calls, the "healthy" value coincides
+  // almost exactly with the failure threshold — any run where real Finnhub
+  // latency tips just ONE symbol's 120s polling loop into a 5th TTL window
+  // (20→21, still inside the healthy 15-30 band checked above) failed this
+  // extra check for no real reason. Root-caused 2026-08-10: not a caching
+  // regression (cache.server.ts/quote.server.ts/finnhub.server.ts unchanged
+  // since before this test existed) — removed rather than re-thresholded,
+  // since the assertion below already proves "scales with symbols, not
+  // users" correctly by holding user count constant (20) across scenarios
+  // A and B while varying symbol count (1 vs 5).
   assert(
     "5-symbol scenario cost ~5× the 1-symbol scenario's provider calls (scales with symbols, not users — both had 20 users)",
     providerCallsB >= providerCallsA * 3,

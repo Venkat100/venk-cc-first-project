@@ -135,6 +135,13 @@ Sequencing logic: unblock strangers first → build the scaling foundation *befo
 
 **Build entitlement checks + usage metering into steps 6–10 as we go** — retrofitting them across a dozen features at step 11 is the expensive path.
 
+## 6b. PRE-LAUNCH CHECKLIST — deferred to the very end (Venky's call, 2026-08-10)
+
+These two are **not code** and are deliberately parked until the build is essentially complete. Venky will have the email set up by then. **Neither may be skipped before opening public signup / charging money.**
+
+1. **`support@mypapertrader.com` must be live.** `legal/privacy.md` and `legal/terms.md` publicly promise this as the contact route for data-rights requests (access/deletion) and general support. A published contact address that bounces is a real compliance gap. Cheapest fix: email forwarding to a personal inbox (check GoDaddy's built-in forwarding first, since DNS already lives there; Cloudflare Email Routing is free but requires moving DNS). **Does NOT affect password reset** — those are sent by Supabase's own mail service, not this address.
+2. **Lawyer review of the legal pages.** The drafts (`legal/*.md`) were written for a free, pre-revenue educational product and are explicitly marked as not professionally reviewed. Before charging money or launching widely — especially outside the US — have a qualified attorney review them, with particular attention to the AI-generated-analysis sections, which sit nearest to investment-advice regulation. Jurisdiction is Texas, USA; entity is Venkat Praveen (revisit if an LLC is formed).
+
 ## 7. Open decisions
 
 - Monetization timing — **assumed "later"** (build → prove value → charge). Correct if wrong.
