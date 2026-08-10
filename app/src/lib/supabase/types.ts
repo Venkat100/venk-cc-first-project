@@ -24,6 +24,11 @@ export type Profile = {
   margin_loan: number;
   margin_status: MarginStatus;
   last_interest_accrued_at: string | null; // date (YYYY-MM-DD)
+  // Server-recorded proof of legal consent at signup (0022_terms_acceptance.sql).
+  // NULL for any account created before this migration — signup-time-only gate,
+  // not retroactively required.
+  terms_accepted_at: string | null; // timestamptz (ISO string)
+  terms_version: string | null;
 };
 
 export type Holding = {

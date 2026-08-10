@@ -4,10 +4,16 @@ import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/auth-context";
+
+// Bumped whenever legal/terms.md or legal/privacy.md materially changes, so
+// profiles.terms_version records exactly which wording a user agreed to.
+// Matches the drafts' "Last updated" date.
+export const LEGAL_VERSION = "2026-08-09";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -35,6 +41,8 @@ export function friendlyError(message: string): string {
     return "Please confirm your email first — check your inbox.";
   if (m.includes("rate limit") || m.includes("too many"))
     return "Too many attempts. Please wait a moment and try again.";
+  if (m.includes("terms_not_accepted"))
+    return "Please accept the Terms of Service and Privacy Policy to create an account.";
   return message;
 }
 
@@ -49,6 +57,7 @@ function Auth() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   // If already signed in, don't show the form — go to the dashboard.
   useEffect(() => {
@@ -98,14 +107,21 @@ function Auth() {
       toast.error("Enter your email and a password.");
       return;
     }
+    if (!termsAccepted) {
+      toast.error("You must accept the Terms of Service and Privacy Policy to continue.");
+      return;
+    }
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         // Stored in user_metadata; the handle_new_user DB trigger copies this
-        // into profiles.display_name when the account is created.
-        data: { display_name: name.trim() || null },
+        // into profiles.display_name when the account is created, and REQUIRES
+        // terms_accepted_version (raises and aborts the signup if missing) —
+        // a data-integrity guarantee that no profile can exist without a
+        // consent record, not a security control (see 0022_terms_acceptance.sql).
+        data: { display_name: name.trim() || null, terms_accepted_version: LEGAL_VERSION },
       },
     });
     setLoading(false);
@@ -221,7 +237,26 @@ function Auth() {
                 <Field id="su-name" label="Full name" autoComplete="name" placeholder="Jane Trader" value={name} onChange={(e) => setName(e.target.value)} />
                 <Field id="su-email" label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />
                 <Field id="su-pass" label="Password" type="password" autoComplete="new-password" placeholder="Min 6 characters" value={password} onChange={(e) => setPassword(e.target.value)} />
-                <Button type="submit" disabled={loading} className="w-full">{loading ? "Creating account…" : "Create account"}</Button>
+                <div className="flex items-start gap-2.5">
+                  <Checkbox
+                    id="su-terms"
+                    checked={termsAccepted}
+                    onCheckedChange={(checked) => setTermsAccepted(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <Label htmlFor="su-terms" className="cursor-pointer text-xs font-normal leading-relaxed text-muted-foreground">
+                    I agree to the{" "}
+                    <Link to="/terms" target="_blank" className="text-foreground underline underline-offset-2 hover:opacity-80">
+                      Terms of Service
+                    </Link>{" "}
+                    and{" "}
+                    <Link to="/privacy" target="_blank" className="text-foreground underline underline-offset-2 hover:opacity-80">
+                      Privacy Policy
+                    </Link>
+                    , and I understand PaperTrader is an educational simulation, not financial advice.
+                  </Label>
+                </div>
+                <Button type="submit" disabled={loading || !termsAccepted} className="w-full">{loading ? "Creating account…" : "Create account"}</Button>
                 <p className="text-center text-xs text-muted-foreground">
                   You'll start with $25,000 in virtual cash.
                 </p>
