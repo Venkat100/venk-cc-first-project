@@ -166,3 +166,38 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Tick-flash (PLAN.md §6 step 3) — a brief background flash when a live
+   price updates, green for up / red for down, fading to transparent.
+   Deliberately subtle (short duration, low peak opacity) — a trading UI
+   that flashes aggressively on every tick is distracting, not informative.
+   prefers-reduced-motion disables the animation outright rather than just
+   shortening it, per the platform convention for motion-sensitive users. */
+@keyframes price-flash-up {
+  from {
+    background-color: color-mix(in oklch, var(--color-gain) 30%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@keyframes price-flash-down {
+  from {
+    background-color: color-mix(in oklch, var(--color-loss) 30%, transparent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.price-flash-up {
+  animation: price-flash-up 700ms ease-out;
+}
+.price-flash-down {
+  animation: price-flash-down 700ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .price-flash-up,
+  .price-flash-down {
+    animation: none;
+  }
+}

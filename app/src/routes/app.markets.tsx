@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/PriceChart";
 import { WatchlistStar } from "@/components/WatchlistStar";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
+import { FlashPrice } from "@/components/FlashPrice";
+import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { MARKET_UNIVERSE } from "@/lib/marketData";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
@@ -51,6 +53,7 @@ function Markets() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Markets</h1>
           <p className="text-sm text-muted-foreground">Search any stock or ETF — prices are live.</p>
+          <MarketStatusBadge className="mt-1" />
         </div>
         {!active && (
           <div className="flex items-center gap-2 rounded-md border border-border bg-surface p-1">
@@ -125,7 +128,9 @@ function Markets() {
                             </Link>
                           </td>
                           <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{m.type || r.sector}</td>
-                          <td className="py-3 text-right tabular">{priced ? fmtUSD(r.price) : "…"}</td>
+                          <td className="py-3 text-right tabular">
+                            {priced ? <FlashPrice value={r.price} className="px-1">{fmtUSD(r.price)}</FlashPrice> : "…"}
+                          </td>
                           <td className={cn("py-3 text-right tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
                             {priced ? <>{up ? "+" : "−"}{fmtUSD(Math.abs(r.dayChange))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(r.dayChangePct)})</span></> : "…"}
                           </td>
@@ -152,7 +157,7 @@ function Markets() {
                             </Link>
                           </td>
                           <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{r.sector}</td>
-                          <td className="py-3 text-right tabular">{fmtUSD(r.price)}</td>
+                          <td className="py-3 text-right tabular"><FlashPrice value={r.price} className="px-1">{fmtUSD(r.price)}</FlashPrice></td>
                           <td className={cn("py-3 text-right tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
                             {up ? "+" : "−"}{fmtUSD(Math.abs(r.dayChange))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(r.dayChangePct)})</span>
                           </td>

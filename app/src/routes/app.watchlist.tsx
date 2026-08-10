@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sparkline } from "@/components/PriceChart";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
+import { FlashPrice } from "@/components/FlashPrice";
+import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/portfolio/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
@@ -56,6 +58,7 @@ function Watchlist() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Watchlist</h1>
           <p className="text-sm text-muted-foreground">Tickers you're tracking. Click any to open its detail page.</p>
+          <MarketStatusBadge className="mt-1" />
         </div>
       </div>
 
@@ -97,7 +100,7 @@ function Watchlist() {
                           </div>
                         </Link>
                       </td>
-                      <td className="py-3 text-right tabular">{fmtUSD(r.price)}</td>
+                      <td className="py-3 text-right tabular"><FlashPrice value={r.price} className="px-1">{fmtUSD(r.price)}</FlashPrice></td>
                       <td className={cn("py-3 text-right tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>{fmtPct(r.dayChangePct)}</td>
                       <td className="hidden py-3 md:table-cell"><Sparkline data={sparkline(sym)} up={up} width={120} height={32} /></td>
                       <td className="px-4 py-3 text-right">

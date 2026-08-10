@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
+import { FlashPrice } from "@/components/FlashPrice";
+import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { getOptionPositions, getOptionTransactions, type OptionTransaction } from "@/lib/options/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
@@ -69,6 +71,7 @@ function Portfolio() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Portfolio & Activity</h1>
         <p className="text-sm text-muted-foreground">Allocation breakdown and full transaction history.</p>
+        <MarketStatusBadge className="mt-1" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -125,7 +128,7 @@ function Portfolio() {
                       <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{q.sector}</td>
                       <td className="hidden py-3 text-right tabular sm:table-cell">{fmtQty(h.quantity)}</td>
                       <td className="hidden py-3 text-right tabular md:table-cell">{fmtUSD(h.avg_cost)}</td>
-                      <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(q.price)}</td>
+                      <td className="hidden py-3 text-right tabular sm:table-cell"><FlashPrice value={q.price} className="px-1">{fmtUSD(q.price)}</FlashPrice></td>
                       <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
                       <td className={cn("px-4 py-3 text-right tabular font-medium", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
                         {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0)})</span>

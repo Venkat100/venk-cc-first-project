@@ -12,6 +12,10 @@ import { getTodaysBrief } from "@/lib/insights/api";
 import { getSnapshots } from "@/lib/snapshots/queries";
 import { getMarginState } from "@/lib/margin/api";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
+import { useTickFlash } from "@/lib/marketData/useTickFlash";
+import { MarketStatusBadge } from "@/components/MarketStatusBadge";
+import type { Holding } from "@/lib/supabase/types";
+import type { Quote } from "@/lib/marketData/types";
 import { useAuth } from "@/lib/auth/auth-context";
 import { topMovers, fmtUSD, fmtPct, fmtQty, sparkline, STARTING_CASH } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
@@ -189,36 +193,13 @@ function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {holdings.map((h) => {
-                      const q = quoteOf(quotes, h.symbol);
-                      const mv = q.price * h.quantity;
-                      const pl = (q.price - h.avg_cost) * h.quantity;
-                      const plPct = h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0;
-                      const up = pl >= 0;
-                      return (
-                        <tr key={h.symbol} className="border-b border-border/60 last:border-0 hover:bg-accent/40">
-                          <td className="py-3">
-                            <Link to="/app/stock/$symbol" params={{ symbol: q.symbol }} className="flex min-w-0 items-center gap-2 sm:gap-3">
-                              <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{q.symbol.slice(0, 2)}</div>
-                              <div className="min-w-0">
-                                <div className="font-semibold">{q.symbol}</div>
-                                <div className="max-w-[100px] truncate text-xs text-muted-foreground sm:max-w-[180px]">{q.name}</div>
-                              </div>
-                            </Link>
-                          </td>
-                          <td className="hidden py-3 tabular sm:table-cell">{fmtQty(h.quantity)}</td>
-                          <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(h.avg_cost)}</td>
-                          <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(q.price)}</td>
-                          <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
-                          <td className={cn("py-3 text-right tabular font-medium", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
-                            {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(plPct)})</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {holdings.map((h) => (
+                      <HoldingRow key={h.symbol} holding={h} quote={quoteOf(quotes, h.symbol)} />
+                    ))}
                   </tbody>
                 </table>
               )}
+              <MarketStatusBadge className="mt-3" />
             </CardContent>
           </Card>
         </div>
@@ -347,5 +328,36 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Own component (not inlined in the .map()) specifically so useTickFlash can
+// be called per-row, legally — one hook instance per holding, comparing
+// THAT row's own price across renders as the shared quotes cache updates.
+function HoldingRow({ holding: h, quote: q }: { holding: Holding; quote: Quote }) {
+  const priceFlash = useTickFlash(q.price);
+  const mv = q.price * h.quantity;
+  const pl = (q.price - h.avg_cost) * h.quantity;
+  const plPct = h.avg_cost > 0 ? ((q.price - h.avg_cost) / h.avg_cost) * 100 : 0;
+  const up = pl >= 0;
+  return (
+    <tr className="border-b border-border/60 last:border-0 hover:bg-accent/40">
+      <td className="py-3">
+        <Link to="/app/stock/$symbol" params={{ symbol: q.symbol }} className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{q.symbol.slice(0, 2)}</div>
+          <div className="min-w-0">
+            <div className="font-semibold">{q.symbol}</div>
+            <div className="max-w-[100px] truncate text-xs text-muted-foreground sm:max-w-[180px]">{q.name}</div>
+          </div>
+        </Link>
+      </td>
+      <td className="hidden py-3 tabular sm:table-cell">{fmtQty(h.quantity)}</td>
+      <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(h.avg_cost)}</td>
+      <td className={cn("hidden rounded py-3 text-right tabular sm:table-cell", priceFlash)}>{fmtUSD(q.price)}</td>
+      <td className="py-3 text-right tabular">{fmtUSD(mv)}</td>
+      <td className={cn("py-3 text-right tabular font-medium", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
+        {up ? "+" : "−"}{fmtUSD(Math.abs(pl))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(plPct)})</span>
+      </td>
+    </tr>
   );
 }
