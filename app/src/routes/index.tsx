@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, LineChart, FlaskConical, ShieldCheck, Sparkles, TrendingUp, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -157,12 +158,7 @@ function Landing() {
         </div>
       </section>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-6 py-6 text-xs text-muted-foreground sm:flex-row">
-          <span>© {new Date().getFullYear()} PaperTrader. Simulated trading only — no real money involved.</span>
-          <span>For educational use.</span>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

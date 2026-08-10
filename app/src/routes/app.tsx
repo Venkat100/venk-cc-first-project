@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TopBar, MobileNavOverlay } from "@/components/TopBar";
+import { SiteFooter } from "@/components/SiteFooter";
 import { useAuth } from "@/lib/auth/auth-context";
 
 export const Route = createFileRoute("/app")({
@@ -47,6 +48,7 @@ function AppLayout() {
           <main className="flex-1 px-4 py-6 md:px-8">
             <Outlet />
           </main>
+          <SiteFooter />
         </div>
         <MobileNavOverlay
           open={mobileOpen}
