@@ -13,7 +13,7 @@ import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
 import { getStock, fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { Search, SearchX } from "lucide-react";
+import { Search, SearchX, SplitSquareHorizontal } from "lucide-react";
 
 export const Route = createFileRoute("/app/markets")({
   head: () => ({ meta: [{ title: "Markets · PaperTrader" }] }),
@@ -137,6 +137,14 @@ function Markets() {
                           <td className="px-2 py-3 sm:px-4">
                             <div className="flex items-center justify-end gap-1">
                               <WatchlistStar symbol={m.symbol} />
+                              <Link
+                                to="/app/options"
+                                search={{ symbol: m.symbol }}
+                                aria-label={`View ${m.symbol}'s option chain`}
+                                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                              >
+                                <SplitSquareHorizontal className="h-4 w-4" />
+                              </Link>
                               <Link to="/app/stock/$symbol" params={{ symbol: m.symbol }}><Button size="sm" variant="outline">Trade</Button></Link>
                             </div>
                           </td>
@@ -166,6 +174,14 @@ function Markets() {
                           <td className="px-2 py-3 sm:px-4">
                             <div className="flex items-center justify-end gap-1">
                               <WatchlistStar symbol={r.symbol} />
+                              <Link
+                                to="/app/options"
+                                search={{ symbol: r.symbol }}
+                                aria-label={`View ${r.symbol}'s option chain`}
+                                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                              >
+                                <SplitSquareHorizontal className="h-4 w-4" />
+                              </Link>
                               <Link to="/app/stock/$symbol" params={{ symbol: r.symbol }}><Button size="sm" variant="outline">Trade</Button></Link>
                             </div>
                           </td>

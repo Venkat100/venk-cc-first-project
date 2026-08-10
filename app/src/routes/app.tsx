@@ -58,6 +58,7 @@ function AppLayout() {
             { to: "/app/agent", label: "AI Agent" },
             { to: "/app/portfolio", label: "Portfolio" },
             { to: "/app/margin", label: "Margin" },
+            { to: "/app/options", label: "Options" },
             { to: "/app/watchlist", label: "Watchlist" },
             { to: "/app/settings", label: "Settings" },
           ]}
