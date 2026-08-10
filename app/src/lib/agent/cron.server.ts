@@ -38,6 +38,7 @@ import { runThinker } from "./thinker.server";
 import { runWatchdog, type WatchdogSources } from "./watchdog.server";
 import { runMarginMonitor } from "@/lib/margin/monitor.server";
 import { isUsMarketOpen } from "@/lib/marketData/marketHours";
+import { recordHeartbeat } from "@/lib/health/heartbeat.server";
 
 // Re-exported for backward compatibility — the actual definition moved to
 // lib/marketData/marketHours.ts (PLAN.md §6 step 3) so the client-side live-
@@ -199,8 +200,10 @@ export async function handleAgentThinkerRequest(request: Request): Promise<Respo
     } catch (e) {
       briefs = { error: e instanceof Error ? e.message : "brief job failed" };
     }
+    void recordHeartbeat("agent-thinker", "ok", { eligible: summary.eligible, processed: summary.processed });
     return json({ ok: true, summary, briefs }, 200);
   } catch (e) {
+    void recordHeartbeat("agent-thinker", "error", { error: e instanceof Error ? e.message : String(e) });
     return json({ ok: false, error: e instanceof Error ? e.message : "Agent thinker batch failed." }, 500);
   }
 }

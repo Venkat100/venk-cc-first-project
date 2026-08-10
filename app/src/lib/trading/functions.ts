@@ -14,6 +14,7 @@ import { z } from "zod";
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getPositionsValue } from "@/lib/margin/valuation.server";
+import { track } from "@/lib/analytics/track.server";
 
 export type TradeResult = {
   cashBalance: number;
@@ -128,6 +129,20 @@ export const executeTradeFn = createServerFn({ method: "POST" })
       });
 
       if (error) return { ok: false, error: friendly(error.message) };
+
+      // Activation tracking: fire-and-forget, never blocks/affects the
+      // trade result. "First trade" = this account's transaction COUNT is
+      // exactly 1 immediately after this trade's own row was inserted by
+      // execute_trade() above — cheap (one indexed count), and correct
+      // regardless of buy/sell since this app has no shorting (a sell can
+      // never be a user's first-ever transaction in practice).
+      void admin
+        .from("transactions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .then(({ count }) => {
+          if (count === 1) void track("first_trade", { userId, properties: { symbol: sym, side: data.side } });
+        });
 
       const r = rpc as Record<string, unknown>;
       return {

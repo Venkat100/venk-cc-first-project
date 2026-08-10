@@ -11,8 +11,14 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { initClientSentry, captureClientError } from "@/lib/sentry/client";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth/auth-context";
+
+// Runs once per module load (both the SSR render pass and client
+// hydration instantiate this module separately) — the function itself
+// guards on `typeof window` so the SSR pass is always a no-op.
+initClientSentry();
 
 function NotFoundComponent() {
   return (
@@ -38,6 +44,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    captureClientError(error, { route: window.location.pathname, boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (

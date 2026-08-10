@@ -12,6 +12,8 @@ import { getServiceClient, verifyUser, mustSucceed } from "@/lib/supabase/admin.
 import { runThinker, type ThinkerResult } from "./thinker.server";
 import { runWatchdog, type WatchdogResult } from "./watchdog.server";
 import { executeProposal, rejectProposal, supersedePending, type ApproveResult } from "./proposals.server";
+import { checkAndRecordRateLimit, RATE_LIMITS } from "@/lib/rateLimit/check.server";
+import { track } from "@/lib/analytics/track.server";
 import type { AgentConfig } from "@/lib/supabase/types";
 
 type Admin = ReturnType<typeof getServiceClient>;
@@ -103,7 +105,17 @@ export const runAgentThinkerFn = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<ThinkerResponse> => {
     try {
       const userId = await verifyUser(data.accessToken);
+
+      // A2 abuse guard: every invocation runs a full quant scan (a burst of
+      // provider requests) plus, when AI is enabled, a real Claude call —
+      // unlike insights there's no cache to fall back on, so this is
+      // checked on every call, not just AI hits. See RATE_LIMITS' own
+      // comment for the numbers and reasoning.
+      const rl = await checkAndRecordRateLimit(userId, RATE_LIMITS.agentRun);
+      if (!rl.allowed) return { ok: false, error: rl.message };
+
       const result = await runThinker(userId);
+      void track("agent_run", { userId, properties: { ran: result.ran, aiUsed: result.aiUsed } });
       return { ok: true, result };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "The agent run failed." };

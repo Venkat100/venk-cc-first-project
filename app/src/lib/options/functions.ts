@@ -14,6 +14,7 @@ import { getRealizedVol } from "./volatility.server";
 import { buildChain, parseContractId, priceParsedContract, type OptionChain } from "./chain.server";
 import { getEnrichedOptionPositions, type EnrichedOptionPosition } from "./valuation.server";
 import { getPositionsValue } from "@/lib/margin/valuation.server";
+import { track } from "@/lib/analytics/track.server";
 
 export type OptionChainResponse = { ok: true; chain: OptionChain } | { ok: false; error: string };
 
@@ -171,6 +172,8 @@ export const executeOptionTradeFn = createServerFn({ method: "POST" })
       });
 
       if (error) return { ok: false, error: friendlyTrade(error.message) };
+
+      void track("option_trade", { userId, properties: { symbol: parsed.symbol, side: data.side } });
 
       const r = rpc as Record<string, unknown>;
       return {

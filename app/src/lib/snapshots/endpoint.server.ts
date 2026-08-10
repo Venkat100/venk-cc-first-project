@@ -21,6 +21,13 @@
 //   4. Portfolio snapshot write.
 //   5. price_cache prune (housekeeping, unrelated to the money steps above —
 //      appended last deliberately; order relative to 1-4 doesn't matter).
+//   6. rate_limit_events prune (A2 housekeeping, same reasoning as 5).
+//   7. analytics_events prune (A3 housekeeping — makes legal/privacy.md's
+//      "retained for a limited period... then discarded" promise actually
+//      true, not aspirational; same reasoning as 5/6).
+//   8. cron_heartbeats upsert (A3) — LAST, deliberately: it must reflect
+//      whether THIS run succeeded or failed, so it has to run after
+//      snapshotResult is known either way (see the ok/error branches below).
 // Each step is isolated in its own try/catch — a failure in any one must
 // never block the ones after it (most importantly, snapshots always run).
 
@@ -29,7 +36,10 @@ import { runExpiryProcessing } from "@/lib/options/expiry.server";
 import { runInterestAccrual } from "@/lib/margin/interest.server";
 import { runMarginMonitor } from "@/lib/margin/monitor.server";
 import { runPriceCachePrune } from "@/lib/marketData/pruneCache.server";
+import { runRateLimitPrune } from "@/lib/rateLimit/prune.server";
+import { runAnalyticsPrune } from "@/lib/analytics/prune.server";
 import { runSnapshots } from "./writer.server";
+import { recordHeartbeat } from "@/lib/health/heartbeat.server";
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -84,8 +94,24 @@ export async function handleSnapshotRequest(request: Request): Promise<Response>
     priceCachePrune = { error: e instanceof Error ? e.message : "price_cache prune failed." };
   }
 
-  if (snapshotResult.ok) {
-    return json({ ok: true, summary: snapshotResult.summary, expiry, interest, margin, priceCachePrune }, 200);
+  let rateLimitPrune;
+  try {
+    rateLimitPrune = await runRateLimitPrune();
+  } catch (e) {
+    rateLimitPrune = { error: e instanceof Error ? e.message : "rate_limit_events prune failed." };
   }
-  return json({ ok: false, error: snapshotResult.error, expiry, interest, margin, priceCachePrune }, 500);
+
+  let analyticsPrune;
+  try {
+    analyticsPrune = await runAnalyticsPrune();
+  } catch (e) {
+    analyticsPrune = { error: e instanceof Error ? e.message : "analytics_events prune failed." };
+  }
+
+  if (snapshotResult.ok) {
+    void recordHeartbeat("snapshot", "ok", { summary: snapshotResult.summary });
+    return json({ ok: true, summary: snapshotResult.summary, expiry, interest, margin, priceCachePrune, rateLimitPrune, analyticsPrune }, 200);
+  }
+  void recordHeartbeat("snapshot", "error", { error: snapshotResult.error });
+  return json({ ok: false, error: snapshotResult.error, expiry, interest, margin, priceCachePrune, rateLimitPrune, analyticsPrune }, 500);
 }

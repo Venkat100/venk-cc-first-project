@@ -15,6 +15,8 @@ import { providerQuotes, fhMetrics, fhCompanyNews, type SymbolMetrics } from "@/
 import { cached } from "@/lib/marketData/cache.server";
 import { agentModel } from "@/lib/agent/anthropic.server";
 import { getMeasuredHistory } from "./eventstudy.server";
+import { checkAndRecordRateLimit, RATE_LIMITS } from "@/lib/rateLimit/check.server";
+import { track } from "@/lib/analytics/track.server";
 import type { StockInsight, MarketBrief, MeasuredHistory } from "./types";
 
 // Verification counter: how many Claude calls the insights layer has made.
@@ -83,8 +85,13 @@ const INSIGHT_SCHEMA = {
  *
  *  The `insights` table (kind='stock') is the source of truth for "already
  *  generated today", so a cold serverless invocation still costs zero Claude
- *  calls. `cached()` sits on top purely as a hot in-process fast path. */
-export async function getStockInsight(symbol: string): Promise<StockInsight> {
+ *  calls. `cached()` sits on top purely as a hot in-process fast path.
+ *
+ *  `userId` is OPTIONAL and used ONLY for the A2 rate-limit guard below —
+ *  callers that don't have a real end-user in context (cron/tests) omit it
+ *  and simply skip the guard. `getStockInsightFn` (the actual user-facing
+ *  server function) always passes the verified userId. */
+export async function getStockInsight(symbol: string, userId?: string): Promise<StockInsight> {
   const sym = symbol.toUpperCase();
   const day = today();
   return cached(`insight:${sym}:${day}`, 6 * 60 * 60_000, async () => {
@@ -99,6 +106,18 @@ export async function getStockInsight(symbol: string): Promise<StockInsight> {
       .eq("created_at", day)
       .maybeSingle();
     if (existing?.payload) return existing.payload as StockInsight;
+
+    // A2 abuse guard: checked HERE, at the exact point a real Claude call
+    // is about to happen — repeat views of an already-generated symbol
+    // return above and never reach this check at all, matching the
+    // reasoning in RATE_LIMITS' own comment (marginal cost of a cache HIT
+    // is zero, so it shouldn't count against a user's daily allowance;
+    // only genuine cache MISSES — a burst across many distinct symbols —
+    // are the real cost vector this guards against).
+    if (userId) {
+      const rl = await checkAndRecordRateLimit(userId, RATE_LIMITS.insight);
+      if (!rl.allowed) throw new Error(rl.message);
+    }
 
     // 2) Not generated today anywhere → gather inputs and generate once.
     const [quotes, metrics, news] = await Promise.all([
