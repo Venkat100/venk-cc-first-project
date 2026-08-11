@@ -25,6 +25,7 @@ import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
 import { Route as AppOptionsRouteImport } from './routes/app.options'
 import { Route as AppMarketsRouteImport } from './routes/app.markets'
 import { Route as AppMarginRouteImport } from './routes/app.margin'
+import { Route as AppJournalRouteImport } from './routes/app.journal'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 import { Route as AppAgentRouteImport } from './routes/app.agent'
 import { Route as AppStockSymbolRouteImport } from './routes/app.stock.$symbol'
@@ -109,6 +110,11 @@ const AppMarginRoute = AppMarginRouteImport.update({
   path: '/margin',
   getParentRoute: () => AppRoute,
 } as any)
+const AppJournalRoute = AppJournalRouteImport.update({
+  id: '/journal',
+  path: '/journal',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -136,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/app/agent': typeof AppAgentRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/journal': typeof AppJournalRoute
   '/app/margin': typeof AppMarginRoute
   '/app/markets': typeof AppMarketsRoute
   '/app/options': typeof AppOptionsRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/app/agent': typeof AppAgentRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/journal': typeof AppJournalRoute
   '/app/margin': typeof AppMarginRoute
   '/app/markets': typeof AppMarketsRoute
   '/app/options': typeof AppOptionsRoute
@@ -178,6 +186,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/app/agent': typeof AppAgentRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/journal': typeof AppJournalRoute
   '/app/margin': typeof AppMarginRoute
   '/app/markets': typeof AppMarketsRoute
   '/app/options': typeof AppOptionsRoute
@@ -201,6 +210,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/app/agent'
     | '/app/dashboard'
+    | '/app/journal'
     | '/app/margin'
     | '/app/markets'
     | '/app/options'
@@ -221,6 +231,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/app/agent'
     | '/app/dashboard'
+    | '/app/journal'
     | '/app/margin'
     | '/app/markets'
     | '/app/options'
@@ -242,6 +253,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/app/agent'
     | '/app/dashboard'
+    | '/app/journal'
     | '/app/margin'
     | '/app/markets'
     | '/app/options'
@@ -378,6 +390,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppMarginRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/journal': {
+      id: '/app/journal'
+      path: '/journal'
+      fullPath: '/app/journal'
+      preLoaderRoute: typeof AppJournalRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/dashboard': {
       id: '/app/dashboard'
       path: '/dashboard'
@@ -405,6 +424,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppAgentRoute: typeof AppAgentRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppJournalRoute: typeof AppJournalRoute
   AppMarginRoute: typeof AppMarginRoute
   AppMarketsRoute: typeof AppMarketsRoute
   AppOptionsRoute: typeof AppOptionsRoute
@@ -419,6 +439,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAgentRoute: AppAgentRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppJournalRoute: AppJournalRoute,
   AppMarginRoute: AppMarginRoute,
   AppMarketsRoute: AppMarketsRoute,
   AppOptionsRoute: AppOptionsRoute,
