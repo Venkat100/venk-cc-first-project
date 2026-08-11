@@ -62,6 +62,7 @@ function AppLayout() {
             { to: "/app/margin", label: "Margin" },
             { to: "/app/options", label: "Options" },
             { to: "/app/journal", label: "Journal" },
+            { to: "/app/coach", label: "Coach" },
             { to: "/app/watchlist", label: "Watchlist" },
             { to: "/app/settings", label: "Settings" },
           ]}

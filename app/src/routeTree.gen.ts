@@ -27,6 +27,7 @@ import { Route as AppMarketsRouteImport } from './routes/app.markets'
 import { Route as AppMarginRouteImport } from './routes/app.margin'
 import { Route as AppJournalRouteImport } from './routes/app.journal'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
+import { Route as AppCoachRouteImport } from './routes/app.coach'
 import { Route as AppAgentRouteImport } from './routes/app.agent'
 import { Route as AppStockSymbolRouteImport } from './routes/app.stock.$symbol'
 
@@ -120,6 +121,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppCoachRoute = AppCoachRouteImport.update({
+  id: '/coach',
+  path: '/coach',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAgentRoute = AppAgentRouteImport.update({
   id: '/agent',
   path: '/agent',
@@ -141,6 +147,7 @@ export interface FileRoutesByFullPath {
   '/simulator': typeof SimulatorRoute
   '/terms': typeof TermsRoute
   '/app/agent': typeof AppAgentRoute
+  '/app/coach': typeof AppCoachRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/journal': typeof AppJournalRoute
   '/app/margin': typeof AppMarginRoute
@@ -162,6 +169,7 @@ export interface FileRoutesByTo {
   '/simulator': typeof SimulatorRoute
   '/terms': typeof TermsRoute
   '/app/agent': typeof AppAgentRoute
+  '/app/coach': typeof AppCoachRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/journal': typeof AppJournalRoute
   '/app/margin': typeof AppMarginRoute
@@ -185,6 +193,7 @@ export interface FileRoutesById {
   '/simulator': typeof SimulatorRoute
   '/terms': typeof TermsRoute
   '/app/agent': typeof AppAgentRoute
+  '/app/coach': typeof AppCoachRoute
   '/app/dashboard': typeof AppDashboardRoute
   '/app/journal': typeof AppJournalRoute
   '/app/margin': typeof AppMarginRoute
@@ -209,6 +218,7 @@ export interface FileRouteTypes {
     | '/simulator'
     | '/terms'
     | '/app/agent'
+    | '/app/coach'
     | '/app/dashboard'
     | '/app/journal'
     | '/app/margin'
@@ -230,6 +240,7 @@ export interface FileRouteTypes {
     | '/simulator'
     | '/terms'
     | '/app/agent'
+    | '/app/coach'
     | '/app/dashboard'
     | '/app/journal'
     | '/app/margin'
@@ -252,6 +263,7 @@ export interface FileRouteTypes {
     | '/simulator'
     | '/terms'
     | '/app/agent'
+    | '/app/coach'
     | '/app/dashboard'
     | '/app/journal'
     | '/app/margin'
@@ -404,6 +416,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/coach': {
+      id: '/app/coach'
+      path: '/coach'
+      fullPath: '/app/coach'
+      preLoaderRoute: typeof AppCoachRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/agent': {
       id: '/app/agent'
       path: '/agent'
@@ -423,6 +442,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppAgentRoute: typeof AppAgentRoute
+  AppCoachRoute: typeof AppCoachRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppJournalRoute: typeof AppJournalRoute
   AppMarginRoute: typeof AppMarginRoute
@@ -438,6 +458,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppAgentRoute: AppAgentRoute,
+  AppCoachRoute: AppCoachRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppJournalRoute: AppJournalRoute,
   AppMarginRoute: AppMarginRoute,

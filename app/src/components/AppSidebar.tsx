@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, LineChart, FlaskConical, PieChart, Star, Settings, Sparkles, Bot, Landmark, SplitSquareHorizontal, BookOpen } from "lucide-react";
+import { LayoutDashboard, LineChart, FlaskConical, PieChart, Star, Settings, Sparkles, Bot, Landmark, SplitSquareHorizontal, BookOpen, Compass } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -11,6 +11,7 @@ const items = [
   { to: "/app/margin", label: "Margin", icon: Landmark },
   { to: "/app/options", label: "Options", icon: SplitSquareHorizontal },
   { to: "/app/journal", label: "Journal", icon: BookOpen },
+  { to: "/app/coach", label: "Coach", icon: Compass },
   { to: "/app/watchlist", label: "Watchlist", icon: Star },
   { to: "/app/settings", label: "Settings", icon: Settings },
 ] as const;
