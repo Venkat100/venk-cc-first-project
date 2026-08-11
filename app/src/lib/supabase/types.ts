@@ -29,6 +29,14 @@ export type Profile = {
   // not retroactively required.
   terms_accepted_at: string | null; // timestamptz (ISO string)
   terms_version: string | null;
+  // Progressive unlocks (0024_progressive_unlocks.sql). NULL = locked.
+  // Written ONLY via unlock_feature() (service_role RPC) — never a direct
+  // client update. "Unlocked" for display purposes is computed at read time
+  // as (this is set) OR (the user already has real activity in that
+  // domain) — see lib/coaching/unlocks.ts — so these being NULL does not by
+  // itself mean an existing active options/margin user is locked out.
+  options_unlocked_at: string | null;
+  margin_unlocked_at: string | null;
 };
 
 export type Holding = {
