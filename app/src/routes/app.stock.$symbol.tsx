@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { OptionChainView } from "@/components/options/OptionChainView";
 import { OptionOrderPanel, type OrderPanelState } from "@/components/options/OptionOrderPanel";
 import { OptionPositionsList } from "@/components/options/OptionPositionsList";
+import { UnlockGate } from "@/components/coaching/UnlockGate";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { JournalEntryDialog, type TradeLinkContext } from "@/components/journal/JournalEntryDialog";
 import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
@@ -222,13 +223,17 @@ function StockDetail() {
                   )}
                 </TabsContent>
                 <TabsContent value="options" className="mt-4 space-y-6">
-                  <OptionChainView symbol={symbol} onSelectContract={(contract, side) => setOrderPanel({ open: true, mode: "buy", contract, side })} />
-                  {symbolOptionPositions.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-wider text-muted-foreground">Your option positions in {symbol}</p>
-                      <OptionPositionsList positions={symbolOptionPositions} onSell={(p) => setOrderPanel({ open: true, mode: "sell", position: p })} />
+                  <UnlockGate feature="options">
+                    <div className="space-y-6">
+                      <OptionChainView symbol={symbol} onSelectContract={(contract, side) => setOrderPanel({ open: true, mode: "buy", contract, side })} />
+                      {symbolOptionPositions.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground">Your option positions in {symbol}</p>
+                          <OptionPositionsList positions={symbolOptionPositions} onSell={(p) => setOrderPanel({ open: true, mode: "sell", position: p })} />
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </UnlockGate>
                 </TabsContent>
                 <TabsContent value="news" className="mt-4">
                   <NewsTab symbol={symbol} />

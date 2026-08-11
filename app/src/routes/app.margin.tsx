@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { MarginDisclaimer, MarginExplainer } from "@/components/margin/MarginExplainer";
+import { UnlockGate } from "@/components/coaching/UnlockGate";
 import { getMarginState, setMarginEnabled, repayMargin, getMarginEvents } from "@/lib/margin/api";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
@@ -117,6 +118,7 @@ function MarginPage() {
         </div>
       </div>
 
+      <UnlockGate feature="margin">
       <StatusBanner status={s.marginStatus} enabled={s.marginEnabled} maintenancePct={s.maintenancePct} warningBufferPct={s.warningBufferPct} />
 
       <MarginDisclaimer />
@@ -271,6 +273,7 @@ function MarginPage() {
         loading={repayMut.isPending}
         onConfirm={() => repayMut.mutate(repayAmt)}
       />
+      </UnlockGate>
     </div>
   );
 }
