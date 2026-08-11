@@ -17,6 +17,7 @@ import { getPositionsValue } from "@/lib/margin/valuation.server";
 import { track } from "@/lib/analytics/track.server";
 
 export type TradeResult = {
+  transactionId: string;
   cashBalance: number;
   marginLoan: number;
   symbol: string;
@@ -148,6 +149,7 @@ export const executeTradeFn = createServerFn({ method: "POST" })
       return {
         ok: true,
         result: {
+          transactionId: String(r.transaction_id),
           cashBalance: Number(r.cash_balance),
           marginLoan: Number(r.margin_loan ?? 0),
           symbol: String(r.symbol),

@@ -70,6 +70,7 @@ export const getOptionChainFn = createServerFn({ method: "POST" })
 export type OptionSide = "buy_to_open" | "sell_to_close";
 
 export type OptionTradeResult = {
+  optionTransactionId: string;
   cashBalance: number;
   marginLoan: number;
   contractId: string;
@@ -179,6 +180,7 @@ export const executeOptionTradeFn = createServerFn({ method: "POST" })
       return {
         ok: true,
         result: {
+          optionTransactionId: String(r.option_transaction_id),
           cashBalance: Number(r.cash_balance),
           marginLoan: Number(r.margin_loan ?? 0),
           contractId: String(r.contract_id),

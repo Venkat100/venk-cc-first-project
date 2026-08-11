@@ -193,6 +193,25 @@ export type MarginEvent = {
   created_at: string;
 };
 
+// ── Journal (B1) ────────────────────────────────────────────
+// A note attaches to a TRANSACTION or OPTION_TRANSACTION (the permanent
+// ledger), never to a holding/option_position (deleted the moment a
+// position fully closes) — so a note survives its position being closed.
+// At most one of transaction_id/option_transaction_id is set (DB-enforced);
+// both null = a standalone dated entry.
+export type JournalEntry = {
+  id: string;
+  user_id: string;
+  transaction_id: string | null;
+  option_transaction_id: string | null;
+  symbol: string | null;
+  title: string | null;
+  body: string;
+  entry_date: string; // date (YYYY-MM-DD)
+  created_at: string;
+  updated_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -446,6 +465,28 @@ export type Database = {
           created_at?: string;
         };
         Update: { [_ in never]: never }; // append-only, written only by margin SQL functions (service_role)
+        Relationships: [];
+      };
+      journal_entries: {
+        Row: JournalEntry;
+        Insert: {
+          id?: string;
+          user_id: string;
+          transaction_id?: string | null;
+          option_transaction_id?: string | null;
+          symbol?: string | null;
+          title?: string | null;
+          body: string;
+          entry_date?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          symbol?: string | null;
+          title?: string | null;
+          body?: string;
+          entry_date?: string;
+        };
         Relationships: [];
       };
     };
