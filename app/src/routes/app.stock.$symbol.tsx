@@ -16,7 +16,7 @@ import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useTickFlash } from "@/lib/marketData/useTickFlash";
 import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
-import { getOptionPositions } from "@/lib/options/queries";
+import { getOptionPositions, getOptionTransactions } from "@/lib/options/queries";
 import { getMarginState } from "@/lib/margin/api";
 import { computeBorrowSplit, borrowSplitSentence } from "@/lib/margin/borrowSplit";
 import { executeTrade } from "@/lib/trading/execute";
@@ -27,7 +27,13 @@ import { OptionChainView } from "@/components/options/OptionChainView";
 import { OptionOrderPanel, type OrderPanelState } from "@/components/options/OptionOrderPanel";
 import { OptionPositionsList } from "@/components/options/OptionPositionsList";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Sparkles, Newspaper, ExternalLink, Globe } from "lucide-react";
+import { JournalEntryDialog, type TradeLinkContext } from "@/components/journal/JournalEntryDialog";
+import { JournalEntryCard } from "@/components/journal/JournalEntryCard";
+import { getJournalEntries, deleteJournalEntry } from "@/lib/journal/queries";
+import { computeJournalOutcome } from "@/lib/journal/outcome";
+import { stockTradeSummary, optionTradeSummary } from "@/lib/journal/format";
+import type { JournalEntry } from "@/lib/supabase/types";
+import { Sparkles, Newspaper, ExternalLink, Globe, BookOpen, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/stock/$symbol")({
@@ -66,6 +72,14 @@ function StockDetail() {
   // Options (O3) — one shared query key so Dashboard/Portfolio/Stock Detail
   // can never disagree about current value/P&L (see lib/options/queries.ts).
   const optionPositionsQ = useQuery({ queryKey: ["optionPositions"], queryFn: getOptionPositions });
+  const optionTxQ = useQuery({ queryKey: ["optionTransactions"], queryFn: getOptionTransactions });
+  const journalQ = useQuery({ queryKey: ["journalEntries"], queryFn: getJournalEntries });
+  const symbolJournalEntries = useMemo(() => (journalQ.data ?? []).filter((e) => e.symbol === symbol), [journalQ.data, symbol]);
+  const journalQc = useQueryClient();
+  const [journalDialogOpen, setJournalDialogOpen] = useState(false);
+  const [editingJournalEntry, setEditingJournalEntry] = useState<JournalEntry | undefined>(undefined);
+  const [deletingJournalEntry, setDeletingJournalEntry] = useState<JournalEntry | undefined>(undefined);
+  const [deletingJournalBusy, setDeletingJournalBusy] = useState(false);
   const symbolOptionPositions = useMemo(() => (optionPositionsQ.data ?? []).filter((p) => p.symbol === symbol), [optionPositionsQ.data, symbol]);
   const [orderPanel, setOrderPanel] = useState<OrderPanelState>({ open: false });
 
@@ -173,6 +187,7 @@ function StockDetail() {
                     <TabsTrigger value="news">News</TabsTrigger>
                     <TabsTrigger value="about">About</TabsTrigger>
                     <TabsTrigger value="trades">Recent trades</TabsTrigger>
+                    <TabsTrigger value="journal">Journal{symbolJournalEntries.length > 0 ? ` (${symbolJournalEntries.length})` : ""}</TabsTrigger>
                   </TabsList>
                 </div>
                 <TabsContent value="position" className="mt-4">
@@ -238,6 +253,56 @@ function StockDetail() {
                     </table>
                   ) : <p className="text-sm text-muted-foreground">No trades for {symbol} yet.</p>}
                 </TabsContent>
+                <TabsContent value="journal" className="mt-4">
+                  <div className="mb-3 flex justify-end">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingJournalEntry(undefined);
+                        setJournalDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" /> Add note
+                    </Button>
+                  </div>
+                  {symbolJournalEntries.length === 0 ? (
+                    <EmptyState
+                      icon={BookOpen}
+                      title={`No journal entries for ${symbol}`}
+                      description="Notes you write about this stock — standalone thoughts, or reasoning attached to a specific trade — will show up here, alongside what actually happened since."
+                    />
+                  ) : (
+                    <div className="space-y-3">
+                      {symbolJournalEntries.map((entry) => {
+                        const tx = entry.transaction_id ? (txQ.data ?? []).find((t) => t.id === entry.transaction_id) : undefined;
+                        const otx = entry.option_transaction_id ? (optionTxQ.data ?? []).find((t) => t.id === entry.option_transaction_id) : undefined;
+                        const outcome = computeJournalOutcome(entry, {
+                          transactions: txQ.data ?? [],
+                          optionTransactions: optionTxQ.data ?? [],
+                          heldSymbols: position ? new Set([symbol]) : new Set(),
+                          openContractIds: new Set((optionPositionsQ.data ?? []).map((p) => p.contractId)),
+                          optionPositions: optionPositionsQ.data ?? [],
+                          stockQuotes: quotesQ.data,
+                        });
+                        const tradeSummary = tx ? stockTradeSummary(tx) : otx ? optionTradeSummary(otx) : undefined;
+                        return (
+                          <JournalEntryCard
+                            key={entry.id}
+                            entry={entry}
+                            outcome={outcome}
+                            tradeSummary={tradeSummary}
+                            onEdit={() => {
+                              setEditingJournalEntry(entry);
+                              setJournalDialogOpen(true);
+                            }}
+                            onDelete={() => setDeletingJournalEntry(entry)}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </TabsContent>
               </Tabs>
             </CardContent>
           </Card>
@@ -257,6 +322,35 @@ function StockDetail() {
       </div>
 
       <OptionOrderPanel state={orderPanel} onClose={() => setOrderPanel({ open: false })} />
+
+      <JournalEntryDialog
+        open={journalDialogOpen}
+        onOpenChange={setJournalDialogOpen}
+        entry={editingJournalEntry}
+        defaultSymbol={symbol}
+        onSaved={() => void journalQc.invalidateQueries({ queryKey: ["journalEntries"] })}
+      />
+
+      <ConfirmDialog
+        open={!!deletingJournalEntry}
+        onOpenChange={(o) => !o && setDeletingJournalEntry(undefined)}
+        title="Delete this entry?"
+        consequence="This journal entry will be permanently deleted. This can't be undone."
+        confirmLabel="Delete entry"
+        variant="destructive"
+        loading={deletingJournalBusy}
+        onConfirm={async () => {
+          if (!deletingJournalEntry) return;
+          setDeletingJournalBusy(true);
+          try {
+            await deleteJournalEntry(deletingJournalEntry.id);
+            await journalQc.invalidateQueries({ queryKey: ["journalEntries"] });
+            setDeletingJournalEntry(undefined);
+          } finally {
+            setDeletingJournalBusy(false);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -448,6 +542,9 @@ function OrderPanel({
   const [limit, setLimit] = useState(price);
   const [sellAll, setSellAll] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Optional, non-blocking "why this trade?" capture — opens automatically
+  // right after a trade fills, skippable with one click, never required.
+  const [tradeNotePrompt, setTradeNotePrompt] = useState<TradeLinkContext | null>(null);
 
   const execPrice = type === "market" ? price : limit;
   const qtyNum = Number(qtyInput) || 0;
@@ -488,6 +585,11 @@ function OrderPanel({
       );
       setSellAll(false);
       setConfirmOpen(false);
+      setTradeNotePrompt({
+        transactionId: r.transactionId,
+        symbol: r.symbol,
+        label: `${r.side === "buy" ? "Buy" : "Sell"} ${fmtQty(r.quantity)} ${r.symbol} @ ${fmtUSD(r.price)}`,
+      });
     },
     onError: (e: Error) => {
       toast.error(e.message || "That order couldn't be completed.");
@@ -678,6 +780,13 @@ function OrderPanel({
         variant={isSellAll ? "destructive" : "default"}
         loading={pending}
         onConfirm={() => trade.mutate()}
+      />
+
+      <JournalEntryDialog
+        open={!!tradeNotePrompt}
+        onOpenChange={(o) => !o && setTradeNotePrompt(null)}
+        tradeLink={tradeNotePrompt ?? undefined}
+        onSaved={() => void qc.invalidateQueries({ queryKey: ["journalEntries"] })}
       />
     </Card>
   );

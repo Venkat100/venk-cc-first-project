@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { JournalEntryDialog, type TradeLinkContext } from "@/components/journal/JournalEntryDialog";
 import { executeOptionTrade } from "@/lib/options/execute";
 import { getMarginState } from "@/lib/margin/api";
 import { computeBorrowSplit, borrowSplitSentence } from "@/lib/margin/borrowSplit";
@@ -60,6 +61,9 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
 
   const [contracts, setContracts] = useState(1);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  // Optional, non-blocking "why this trade?" capture — opens automatically
+  // right after a trade fills, skippable with one click, never required.
+  const [tradeNotePrompt, setTradeNotePrompt] = useState<TradeLinkContext | null>(null);
   useEffect(() => {
     if (state.open) setContracts(1); // reset whenever a new contract/position opens
   }, [state.open, contractId]);
@@ -82,6 +86,12 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
         description: `${r.side === "buy_to_open" ? "Cost" : "Proceeds"} ${fmtUSD(r.total)} @ ${fmtUSD(r.premium)}/share · Buying power now ${fmtUSD(r.cashBalance)}`,
       });
       setConfirmOpen(false);
+      const verbLabel = r.side === "buy_to_open" ? "Buy to open" : "Sell to close";
+      setTradeNotePrompt({
+        optionTransactionId: r.optionTransactionId,
+        symbol: r.symbol,
+        label: `${verbLabel} ${r.contracts} ${symbol} $${strike} ${optType === "call" ? "Call" : "Put"} · ${expiryLabel(expiry)} @ ${fmtUSD(r.premium)}`,
+      });
       onClose();
     },
     onError: (e: Error) => {
@@ -93,6 +103,7 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
   const dateLabel = expiry ? expiryLabel(expiry) : "";
 
   return (
+    <>
     <Dialog open={state.open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className={SHEET_CONTENT_CLASS}>
         <DialogHeader className="border-b border-border px-4 py-3 text-left sm:px-5">
@@ -227,6 +238,13 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
         onConfirm={() => trade.mutate()}
       />
     </Dialog>
+
+    <JournalEntryDialog
+      open={!!tradeNotePrompt}
+      onOpenChange={(o) => !o && setTradeNotePrompt(null)}
+      tradeLink={tradeNotePrompt ?? undefined}
+    />
+    </>
   );
 }
 

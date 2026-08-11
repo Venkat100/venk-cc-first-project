@@ -7,13 +7,14 @@ import { FlashPrice } from "@/components/FlashPrice";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { getOptionPositions, getOptionTransactions, type OptionTransaction } from "@/lib/options/queries";
+import { getNotedTransactionIds } from "@/lib/journal/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
 import { OptionPositionsList } from "@/components/options/OptionPositionsList";
 import { OptionOrderPanel, type OrderPanelState } from "@/components/options/OptionOrderPanel";
-import { Wallet, Receipt, PieChart as PieIcon, LineChart } from "lucide-react";
+import { Wallet, Receipt, PieChart as PieIcon, LineChart, NotebookPen } from "lucide-react";
 
 export const Route = createFileRoute("/app/portfolio")({
   head: () => ({ meta: [{ title: "Portfolio · PaperTrader" }] }),
@@ -25,6 +26,8 @@ const COLORS = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-cha
 function Portfolio() {
   const holdingsQ = useQuery({ queryKey: ["holdings"], queryFn: getHoldings });
   const txQ = useQuery({ queryKey: ["transactions"], queryFn: getTransactions });
+  const notedTxQ = useQuery({ queryKey: ["notedTransactionIds"], queryFn: getNotedTransactionIds });
+  const notedTransactionIds = notedTxQ.data ?? new Set<string>();
   const optionPositionsQ = useQuery({ queryKey: ["optionPositions"], queryFn: getOptionPositions });
   const optionTxQ = useQuery({ queryKey: ["optionTransactions"], queryFn: getOptionTransactions });
 
@@ -216,7 +219,16 @@ function Portfolio() {
                             : "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]",
                         )}>{t.side}</span>
                       </td>
-                      <td className="py-3 font-semibold">{t.symbol}</td>
+                      <td className="py-3 font-semibold">
+                        <span className="inline-flex items-center gap-1.5">
+                          {t.symbol}
+                          {notedTransactionIds.has(t.id) && (
+                            <Link to="/app/journal" search={{ symbol: t.symbol }} title="View journal note" className="text-muted-foreground hover:text-foreground">
+                              <NotebookPen className="h-3.5 w-3.5" />
+                            </Link>
+                          )}
+                        </span>
+                      </td>
                       <td className="hidden py-3 text-right tabular sm:table-cell">{fmtQty(t.quantity)}</td>
                       <td className="hidden py-3 text-right tabular sm:table-cell">{fmtUSD(t.price)}</td>
                       <td className="px-4 py-3 text-right tabular">{fmtUSD(t.total)}</td>
