@@ -220,6 +220,49 @@ export type JournalEntry = {
   updated_at: string;
 };
 
+// ── Scenario Challenges (B5) ────────────────────────────────
+// A scenario run is its OWN sub-portfolio, isolated from the real paper
+// account — same pattern as agent_config/agent_holdings/agent_transactions.
+// Scenarios themselves (date range, symbols, starting cash) are CODE-DEFINED
+// in lib/scenarios/catalog.ts; scenario_id here is just the catalog key.
+export type ScenarioRunStatus = "active" | "completed";
+
+export type ScenarioRun = {
+  id: string;
+  user_id: string;
+  scenario_id: string;
+  status: ScenarioRunStatus;
+  cash: number;
+  starting_cash: number;
+  step_index: number;
+  final_score: unknown; // ScenarioScore (lib/scenarios/scoring.ts) once completed, else null
+  started_at: string;
+  completed_at: string | null;
+};
+
+export type ScenarioHolding = {
+  id: string;
+  run_id: string;
+  user_id: string;
+  symbol: string;
+  quantity: number;
+  avg_cost: number;
+  updated_at: string;
+};
+
+export type ScenarioTransaction = {
+  id: string;
+  run_id: string;
+  user_id: string;
+  symbol: string;
+  side: TransactionSide;
+  quantity: number;
+  price: number;
+  total: number;
+  sim_date: string; // date (YYYY-MM-DD) — the in-scenario date, not wall-clock
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -495,6 +538,54 @@ export type Database = {
           body?: string;
           entry_date?: string;
         };
+        Relationships: [];
+      };
+      scenario_runs: {
+        Row: ScenarioRun;
+        Insert: {
+          id?: string;
+          user_id: string;
+          scenario_id: string;
+          status?: ScenarioRunStatus;
+          cash: number;
+          starting_cash: number;
+          step_index?: number;
+          final_score?: unknown;
+          started_at?: string;
+          completed_at?: string | null;
+        };
+        Update: { [_ in never]: never }; // written only by start/advance/finalize_scenario_run (service_role)
+        Relationships: [];
+      };
+      scenario_holdings: {
+        Row: ScenarioHolding;
+        Insert: {
+          id?: string;
+          run_id: string;
+          user_id: string;
+          symbol: string;
+          quantity: number;
+          avg_cost: number;
+          updated_at?: string;
+        };
+        Update: { [_ in never]: never }; // written only by execute_scenario_trade (service_role)
+        Relationships: [];
+      };
+      scenario_transactions: {
+        Row: ScenarioTransaction;
+        Insert: {
+          id?: string;
+          run_id: string;
+          user_id: string;
+          symbol: string;
+          side: TransactionSide;
+          quantity: number;
+          price: number;
+          total: number;
+          sim_date: string;
+          created_at?: string;
+        };
+        Update: { [_ in never]: never }; // append-only
         Relationships: [];
       };
     };
