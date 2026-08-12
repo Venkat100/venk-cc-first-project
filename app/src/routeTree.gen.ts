@@ -21,6 +21,7 @@ import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppWatchlistRouteImport } from './routes/app.watchlist'
 import { Route as AppSimulatorRouteImport } from './routes/app.simulator'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
+import { Route as AppScenariosRouteImport } from './routes/app.scenarios'
 import { Route as AppPortfolioRouteImport } from './routes/app.portfolio'
 import { Route as AppOptionsRouteImport } from './routes/app.options'
 import { Route as AppMarketsRouteImport } from './routes/app.markets'
@@ -29,7 +30,9 @@ import { Route as AppJournalRouteImport } from './routes/app.journal'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 import { Route as AppCoachRouteImport } from './routes/app.coach'
 import { Route as AppAgentRouteImport } from './routes/app.agent'
+import { Route as AppScenariosIndexRouteImport } from './routes/app.scenarios.index'
 import { Route as AppStockSymbolRouteImport } from './routes/app.stock.$symbol'
+import { Route as AppScenariosRunIdRouteImport } from './routes/app.scenarios.$runId'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -91,6 +94,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppScenariosRoute = AppScenariosRouteImport.update({
+  id: '/scenarios',
+  path: '/scenarios',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPortfolioRoute = AppPortfolioRouteImport.update({
   id: '/portfolio',
   path: '/portfolio',
@@ -131,10 +139,20 @@ const AppAgentRoute = AppAgentRouteImport.update({
   path: '/agent',
   getParentRoute: () => AppRoute,
 } as any)
+const AppScenariosIndexRoute = AppScenariosIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppScenariosRoute,
+} as any)
 const AppStockSymbolRoute = AppStockSymbolRouteImport.update({
   id: '/stock/$symbol',
   path: '/stock/$symbol',
   getParentRoute: () => AppRoute,
+} as any)
+const AppScenariosRunIdRoute = AppScenariosRunIdRouteImport.update({
+  id: '/$runId',
+  path: '/$runId',
+  getParentRoute: () => AppScenariosRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -154,11 +172,14 @@ export interface FileRoutesByFullPath {
   '/app/markets': typeof AppMarketsRoute
   '/app/options': typeof AppOptionsRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/scenarios': typeof AppScenariosRouteWithChildren
   '/app/settings': typeof AppSettingsRoute
   '/app/simulator': typeof AppSimulatorRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app/': typeof AppIndexRoute
+  '/app/scenarios/$runId': typeof AppScenariosRunIdRoute
   '/app/stock/$symbol': typeof AppStockSymbolRoute
+  '/app/scenarios/': typeof AppScenariosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -180,7 +201,9 @@ export interface FileRoutesByTo {
   '/app/simulator': typeof AppSimulatorRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app': typeof AppIndexRoute
+  '/app/scenarios/$runId': typeof AppScenariosRunIdRoute
   '/app/stock/$symbol': typeof AppStockSymbolRoute
+  '/app/scenarios': typeof AppScenariosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -200,11 +223,14 @@ export interface FileRoutesById {
   '/app/markets': typeof AppMarketsRoute
   '/app/options': typeof AppOptionsRoute
   '/app/portfolio': typeof AppPortfolioRoute
+  '/app/scenarios': typeof AppScenariosRouteWithChildren
   '/app/settings': typeof AppSettingsRoute
   '/app/simulator': typeof AppSimulatorRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app/': typeof AppIndexRoute
+  '/app/scenarios/$runId': typeof AppScenariosRunIdRoute
   '/app/stock/$symbol': typeof AppStockSymbolRoute
+  '/app/scenarios/': typeof AppScenariosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -225,11 +251,14 @@ export interface FileRouteTypes {
     | '/app/markets'
     | '/app/options'
     | '/app/portfolio'
+    | '/app/scenarios'
     | '/app/settings'
     | '/app/simulator'
     | '/app/watchlist'
     | '/app/'
+    | '/app/scenarios/$runId'
     | '/app/stock/$symbol'
+    | '/app/scenarios/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -251,7 +280,9 @@ export interface FileRouteTypes {
     | '/app/simulator'
     | '/app/watchlist'
     | '/app'
+    | '/app/scenarios/$runId'
     | '/app/stock/$symbol'
+    | '/app/scenarios'
   id:
     | '__root__'
     | '/'
@@ -270,11 +301,14 @@ export interface FileRouteTypes {
     | '/app/markets'
     | '/app/options'
     | '/app/portfolio'
+    | '/app/scenarios'
     | '/app/settings'
     | '/app/simulator'
     | '/app/watchlist'
     | '/app/'
+    | '/app/scenarios/$runId'
     | '/app/stock/$symbol'
+    | '/app/scenarios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -374,6 +408,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/scenarios': {
+      id: '/app/scenarios'
+      path: '/scenarios'
+      fullPath: '/app/scenarios'
+      preLoaderRoute: typeof AppScenariosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/portfolio': {
       id: '/app/portfolio'
       path: '/portfolio'
@@ -430,6 +471,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgentRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/scenarios/': {
+      id: '/app/scenarios/'
+      path: '/'
+      fullPath: '/app/scenarios/'
+      preLoaderRoute: typeof AppScenariosIndexRouteImport
+      parentRoute: typeof AppScenariosRoute
+    }
     '/app/stock/$symbol': {
       id: '/app/stock/$symbol'
       path: '/stock/$symbol'
@@ -437,8 +485,29 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppStockSymbolRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/scenarios/$runId': {
+      id: '/app/scenarios/$runId'
+      path: '/$runId'
+      fullPath: '/app/scenarios/$runId'
+      preLoaderRoute: typeof AppScenariosRunIdRouteImport
+      parentRoute: typeof AppScenariosRoute
+    }
   }
 }
+
+interface AppScenariosRouteChildren {
+  AppScenariosRunIdRoute: typeof AppScenariosRunIdRoute
+  AppScenariosIndexRoute: typeof AppScenariosIndexRoute
+}
+
+const AppScenariosRouteChildren: AppScenariosRouteChildren = {
+  AppScenariosRunIdRoute: AppScenariosRunIdRoute,
+  AppScenariosIndexRoute: AppScenariosIndexRoute,
+}
+
+const AppScenariosRouteWithChildren = AppScenariosRoute._addFileChildren(
+  AppScenariosRouteChildren,
+)
 
 interface AppRouteChildren {
   AppAgentRoute: typeof AppAgentRoute
@@ -449,6 +518,7 @@ interface AppRouteChildren {
   AppMarketsRoute: typeof AppMarketsRoute
   AppOptionsRoute: typeof AppOptionsRoute
   AppPortfolioRoute: typeof AppPortfolioRoute
+  AppScenariosRoute: typeof AppScenariosRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRoute
   AppSimulatorRoute: typeof AppSimulatorRoute
   AppWatchlistRoute: typeof AppWatchlistRoute
@@ -465,6 +535,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppMarketsRoute: AppMarketsRoute,
   AppOptionsRoute: AppOptionsRoute,
   AppPortfolioRoute: AppPortfolioRoute,
+  AppScenariosRoute: AppScenariosRouteWithChildren,
   AppSettingsRoute: AppSettingsRoute,
   AppSimulatorRoute: AppSimulatorRoute,
   AppWatchlistRoute: AppWatchlistRoute,
