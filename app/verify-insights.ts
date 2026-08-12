@@ -19,6 +19,7 @@ import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
 import { getStockInsight, runDailyBriefs, insightClaudeCalls, resetInsightClaudeCalls } from "@/lib/insights/insights.server";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { createTestUser } from "./verify-harness";
 
 function ts() {
   return new Date().toISOString().slice(11, 23);
@@ -130,9 +131,7 @@ async function main() {
 
   console.log("\n████ 4. Daily market brief — real user with a watchlist ████");
   const email = `pt-insight-${Date.now()}@example.org`;
-  const { data: u, error: uErr } = await step("create test user", () => admin.auth.admin.createUser({ email, password: "Test1234!pw", email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }), 15000);
-  if (uErr || !u.user) throw new Error("createUser: " + uErr?.message);
-  const uid = u.user.id;
+  const { uid } = await step("create test user", () => createTestUser(admin, email, "Test1234!pw"), 15000);
   created.push(uid);
   const pub = createClient(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_ANON_KEY, { auth: { persistSession: false } });
   const { error: sErr } = await step("sign in test user", () => pub.auth.signInWithPassword({ email, password: "Test1234!pw" }), 15000);
@@ -162,15 +161,10 @@ async function main() {
   assert("brief items reference tracked symbols only", (brief?.items ?? []).every((it) => ["NVDA", "AAPL", "VOO"].includes(it.symbol)), (brief?.items ?? []).map((i) => i.symbol).join(","));
 
   console.log("\n████ 5. Users with nothing tracked are skipped ████");
-  const { data: u2 } = await step("create second (empty) test user", () =>
-    admin.auth.admin.createUser({ email: `pt-insight-empty-${Date.now()}@example.org`, password: "Test1234!pw", email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }),
-    15000,
-  );
-  if (u2?.user) {
-    created.push(u2.user.id);
-    const s2 = await step("runDailyBriefs for the empty user (should no-op)", () => runDailyBriefs({ onlyUserIds: [u2.user.id] }), 30000);
-    assert("no brief for a user with no holdings/watchlist", s2.briefsWritten === 0 && s2.usersConsidered === 0, JSON.stringify(s2));
-  }
+  const { uid: uid2 } = await step("create second (empty) test user", () => createTestUser(admin, `pt-insight-empty-${Date.now()}@example.org`, "Test1234!pw"), 15000);
+  created.push(uid2);
+  const s2 = await step("runDailyBriefs for the empty user (should no-op)", () => runDailyBriefs({ onlyUserIds: [uid2] }), 30000);
+  assert("no brief for a user with no holdings/watchlist", s2.briefsWritten === 0 && s2.usersConsidered === 0, JSON.stringify(s2));
 }
 
 main()

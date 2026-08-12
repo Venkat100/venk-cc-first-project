@@ -26,6 +26,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { createTestUser } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 
 function ts() {
@@ -71,11 +72,7 @@ const created: string[] = [];
 async function main() {
   console.log("\n████ 1. Fresh signup starts at exactly $25,000.00 ████");
   const email1 = `pt-acct-fresh-${Date.now()}@example.org`;
-  const u1 = await step("create user (via admin.createUser -> handle_new_user trigger)", () =>
-    admin.auth.admin.createUser({ email: email1, password: PASSWORD_A, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }),
-  );
-  if (u1.error || !u1.data.user) throw new Error("createUser: " + u1.error?.message);
-  const uid1 = u1.data.user.id;
+  const { uid: uid1 } = await step("create user (via admin.createUser -> handle_new_user trigger)", () => createTestUser(admin, email1, PASSWORD_A));
   created.push(uid1);
   const p1 = await step("read profile", () =>
     admin.from("profiles").select("cash_balance, starting_capital").eq("id", uid1).single(),
@@ -128,9 +125,7 @@ async function main() {
 
   console.log("\n████ 4. Delete account — seed all 16 user-scoped tables, delete, prove zero rows remain everywhere ████");
   const email2 = `pt-acct-delete-${Date.now()}@example.org`;
-  const u2 = await step("create the account to be deleted", () => admin.auth.admin.createUser({ email: email2, password: PASSWORD_A, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }), 15000);
-  if (u2.error || !u2.data.user) throw new Error("createUser (delete target): " + u2.error?.message);
-  const uid2 = u2.data.user.id;
+  const { uid: uid2 } = await step("create the account to be deleted", () => createTestUser(admin, email2, PASSWORD_A), 15000);
   // NOT pushed to `created` — this account is the thing under test; if
   // deletion fails, cleanup below (the finally block) still catches it.
   const today = new Date().toISOString().slice(0, 10);
@@ -227,9 +222,7 @@ async function main() {
 
   console.log("\n████ 5. Reset targets the CURRENT default ($25,000), independent of an account's original starting_capital ████");
   const email3 = `pt-acct-oldstyle-${Date.now()}@example.org`;
-  const u3 = await step("create a fresh account (starts at 25000, per item 1)", () => admin.auth.admin.createUser({ email: email3, password: PASSWORD_A, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }), 15000);
-  if (u3.error || !u3.data.user) throw new Error("createUser (reset target): " + u3.error?.message);
-  const uid3 = u3.data.user.id;
+  const { uid: uid3 } = await step("create a fresh account (starts at 25000, per item 1)", () => createTestUser(admin, email3, PASSWORD_A), 15000);
   created.push(uid3);
   // Simulate an OLD-style ($100k) account by directly setting starting_capital
   // back to 100000 — recreating the pre-migration cohort this account would

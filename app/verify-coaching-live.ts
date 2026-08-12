@@ -26,6 +26,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { createTestUser } from "./verify-harness";
 import { checkAnswers, quizFor, OPTIONS_QUIZ, MARGIN_QUIZ } from "@/lib/coaching/quiz";
 import { computeUnlockStatus } from "@/lib/coaching/unlocks";
 import { computeExperienceLevel, type ExperienceInputs } from "@/lib/coaching/level";
@@ -69,12 +70,9 @@ const created: string[] = [];
 
 async function createUser(label: string, stamp: number): Promise<{ uid: string; email: string }> {
   const email = `pt-coach-${label}-${stamp}@example.org`;
-  const res = await step(`create user ${label}`, () =>
-    admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }),
-  );
-  if (res.error || !res.data.user) throw new Error(`create user ${label} failed: ${res.error?.message}`);
-  created.push(res.data.user.id);
-  return { uid: res.data.user.id, email };
+  const { uid } = await step(`create user ${label}`, () => createTestUser(admin, email, PASSWORD));
+  created.push(uid);
+  return { uid, email };
 }
 
 async function signIn(email: string) {

@@ -13,6 +13,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { createTestUser } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
@@ -60,11 +61,8 @@ async function main() {
   console.log("\n████ Setup ████");
   const emailA = `pt-c1b-rich-${stamp}@example.org`;
   const emailB = `pt-c1b-other-${stamp}@example.org`;
-  const createdA = await step("create rich test user (A)", 15000, () => admin.auth.admin.createUser({ email: emailA, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
-  const createdB = await step("create isolation test user (B)", 15000, () => admin.auth.admin.createUser({ email: emailB, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
-  if (createdA.error || !createdA.data.user || createdB.error || !createdB.data.user) throw new Error(`user creation failed: ${createdA.error?.message} ${createdB.error?.message}`);
-  const uidA = createdA.data.user.id;
-  const uidB = createdB.data.user.id;
+  const { uid: uidA } = await step("create rich test user (A)", 15000, () => createTestUser(admin, emailA, PASSWORD));
+  const { uid: uidB } = await step("create isolation test user (B)", 15000, () => createTestUser(admin, emailB, PASSWORD));
   console.log(`  user A (rich): ${emailA} (${uidA})`);
   console.log(`  user B (isolation check): ${emailB} (${uidB})`);
 

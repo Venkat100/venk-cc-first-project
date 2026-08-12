@@ -20,6 +20,7 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { getDailyHistory } from "@/lib/marketData/dailyHistory.server";
 import { runExpiryProcessing } from "@/lib/options/expiry.server";
 import { runSnapshots } from "@/lib/snapshots/writer.server";
+import { createTestUser } from "./verify-harness";
 
 let failures = 0;
 function assert(name: string, cond: boolean, detail = "") {
@@ -48,9 +49,7 @@ console.log("\n████ Setup ████");
 const stamp = Date.now();
 const email = `pt-o4-verify-${stamp}@example.org`;
 const password = "O4VerifyPass!234";
-const { data: created, error: createErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } });
-if (createErr || !created.user) throw new Error(`user creation failed: ${createErr?.message}`);
-const userId = created.user.id;
+const { uid: userId } = await createTestUser(admin, email, password);
 console.log(`  test user: ${email} (${userId})`);
 
 async function cash(): Promise<number> {

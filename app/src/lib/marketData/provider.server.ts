@@ -39,6 +39,29 @@ function assertOk(json: any) {
   }
 }
 
+// Root-caused 2026-08-11 (scenario-challenges verification incident): a
+// bare `fetch()` with a stalled connection has NOTHING to convert it into a
+// rejection — it just hangs forever, and nothing downstream (a verify
+// script's own timeout wrapper, a server function's caller, a browser
+// request) can do anything but wait with it. Every provider fetch goes
+// through this instead, so a real network stall fails loudly and specifically
+// after FETCH_TIMEOUT_MS rather than hanging the request indefinitely.
+const FETCH_TIMEOUT_MS = 20_000;
+async function fetchWithTimeout(url: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new ProviderError(`Provider request timed out after ${FETCH_TIMEOUT_MS}ms`, 408);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── Range → Twelve Data interval/outputsize ─────────────────────────────
 const RANGE_CFG: Record<Range, { interval: string; outputsize: number }> = {
   "1D": { interval: "5min", outputsize: 78 },
@@ -53,7 +76,7 @@ async function tdCandles(symbol: string, range: Range): Promise<Candle[]> {
   const apikey = requireServerEnv("TWELVEDATA_API_KEY");
   const { interval, outputsize } = RANGE_CFG[range];
   const url = `${TD_BASE}/time_series?symbol=${encodeURIComponent(symbol.toUpperCase())}&interval=${interval}&outputsize=${outputsize}&apikey=${apikey}`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (!res.ok) throw new ProviderError(`Provider HTTP ${res.status}`, res.status);
   const json: any = await res.json();
   assertOk(json);
@@ -71,14 +94,19 @@ async function tdCandles(symbol: string, range: Range): Promise<Candle[]> {
     .reverse();
 }
 
-// Daily candles from a start date up to today, ascending. Used by the
-// What-If Simulator (arbitrary historical windows). If start_date predates the
-// symbol's listing, Twelve Data returns from the earliest available day — the
-// caller treats that first day as "earliest available".
-async function tdSeriesSince(symbol: string, startDate: string): Promise<Candle[]> {
+// Daily candles from a start date up to an end date (or today, if omitted),
+// ascending. Used by the What-If Simulator (arbitrary historical windows,
+// unbounded end) and Scenario Challenges (a FIXED end date — bounding the
+// request avoids pulling years of unneeded candles past the scenario's own
+// window, which matters on the free tier's ~8 credits/min budget). If
+// start_date predates the symbol's listing, Twelve Data returns from the
+// earliest available day — the caller treats that first day as "earliest
+// available".
+async function tdSeriesSince(symbol: string, startDate: string, endDate?: string): Promise<Candle[]> {
   const apikey = requireServerEnv("TWELVEDATA_API_KEY");
-  const url = `${TD_BASE}/time_series?symbol=${encodeURIComponent(symbol.toUpperCase())}&interval=1day&start_date=${startDate}&order=ASC&outputsize=5000&apikey=${apikey}`;
-  const res = await fetch(url);
+  const endParam = endDate ? `&end_date=${endDate}` : "";
+  const url = `${TD_BASE}/time_series?symbol=${encodeURIComponent(symbol.toUpperCase())}&interval=1day&start_date=${startDate}${endParam}&order=ASC&outputsize=5000&apikey=${apikey}`;
+  const res = await fetchWithTimeout(url);
   if (!res.ok) throw new ProviderError(`Provider HTTP ${res.status}`, res.status);
   const json: any = await res.json();
   assertOk(json);
@@ -98,9 +126,9 @@ export async function providerCandles(symbol: string, range: Range): Promise<Can
   return tdCandles(symbol, range);
 }
 
-/** Daily candles from `startDate` (YYYY-MM-DD) to today, ascending (Twelve Data). */
-export async function providerSeries(symbol: string, startDate: string): Promise<Candle[]> {
-  return tdSeriesSince(symbol, startDate);
+/** Daily candles from `startDate` to `endDate` (or today, if omitted), ascending (Twelve Data). */
+export async function providerSeries(symbol: string, startDate: string, endDate?: string): Promise<Candle[]> {
+  return tdSeriesSince(symbol, startDate, endDate);
 }
 
 /** Diagnostics: which provider serves what. */

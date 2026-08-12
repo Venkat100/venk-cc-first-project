@@ -25,6 +25,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { createTestUser } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
@@ -69,9 +70,7 @@ async function main() {
   const stamp = Date.now();
   const PASSWORD = "HardenPass!234";
   const email = `pt-hardening-${stamp}@example.org`;
-  const created = await step("create test user", 15000, () => admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
-  if (created.error || !created.data.user) throw new Error(`user creation failed: ${created.error?.message}`);
-  const uid = created.data.user.id;
+  const { uid } = await step("create test user", 15000, () => createTestUser(admin, email, PASSWORD));
   console.log(`  primary test user: ${email} (${uid})`);
   const client = createClient(anonUrl, anonKey);
   const signIn = await step("sign in", 15000, () => client.auth.signInWithPassword({ email, password: PASSWORD }));

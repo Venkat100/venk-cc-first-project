@@ -17,6 +17,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { createTestUser } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { computeBehavioralAnalytics } from "@/lib/behavioral/metrics";
 import type { Transaction, OptionTransaction } from "@/lib/supabase/types";
@@ -74,15 +75,8 @@ async function main() {
   const stamp = Date.now();
   const emailA = `pt-behav-a-${stamp}@example.org`;
   const emailB = `pt-behav-b-${stamp}@example.org`;
-  const userA = await step("create user A", () =>
-    admin.auth.admin.createUser({ email: emailA, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }),
-  );
-  const userB = await step("create user B", () =>
-    admin.auth.admin.createUser({ email: emailB, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }),
-  );
-  if (userA.error || !userA.data.user || userB.error || !userB.data.user) throw new Error("user creation failed");
-  const uidA = userA.data.user.id;
-  const uidB = userB.data.user.id;
+  const { uid: uidA } = await step("create user A", () => createTestUser(admin, emailA, PASSWORD));
+  const { uid: uidB } = await step("create user B", () => createTestUser(admin, emailB, PASSWORD));
   created.push(uidA, uidB);
   console.log(`  user A: ${emailA} (${uidA})`);
   console.log(`  user B: ${emailB} (${uidB})`);

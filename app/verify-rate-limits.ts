@@ -13,6 +13,7 @@
 // different action are both unaffected by another user's exhausted limit.
 
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { createTestUser } from "./verify-harness";
 import { checkAndRecordRateLimit, RATE_LIMITS } from "@/lib/rateLimit/check.server";
 
 let failures = 0;
@@ -51,9 +52,7 @@ async function countEvents(userId: string, action: string): Promise<number> {
 async function main() {
   console.log("\n████ Setup: real throwaway test user ████");
   const email = `pt-ratelimit-verify-${Date.now()}@example.org`;
-  const created = await step("create test user", () => admin.auth.admin.createUser({ email, password: "Test1234!pw", email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
-  if (created.error || !created.data.user) throw new Error(`user creation failed: ${created.error?.message}`);
-  const userId = created.data.user.id;
+  const { uid: userId } = await step("create test user", () => createTestUser(admin, email, "Test1234!pw"));
   console.log(`  test user: ${email} (${userId})`);
 
   console.log(`\n████ 1. REAL burst limit — agentRun (${RATE_LIMITS.agentRun.burstLimit}/${RATE_LIMITS.agentRun.burstWindowSeconds}s) ████`);
@@ -121,9 +120,7 @@ async function main() {
   assert("same 'burst' reason as the normal path", rawResult.reason === "burst", rawResult.reason);
 
   console.log("\n████ 4. Scoping — a DIFFERENT user and a DIFFERENT action are both unaffected ████");
-  const otherUser = await step("create a second, unrelated test user", () => admin.auth.admin.createUser({ email: `pt-ratelimit-verify-other-${Date.now()}@example.org`, password: "Test1234!pw", email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
-  if (otherUser.error || !otherUser.data.user) throw new Error("second user creation failed");
-  const otherUserId = otherUser.data.user.id;
+  const { uid: otherUserId } = await step("create a second, unrelated test user", () => createTestUser(admin, `pt-ratelimit-verify-other-${Date.now()}@example.org`, "Test1234!pw"));
   const otherUserCheck = await step("a DIFFERENT user's agent_run call, same action name", () => checkAndRecordRateLimit(otherUserId, RATE_LIMITS.agentRun));
   assert("a different user is NOT affected by the first user's exhausted limit", otherUserCheck.allowed === true, JSON.stringify(otherUserCheck));
 

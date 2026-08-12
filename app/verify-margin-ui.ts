@@ -11,6 +11,7 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { getPositionsValue } from "@/lib/margin/valuation.server";
 import { runMarginMonitor } from "@/lib/margin/monitor.server";
 import { MARGIN_MAINTENANCE_PCT, MARGIN_WARNING_BUFFER_PCT } from "@/lib/margin/config.server";
+import { createTestUser } from "./verify-harness";
 
 function ts() { return new Date().toISOString().slice(11, 23); }
 function withTimeout<T>(label: string, p: Promise<T>, ms = 15000): Promise<T> {
@@ -34,9 +35,7 @@ async function main() {
     const stamp = Date.now();
     const PASSWORD = "M2VerifyPass!234";
     const email = `pt-m2-verify-${stamp}@example.org`;
-    const created = await step("create test user", 15000, () => admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
-    if (created.error || !created.data.user) throw new Error(`user creation failed: ${created.error?.message}`);
-    const uid = created.data.user.id;
+    const { uid } = await step("create test user", 15000, () => createTestUser(admin, email, PASSWORD));
     console.log(`\nEMAIL=${email}\nPASSWORD=${PASSWORD}\nUID=${uid}\nANON_URL=${env.VITE_SUPABASE_URL}\n`);
     return;
   }

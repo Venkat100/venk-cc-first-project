@@ -36,6 +36,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { createTestUser } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
@@ -94,9 +95,7 @@ async function main() {
   const stamp = Date.now();
   const PASSWORD = "M1VerifyPass!234";
   const email = `pt-m1-verify-${stamp}@example.org`;
-  const created = await step("create primary test user", 15000, () => admin.auth.admin.createUser({ email, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
-  if (created.error || !created.data.user) throw new Error(`user creation failed: ${created.error?.message}`);
-  const uid = created.data.user.id;
+  const { uid } = await step("create primary test user", 15000, () => createTestUser(admin, email, PASSWORD));
   console.log(`  primary test user: ${email} (${uid})`);
 
   const client = createClient(anonUrl, anonKey);
@@ -470,9 +469,7 @@ async function main() {
   console.log("\n████ (8) RLS isolation of margin_events (second, lightweight user) ████");
   {
     const email2 = `pt-m1-verify-rls-${stamp}@example.org`;
-    const created2 = await step("create second test user", 15000, () => admin.auth.admin.createUser({ email: email2, password: PASSWORD, email_confirm: true, user_metadata: { terms_accepted_version: "test-harness" } }));
-    if (created2.error || !created2.data.user) throw new Error(`second user creation failed: ${created2.error?.message}`);
-    const uid2 = created2.data.user.id;
+    const { uid: uid2 } = await step("create second test user", 15000, () => createTestUser(admin, email2, PASSWORD));
     console.log(`  second (lightweight) test user: ${email2} (${uid2})`);
     const client2 = createClient(anonUrl, anonKey);
     const signIn2 = await step("sign in second test user", 15000, () => client2.auth.signInWithPassword({ email: email2, password: PASSWORD }));
