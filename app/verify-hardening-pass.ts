@@ -27,6 +27,7 @@ import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
 import { createTestUser } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
+import { providerQuotes } from "@/lib/marketData/finnhub.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
 import { STARTING_CASH } from "@/lib/mockData";
@@ -48,6 +49,19 @@ function assert(name: string, cond: boolean, detail = "") {
 function money(n: number) { return `$${Number(n).toFixed(2)}`; }
 function round2(n: number) { return Math.round(n * 100) / 100; }
 function closeTo(a: number, b: number, eps = 0.02) { return Math.abs(a - b) <= eps; }
+// For comparisons that legitimately span TWO INDEPENDENT live-price fetches
+// (e.g. this test's own reconstruction vs. getPositionsValue()'s/
+// runSnapshots()'s OWN internal fetch, each a genuinely separate network
+// call — margin/snapshot code deliberately never uses the quote cache for
+// a money-critical number, see valuation.server.ts's own doc comment) a
+// real market symbol can tick between the two calls. That's not a bug in
+// either code path; it's the real, if tiny, cost of always-live pricing.
+// 5bps of the reference value (min 2¢) comfortably covers realistic
+// sub-second tick noise for a liquid symbol while staying ~1000x tighter
+// than the smallest real bug this test exists to catch (the original
+// missing-loan-subtraction bug this file is named for overstated net worth
+// by the FULL loan amount, not a few basis points).
+function closeToLive(a: number, b: number) { return closeTo(a, b, Math.max(0.02, Math.abs(b) * 0.0005)); }
 function ts() { return new Date().toISOString().slice(11, 23); }
 function withTimeout<T>(label: string, p: Promise<T>, ms = 20000): Promise<T> {
   return Promise.race([p, new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`STEP TIMEOUT after ${ms}ms: ${label}`)), ms))]);
@@ -176,10 +190,22 @@ async function main() {
     const { data: holdings } = await admin.from("holdings").select("symbol, quantity").eq("user_id", uid);
     const optionPositions = await getEnrichedOptionPositions(uid);
     const optionsValue = round2(optionPositions.reduce((s, x) => s + x.marketValue, 0));
+    // ONE batched, uncached fetch — not a per-symbol loop through the 30s-TTL
+    // quote cache (TTL.quote in cache.server.ts). getPositionsValue() below
+    // ALSO always fetches live, never cached (by design, for a money number)
+    // — comparing a cached-up-to-30s-stale price against an always-live one
+    // was the actual, avoidable root cause of this test's flake (a real,
+    // if small, live-quote drift masquerading as a bug). Matching Dashboard's
+    // own reconstruction to the SAME always-live mechanism getPositionsValue
+    // uses internally shrinks the remaining race window from "up to 30s" to
+    // "the real network gap between two back-to-back live fetches" —
+    // covered by closeToLive()'s small, documented tolerance below.
     let holdingsValue = 0;
-    for (const h of holdings ?? []) {
-      const q = await getServerQuote(h.symbol);
-      holdingsValue += q.price * Number(h.quantity);
+    if (holdings && holdings.length > 0) {
+      const symbols = [...new Set(holdings.map((h) => h.symbol))];
+      const quotes = await providerQuotes(symbols);
+      const priceMap = new Map(quotes.map((q) => [q.symbol, q.price]));
+      for (const h of holdings) holdingsValue += (priceMap.get(h.symbol) ?? 0) * Number(h.quantity);
     }
     holdingsValue = round2(holdingsValue);
 
@@ -198,8 +224,8 @@ async function main() {
     const positionsValue = await step("getPositionsValue (margin engine's own number)", 20000, () => getPositionsValue(uid));
     const marginEquity = round2(p.cash + positionsValue - p.marginLoan);
     console.log(`  Margin page equity = cash+positions-loan = ${money(p.cash)}+${money(positionsValue)}-${money(p.marginLoan)} = ${money(marginEquity)}`);
-    assert("positionsValue (margin engine) === holdingsValue+optionsValue (Dashboard) to the cent", closeTo(positionsValue, holdingsValue + optionsValue), `${positionsValue} vs ${holdingsValue + optionsValue}`);
-    assert("Dashboard total === Margin page equity, to the cent", closeTo(dashboardTotal, marginEquity), `${dashboardTotal} vs ${marginEquity}`);
+    assert("positionsValue (margin engine) === holdingsValue+optionsValue (Dashboard), within live-quote drift", closeToLive(positionsValue, holdingsValue + optionsValue), `${positionsValue} vs ${holdingsValue + optionsValue}`);
+    assert("Dashboard total === Margin page equity, within live-quote drift", closeToLive(dashboardTotal, marginEquity), `${dashboardTotal} vs ${marginEquity}`);
 
     // What the daily snapshot writer computes (the FIXED code, real function call).
     const snapSummary = await step("runSnapshots({onlyUserId}) — the real writer, post-fix", 25000, () => runSnapshots({ onlyUserId: uid }));
@@ -207,13 +233,13 @@ async function main() {
     const today = new Date().toISOString().slice(0, 10);
     const { data: snapRow } = await admin.from("portfolio_snapshots").select("total_value, cash, holdings_value").eq("user_id", uid).eq("captured_at", today).single();
     console.log(`  Snapshot row: total_value=${money(Number(snapRow?.total_value))} cash=${money(Number(snapRow?.cash))} holdings_value=${money(Number(snapRow?.holdings_value))}`);
-    assert("Snapshot total_value === Dashboard total === Margin equity, ALL to the cent", closeTo(Number(snapRow?.total_value), dashboardTotal), `${snapRow?.total_value} vs ${dashboardTotal}`);
+    assert("Snapshot total_value === Dashboard total === Margin equity, ALL within live-quote drift", closeToLive(Number(snapRow?.total_value), dashboardTotal), `${snapRow?.total_value} vs ${dashboardTotal}`);
 
     // Agent isolation check, folded in here since we already have all 3 pulled:
     const { data: agentCfg } = await admin.from("agent_config").select("agent_cash").eq("user_id", uid).single();
     const { data: agentHoldings } = await admin.from("agent_holdings").select("symbol, quantity").eq("user_id", uid);
     assert("agent_cash/agent_holdings exist (agent really traded)", !!agentCfg && (agentHoldings ?? []).length > 0, `agent_cash=${agentCfg?.agent_cash}, holdings=${(agentHoldings ?? []).length}`);
-    assert("main positionsValue (margin engine) does NOT include agent_holdings", closeTo(positionsValue, holdingsValue + optionsValue), "confirms getPositionsValue only reads `holdings`+`option_positions`, never `agent_holdings`");
+    assert("main positionsValue (margin engine) does NOT include agent_holdings", closeToLive(positionsValue, holdingsValue + optionsValue), "confirms getPositionsValue only reads `holdings`+`option_positions`, never `agent_holdings`");
   }
 
   // ══════════════════════════════════════════════════════════════════════
