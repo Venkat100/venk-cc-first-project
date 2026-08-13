@@ -169,6 +169,7 @@ function StockDetail() {
                   <Stat label="Prev close" value={quote.previousClose != null ? fmtUSD(quote.previousClose) : "—"} />
                   <Stat label="Market cap" value={quote.marketCap != null ? `$${fmtCompact(quote.marketCap)}` : "—"} />
                   <Stat label="52-wk range" value={quote.week52Low != null && quote.week52High != null ? `${fmtUSD(quote.week52Low)} – ${fmtUSD(quote.week52High)}` : "—"} />
+                  <FundamentalsRow quote={quote} />
                 </>
               ) : (
                 <div className="col-span-full"><LoadingState label="Loading stats…" /></div>
@@ -404,6 +405,52 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "ga
       <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className={cn("mt-1 text-sm font-medium tabular", tone === "gain" && "text-[color:var(--color-gain)]", tone === "loss" && "text-[color:var(--color-loss)]")}>{value}</p>
     </div>
+  );
+}
+
+// Key Stats row 2 — fields already sitting in the /stock/metric response
+// finnhub.server.ts fetches for every symbol (52-wk range came from the
+// same call before this). Zero new API cost (2026-08-13 app audit, Part
+// 4/6). ETFs return almost none of the stock-fundamentals fields below
+// (no P/E, no margins — a real limitation of the instrument, not a fetch
+// failure), so this renders whichever fields the quote actually carries
+// and OMITS the rest entirely — never a dash grid. Each entry is built,
+// then filtered, so a symbol with 2 populated fields shows exactly 2
+// Stats, not 2 real values next to 8 placeholders.
+function FundamentalsRow({ quote }: { quote: Quote }) {
+  const entries: { label: string; value: string; tone?: "gain" | "loss" }[] = [];
+  const push = (cond: number | undefined, label: string, format: (n: number) => { value: string; tone?: "gain" | "loss" }) => {
+    if (cond == null || Number.isNaN(cond)) return;
+    entries.push({ label, ...format(cond) });
+  };
+
+  // Stock fundamentals — absent by design for ETFs/funds.
+  push(quote.peTTM, "P/E (TTM)", (n) => ({ value: n.toFixed(1) }));
+  push(quote.epsTTM, "EPS (TTM)", (n) => ({ value: fmtUSD(n) }));
+  push(quote.dividendYieldPct, "Dividend yield", (n) => ({ value: `${n.toFixed(2)}%` }));
+  push(quote.netMarginPct, "Net margin", (n) => ({ value: fmtPct(n), tone: n >= 0 ? "gain" : "loss" }));
+  push(quote.roePct, "ROE", (n) => ({ value: fmtPct(n), tone: n >= 0 ? "gain" : "loss" }));
+  push(quote.debtToEquity, "Debt/equity", (n) => ({ value: `${n.toFixed(2)}×` }));
+  push(quote.revenueGrowthYoYPct, "Revenue growth (YoY)", (n) => ({ value: fmtPct(n), tone: n >= 0 ? "gain" : "loss" }));
+  push(quote.psTTM, "P/S (TTM)", (n) => ({ value: n.toFixed(1) }));
+  push(quote.bookValuePerShare, "Book value/share", (n) => ({ value: fmtUSD(n) }));
+
+  // ETF/fund substitute — populated whenever the metric call succeeds at
+  // all, stocks and funds alike, so these fill the row for instruments
+  // with none of the fields above.
+  if (entries.length === 0) {
+    push(quote.beta, "Beta", (n) => ({ value: n.toFixed(2) }));
+    push(quote.priceReturn13wPct, "13-wk return", (n) => ({ value: fmtPct(n), tone: n >= 0 ? "gain" : "loss" }));
+    push(quote.priceReturnYtdPct, "YTD return", (n) => ({ value: fmtPct(n), tone: n >= 0 ? "gain" : "loss" }));
+  }
+
+  if (entries.length === 0) return null;
+  return (
+    <>
+      {entries.map((e) => (
+        <Stat key={e.label} label={e.label} value={e.value} tone={e.tone} />
+      ))}
+    </>
   );
 }
 

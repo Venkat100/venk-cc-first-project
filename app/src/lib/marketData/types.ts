@@ -29,6 +29,27 @@ export type Quote = {
   weburl?: string;
   country?: string;
   ipo?: string; // YYYY-MM-DD
+  // Fundamentals — same /stock/metric?metric=all call already made for
+  // week52High/Low (PLAN.md app audit, 2026-08-13: this response was being
+  // fetched and almost entirely discarded). Genuinely absent (not merely
+  // zero) for ETFs/funds, which have no per-share earnings or debt
+  // structure of their own — callers must treat `undefined` as "doesn't
+  // apply to this instrument," not as a loading/error state.
+  peTTM?: number;
+  epsTTM?: number;
+  dividendYieldPct?: number;
+  netMarginPct?: number; // can be negative for unprofitable companies — a real number, not an error
+  roePct?: number;
+  debtToEquity?: number;
+  revenueGrowthYoYPct?: number;
+  psTTM?: number;
+  bookValuePerShare?: number;
+  // Populated for instruments that lack the fundamentals above (ETFs) as a
+  // meaningful substitute — always present when the metric call succeeds,
+  // for stocks and funds alike.
+  beta?: number;
+  priceReturn13wPct?: number;
+  priceReturnYtdPct?: number;
 };
 
 export type Candle = {

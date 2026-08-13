@@ -99,15 +99,53 @@ async function fhProfile(symbol: string): Promise<Profile> {
   });
 }
 
-async function fh52Week(symbol: string): Promise<{ high?: number; low?: number }> {
-  return durableCached("metric52w", symbol, "", METRIC_TTL, async () => {
-    let out: { high?: number; low?: number } = {};
+// The Key Stats fields a Stock Detail page can show, extracted from the
+// SAME /stock/metric?metric=all call already made here for 52-week
+// high/low — zero new API calls (2026-08-13 app audit, Part 4/6). Every
+// field is independently optional: ETFs return ~19 of these ~133 possible
+// keys (no fundamentals at all, real limitation of the instrument type,
+// not a fetch failure), so callers render whichever fields exist and hide
+// the rest rather than showing a placeholder for something that
+// structurally doesn't apply.
+type Fundamentals = {
+  high?: number;
+  low?: number;
+  peTTM?: number;
+  epsTTM?: number;
+  dividendYieldPct?: number;
+  netMarginPct?: number;
+  roePct?: number;
+  debtToEquity?: number;
+  revenueGrowthYoYPct?: number;
+  psTTM?: number;
+  bookValuePerShare?: number;
+  beta?: number;
+  priceReturn13wPct?: number;
+  priceReturnYtdPct?: number;
+};
+
+async function fhFundamentals(symbol: string): Promise<Fundamentals> {
+  return durableCached("fundamentals", symbol, "", METRIC_TTL, async () => {
+    let out: Fundamentals = {};
     try {
       const raw = await fhGet(`/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all`);
       const m = raw?.metric ?? {};
+      const g = (k: string) => (m[k] != null ? num(m[k]) : undefined);
       out = {
-        high: m["52WeekHigh"] != null ? num(m["52WeekHigh"]) : undefined,
-        low: m["52WeekLow"] != null ? num(m["52WeekLow"]) : undefined,
+        high: g("52WeekHigh"),
+        low: g("52WeekLow"),
+        peTTM: g("peBasicExclExtraTTM"),
+        epsTTM: g("epsBasicExclExtraItemsTTM"),
+        dividendYieldPct: g("dividendYieldIndicatedAnnual"),
+        netMarginPct: g("netProfitMarginTTM"),
+        roePct: g("roeTTM"),
+        debtToEquity: g("totalDebt/totalEquityAnnual"),
+        revenueGrowthYoYPct: g("revenueGrowthTTMYoy"),
+        psTTM: g("psTTM"),
+        bookValuePerShare: g("bookValuePerShareAnnual"),
+        beta: g("beta"),
+        priceReturn13wPct: g("13WeekPriceReturnDaily"),
+        priceReturnYtdPct: g("yearToDatePriceReturnDaily"),
       };
     } catch {
       // best-effort
@@ -141,10 +179,10 @@ async function resolveSymbolName(symbol: string): Promise<string | undefined> {
 async function fhQuote(symbol: string): Promise<Quote> {
   const sym = symbol.toUpperCase();
   // Live quote (cheap) + cached profile/metric enrichment, in parallel.
-  const [q, profile, fw] = await Promise.all([
+  const [q, profile, fund] = await Promise.all([
     fhGet(`/quote?symbol=${encodeURIComponent(sym)}`),
     fhProfile(sym),
-    fh52Week(sym),
+    fhFundamentals(sym),
   ]);
   const price = num(q?.c);
   const change = num(q?.d);
@@ -164,14 +202,26 @@ async function fhQuote(symbol: string): Promise<Quote> {
     low: q?.l != null ? num(q.l) : undefined,
     previousClose: q?.pc != null ? num(q.pc) : undefined,
     volume: undefined, // Finnhub /quote has no intraday volume on free tier
-    week52High: fw.high,
-    week52Low: fw.low,
+    week52High: fund.high,
+    week52Low: fund.low,
     marketCap: profile.marketCap,
     logo: profile.logo,
     exchange: profile.exchange,
     weburl: profile.weburl,
     country: profile.country,
     ipo: profile.ipo,
+    peTTM: fund.peTTM,
+    epsTTM: fund.epsTTM,
+    dividendYieldPct: fund.dividendYieldPct,
+    netMarginPct: fund.netMarginPct,
+    roePct: fund.roePct,
+    debtToEquity: fund.debtToEquity,
+    revenueGrowthYoYPct: fund.revenueGrowthYoYPct,
+    psTTM: fund.psTTM,
+    bookValuePerShare: fund.bookValuePerShare,
+    beta: fund.beta,
+    priceReturn13wPct: fund.priceReturn13wPct,
+    priceReturnYtdPct: fund.priceReturnYtdPct,
   };
 }
 
