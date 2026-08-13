@@ -10,13 +10,13 @@
 //  Call sites fetch via react-query and render loading/empty/error states.
 // ════════════════════════════════════════════════════════════════════════
 
-import { getQuotesFn, getCandlesFn, searchSymbolsFn, getCompanyNewsFn, getContentAvailabilityFn, type ContentAvailability } from "./functions";
+import { getQuotesFn, getCandlesFn, searchSymbolsFn, getCompanyNewsFn, getContentAvailabilityFn, getStockEnrichmentFn, type ContentAvailability } from "./functions";
 import { getStock } from "@/lib/mockData";
-import type { Candle, Quote, Range, SymbolMatch, NewsItem } from "./types";
+import type { Candle, Quote, Range, SymbolMatch, NewsItem, StockEnrichment } from "./types";
 
 export type { ContentAvailability } from "./functions";
 
-export type { Candle, Quote, Range, SymbolMatch, NewsItem } from "./types";
+export type { Candle, Quote, Range, SymbolMatch, NewsItem, StockEnrichment, NextEarnings, EarningsSurprise, RecommendationTrendPoint } from "./types";
 
 // Curated universe shown on the Markets page. Kept small to respect the
 // Twelve Data free tier (≈8 credits/min). Names/sectors come from curated
@@ -67,6 +67,14 @@ export async function getCompanyNews(symbol: string): Promise<NewsItem[]> {
   const res = await getCompanyNewsFn({ data: { symbol: symbol.toUpperCase() } });
   if (!res.ok) throw new Error(res.error);
   return res.items;
+}
+
+/** Stock page enrichment, phase 2: next earnings date, EPS surprise
+ *  history, analyst recommendation trend, peer tickers. */
+export async function getStockEnrichment(symbol: string): Promise<StockEnrichment> {
+  const res = await getStockEnrichmentFn({ data: { symbol: symbol.toUpperCase() } });
+  if (!res.ok) throw new Error(res.error);
+  return res.data;
 }
 
 /** Which of these symbols already have fresh cached news / today's AI

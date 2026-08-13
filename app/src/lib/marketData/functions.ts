@@ -9,10 +9,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { providerCandles } from "./provider.server";
-import { providerQuotes, providerSearch, fhCompanyNews } from "./finnhub.server";
+import { providerQuotes, providerSearch, fhCompanyNews, fhStockEnrichment } from "./finnhub.server";
 import { durableCached, durablePeekMany, durablePutMany, TTL } from "./cache.server";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import type { Candle, Quote, SymbolMatch, NewsItem } from "./types";
+import type { Candle, Quote, SymbolMatch, NewsItem, StockEnrichment } from "./types";
 
 const RANGES = ["1D", "1W", "1M", "3M", "1Y", "ALL"] as const;
 
@@ -73,6 +73,25 @@ export const getCompanyNewsFn = createServerFn({ method: "POST" })
       return { ok: true, items };
     } catch {
       return { ok: false, error: "Couldn't load news right now — the provider may be rate-limited. Try again shortly." };
+    }
+  });
+
+export type StockEnrichmentResponse = { ok: true; data: StockEnrichment } | { ok: false; error: string };
+
+/** Stock page enrichment, phase 2 (2026-08-14): next earnings date, EPS
+ *  surprise history, analyst recommendation trend, peer tickers. Not
+ *  user-specific — same no-auth pattern as quotes/candles/search/news.
+ *  One round trip for all four; each is independently cached/best-effort
+ *  server-side (see fhStockEnrichment), so this can never partially fail —
+ *  worst case a field comes back empty and the UI hides that section. */
+export const getStockEnrichmentFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ symbol: z.string().min(1) }))
+  .handler(async ({ data }): Promise<StockEnrichmentResponse> => {
+    try {
+      const enrichment = await fhStockEnrichment(data.symbol.toUpperCase());
+      return { ok: true, data: enrichment };
+    } catch {
+      return { ok: false, error: "Couldn't load earnings/analyst data right now. Try again shortly." };
     }
   });
 
