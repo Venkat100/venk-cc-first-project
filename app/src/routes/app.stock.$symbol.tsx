@@ -11,7 +11,7 @@ import { LivePriceChart } from "@/components/LivePriceChart";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { StockInsightBody, AiDisclaimer } from "@/components/InsightUI";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
-import { getCompanyNews, type NewsItem, type Quote } from "@/lib/marketData";
+import { getCompanyNews, getStockEnrichment, type NewsItem, type Quote, type StockEnrichment, type NextEarnings, type EarningsSurprise, type RecommendationTrendPoint } from "@/lib/marketData";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useTickFlash } from "@/lib/marketData/useTickFlash";
 import { getStockInsight } from "@/lib/insights/api";
@@ -97,6 +97,16 @@ function StockDetail() {
   const quotesQ = useQuotes(allSymbols);
   const quote = quotesQ.data?.get(symbol);
   const priceFlash = useTickFlash(quote?.price);
+  // Stock page enrichment, phase 2: earnings/analyst/peer data. Near-static
+  // (server caches 24h — see finnhub.server.ts), so a long client staleTime
+  // just avoids a redundant round trip on remounts within the same session;
+  // the server-side cache is the real backstop against re-fetching Finnhub.
+  const enrichmentQ = useQuery({
+    queryKey: ["stockEnrichment", symbol],
+    queryFn: () => getStockEnrichment(symbol),
+    staleTime: 6 * 60 * 60_000,
+    retry: 1,
+  });
   const portfolioPricesReady = quotesQ.isSuccess;
   const holdingsValue = (holdingsQ.data ?? []).reduce((sum, h) => sum + quoteOf(quotesQ.data, h.symbol).price * h.quantity, 0);
   const allOptionsValue = (optionPositionsQ.data ?? []).reduce((sum, p) => sum + p.marketValue, 0);
@@ -177,6 +187,8 @@ function StockDetail() {
             </CardContent>
           </Card>
 
+          <EarningsAndAnalystsCard data={enrichmentQ.data} isLoading={enrichmentQ.isLoading} />
+
           <InsightCard symbol={symbol} />
 
           <Card>
@@ -240,7 +252,7 @@ function StockDetail() {
                   <NewsTab symbol={symbol} />
                 </TabsContent>
                 <TabsContent value="about" className="mt-4">
-                  <AboutTab symbol={symbol} quote={quote} />
+                  <AboutTab symbol={symbol} quote={quote} peers={enrichmentQ.data?.peers ?? []} />
                 </TabsContent>
                 <TabsContent value="trades" className="mt-4">
                   {recent.length ? (
@@ -399,6 +411,130 @@ function InsightCard({ symbol }: { symbol: string }) {
   );
 }
 
+// Stock page enrichment, phase 2 (2026-08-14) — next earnings date, EPS
+// surprise history, analyst recommendation trend. Genuinely empty for
+// ETFs (Finnhub returns 200 with no data, not an error) — the whole card
+// hides itself rather than showing a heading over nothing, same rule as
+// Key Stats' FundamentalsRow below. Educational framing throughout: these
+// are counts of estimates/opinions, never advice or a prediction.
+function EarningsAndAnalystsCard({ data, isLoading }: { data?: StockEnrichment; isLoading: boolean }) {
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base">Earnings &amp; analysts</CardTitle></CardHeader>
+        <CardContent><LoadingState label="Loading earnings & analyst data…" /></CardContent>
+      </Card>
+    );
+  }
+  const hasEarningsDate = !!data?.nextEarnings;
+  const hasSurprises = (data?.earningsSurprises?.length ?? 0) > 0;
+  const hasRecs = (data?.recommendationTrend?.length ?? 0) > 0;
+  if (!hasEarningsDate && !hasSurprises && !hasRecs) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-base">Earnings &amp; analysts</CardTitle></CardHeader>
+      <CardContent className="space-y-6">
+        {hasEarningsDate && <NextEarningsRow earnings={data!.nextEarnings!} />}
+        {hasSurprises && <EarningsSurpriseChart surprises={data!.earningsSurprises} />}
+        {hasRecs && <AnalystRecommendationBar trend={data!.recommendationTrend} />}
+        <p className="text-[11px] text-muted-foreground">
+          Estimates and analyst counts are context for learning, not advice — a summary of publicly reported figures and current analyst opinions, never a prediction or a recommendation from us.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function NextEarningsRow({ earnings }: { earnings: NextEarnings }) {
+  const dateLabel = new Date(`${earnings.date}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  const hourLabel = earnings.hour === "bmo" ? "Before market open" : earnings.hour === "amc" ? "After market close" : earnings.hour === "dmh" ? "During market hours" : undefined;
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">Next earnings</p>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <p className="text-lg font-semibold">{dateLabel}</p>
+        {hourLabel && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs text-muted-foreground">{hourLabel}</span>}
+      </div>
+      {(earnings.epsEstimate != null || earnings.revenueEstimate != null) && (
+        <p className="mt-1 text-sm text-muted-foreground">
+          Consensus estimate:{" "}
+          {earnings.epsEstimate != null && <>EPS {fmtUSD(earnings.epsEstimate)}</>}
+          {earnings.epsEstimate != null && earnings.revenueEstimate != null && " · "}
+          {earnings.revenueEstimate != null && <>Revenue ${fmtCompact(earnings.revenueEstimate)}</>}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function EarningsSurpriseChart({ surprises }: { surprises: EarningsSurprise[] }) {
+  // Oldest → newest, left to right — the natural reading order for a trend.
+  const ordered = [...surprises].reverse();
+  const maxAbs = Math.max(1, ...ordered.map((s) => Math.abs(s.surprisePercent ?? 0)));
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">EPS surprise, last {ordered.length} quarter{ordered.length === 1 ? "" : "s"}</p>
+      <div className="mt-2 space-y-2">
+        {ordered.map((s) => {
+          const pct = s.surprisePercent;
+          const beat = (pct ?? 0) >= 0;
+          const halfWidthPct = pct != null ? (Math.abs(pct) / maxAbs) * 50 : 0;
+          const label = s.quarter != null && s.year != null ? `Q${s.quarter} '${String(s.year).slice(2)}` : s.period;
+          return (
+            <div key={s.period} className="flex items-center gap-3 text-sm">
+              <span className="w-14 shrink-0 text-xs text-muted-foreground">{label}</span>
+              <div className="relative h-4 flex-1 rounded bg-surface-2">
+                <div className="absolute inset-y-0 left-1/2 w-px bg-border" />
+                {pct != null && (
+                  <div
+                    className={cn("absolute inset-y-0 rounded", beat ? "bg-[color:var(--color-gain)]" : "bg-[color:var(--color-loss)]")}
+                    style={beat ? { left: "50%", width: `${halfWidthPct}%` } : { right: "50%", width: `${halfWidthPct}%` }}
+                  />
+                )}
+              </div>
+              <span className={cn("w-16 shrink-0 text-right tabular text-xs font-medium", pct == null ? "text-muted-foreground" : beat ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
+                {pct != null ? `${beat ? "+" : ""}${pct.toFixed(1)}%` : "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">Actual reported EPS vs. analyst consensus estimate, each of the last {ordered.length} reported quarters.</p>
+    </div>
+  );
+}
+
+function AnalystRecommendationBar({ trend }: { trend: RecommendationTrendPoint[] }) {
+  const latest = trend[0];
+  const total = latest.strongBuy + latest.buy + latest.hold + latest.sell + latest.strongSell;
+  if (total === 0) return null;
+  const periodLabel = new Date(`${latest.period}T00:00:00Z`).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+  const segments = [
+    { label: "Strong buy", count: latest.strongBuy, className: "bg-[color:var(--color-gain)]" },
+    { label: "Buy", count: latest.buy, className: "bg-[color:var(--color-gain)]/55" },
+    { label: "Hold", count: latest.hold, className: "bg-muted-foreground/40" },
+    { label: "Sell", count: latest.sell, className: "bg-[color:var(--color-loss)]/55" },
+    { label: "Strong sell", count: latest.strongSell, className: "bg-[color:var(--color-loss)]" },
+  ];
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">Analyst ratings, as of {periodLabel}</p>
+      <div className="mt-2 flex h-4 overflow-hidden rounded-full">
+        {segments.map((s) => (s.count > 0 ? <div key={s.label} className={cn("h-full", s.className)} style={{ width: `${(s.count / total) * 100}%` }} title={`${s.label}: ${s.count}`} /> : null))}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        {segments.filter((s) => s.count > 0).map((s) => (
+          <span key={s.label} className="inline-flex items-center gap-1.5">
+            <span className={cn("h-2 w-2 rounded-full", s.className)} /> {s.label} ({s.count})
+          </span>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">{total} analysts — what analysts currently rate this stock, a count of opinions, not a prediction or a recommendation from us.</p>
+    </div>
+  );
+}
+
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "gain" | "loss" }) {
   return (
     <div>
@@ -503,7 +639,7 @@ function NewsRow({ item }: { item: NewsItem }) {
   );
 }
 
-function AboutTab({ symbol, quote }: { symbol: string; quote?: Quote }) {
+function AboutTab({ symbol, quote, peers }: { symbol: string; quote?: Quote; peers: string[] }) {
   if (!quote) return <LoadingState label="Loading company info…" />;
   // Finnhub's /stock/profile2 is empty for ETFs/funds — no sector, no market
   // cap, no country. Degrade to a clear fund label instead of blank gaps.
@@ -533,6 +669,27 @@ function AboutTab({ symbol, quote }: { symbol: string; quote?: Quote }) {
         <a href={quote.weburl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-[color:var(--color-primary)] hover:underline">
           <Globe className="h-3.5 w-3.5" /> Visit website
         </a>
+      )}
+
+      {/* Peers, phase 2 (2026-08-14): genuinely empty for ETFs — hide the
+         whole section rather than an empty heading, same rule as everywhere
+         else in this enrichment pass. */}
+      {peers.length > 0 && (
+        <div>
+          <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Related stocks</p>
+          <div className="flex flex-wrap gap-2">
+            {peers.map((p) => (
+              <Link
+                key={p}
+                to="/app/stock/$symbol"
+                params={{ symbol: p }}
+                className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]"
+              >
+                {p}
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
 
       <p className="text-[11px] text-muted-foreground">Live quote &amp; company profile from Finnhub; historical price chart from Twelve Data.</p>
