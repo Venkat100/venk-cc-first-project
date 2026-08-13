@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { requireAdmin } from "./requireAdmin.server";
+import { isTestAccountEmail } from "./testAccounts";
 import { runHealthChecks, type HealthReport } from "@/lib/health/check.server";
 import {
   ESTIMATED_COST_PER_INSIGHT_CALL_USD,
@@ -340,8 +341,15 @@ export type UsageStats = {
   agentRuns: { total: number; estimatedCostUsd: number; note: string };
   providerFetches: { total: number; note: string };
   rateLimitRejections: { total: number; byAction: Record<string, number>; byReason: { burst: number; daily: number } };
-  perUserCost: { userId: string; email: string; insightCalls: number; agentRuns: number; estimatedCostUsd: number }[];
+  perUserCost: { userId: string; email: string; isTestAccount: boolean; insightCalls: number; agentRuns: number; estimatedCostUsd: number }[];
   assumedRates: { insightCallUsd: number; agentRunUsd: number };
+  // Real vs. throwaway-test account split (2026-08-13 app audit, Part 5/6)
+  // — computed from the SAME auth-user listing already fetched for
+  // perUserCost's email lookup, zero extra query. Answers exactly the
+  // question the audit found impossible to answer from analytics_events
+  // alone: how many of these accounts are real. note explains the method
+  // so this number is never mistaken for a database-enforced fact.
+  accountCounts: { real: number; test: number; note: string };
 };
 
 export type GetUsageStatsResponse = { ok: true; stats: UsageStats } | { ok: false; error: string };
@@ -407,15 +415,26 @@ export const getUsageStatsFn = createServerFn({ method: "POST" })
         perUserMap.set(r.user_id, entry);
       }
       const perUserCost = [...perUserMap.entries()]
-        .map(([uid, v]) => ({
-          userId: uid,
-          email: authMap.get(uid)?.email ?? "(unknown)",
-          insightCalls: v.insightCalls,
-          agentRuns: v.agentRuns,
-          estimatedCostUsd: estimateInsightCostUsd(v.insightCalls) + estimateAgentRunCostUsd(v.agentRuns),
-        }))
+        .map(([uid, v]) => {
+          const email = authMap.get(uid)?.email ?? "(unknown)";
+          return {
+            userId: uid,
+            email,
+            isTestAccount: isTestAccountEmail(email),
+            insightCalls: v.insightCalls,
+            agentRuns: v.agentRuns,
+            estimatedCostUsd: estimateInsightCostUsd(v.insightCalls) + estimateAgentRunCostUsd(v.agentRuns),
+          };
+        })
         .sort((a, b) => b.estimatedCostUsd - a.estimatedCostUsd)
         .slice(0, 20);
+
+      let realAccountCount = 0;
+      let testAccountCount = 0;
+      for (const u of authMap.values()) {
+        if (isTestAccountEmail(u.email)) testAccountCount++;
+        else realAccountCount++;
+      }
 
       const stats: UsageStats = {
         windowDays,
@@ -442,6 +461,11 @@ export const getUsageStatsFn = createServerFn({ method: "POST" })
         assumedRates: {
           insightCallUsd: ESTIMATED_COST_PER_INSIGHT_CALL_USD,
           agentRunUsd: ESTIMATED_COST_PER_AGENT_RUN_USD,
+        },
+        accountCounts: {
+          real: realAccountCount,
+          test: testAccountCount,
+          note: "Test = email ends in @example.org/.com/.net — the RFC 2606 reserved-for-documentation domains every verify-*.ts script's throwaway accounts use (no real signup can ever use them). Not a stored flag; computed at read time from the current account list.",
         },
       };
 

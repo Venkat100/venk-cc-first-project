@@ -90,6 +90,15 @@ function AdminOverviewPage() {
               value={String(statsQ.data!.rateLimitRejections.total)}
               sub={`${statsQ.data!.rateLimitRejections.byReason.burst} burst · ${statsQ.data!.rateLimitRejections.byReason.daily} daily`}
             />
+            <StatCard
+              label="Real accounts"
+              value={String(statsQ.data!.accountCounts.real)}
+              sub={`${statsQ.data!.accountCounts.test} test accounts excluded`}
+            />
+          </div>
+          <div className="flex items-start gap-2 rounded-lg border border-border bg-surface px-3 py-2.5 text-xs text-muted-foreground">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>{statsQ.data!.accountCounts.note}</p>
           </div>
 
           <Card>
@@ -101,7 +110,12 @@ function AdminOverviewPage() {
                 <div className="divide-y divide-border/60">
                   {statsQ.data!.perUserCost.map((u) => (
                     <div key={u.userId} className="flex items-center justify-between px-4 py-2.5 text-sm">
-                      <span className="truncate">{u.email}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">{u.email}</span>
+                        {u.isTestAccount && (
+                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">test</span>
+                        )}
+                      </span>
                       <span className="tabular shrink-0 text-muted-foreground">
                         {u.insightCalls} insight · {u.agentRuns} agent · ~{fmtUSD(u.estimatedCostUsd)}
                       </span>
