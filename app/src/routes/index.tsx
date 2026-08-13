@@ -28,7 +28,7 @@ function Landing() {
         </div>
         <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
           <a href="#features" className="hover:text-foreground">Features</a>
-          <a href="#simulator" className="hover:text-foreground">Simulator</a>
+          <Link to="/simulator" className="hover:text-foreground">Simulator</Link>
           <a href="#how" className="hover:text-foreground">How it works</a>
         </nav>
         <div className="flex items-center gap-2">
