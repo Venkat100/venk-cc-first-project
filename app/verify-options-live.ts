@@ -69,7 +69,14 @@ for (let i = 1; i < nearest.strikes.length; i++) {
 const atmExtr = nearest.strikes[atmIdx].call.extrinsic;
 const maxExtr = Math.max(...nearest.strikes.map((r) => r.call.extrinsic));
 assert("ATM strike has the (or ties for) largest call extrinsic value in the nearest expiry", Math.abs(atmExtr - maxExtr) < 0.05, `atm=${atmExtr} max=${maxExtr}`);
-assert("all deltas well-formed: calls in (0,1), puts in (-1,0)", nearest.strikes.every((r) => r.call.delta > 0 && r.call.delta < 1 && r.put.delta > -1 && r.put.delta < 0));
+// Closed interval, not open: at the nearest (often 1-day) expiry, deep
+// OTM/ITM strikes push d1 far enough that the normal CDF genuinely
+// saturates to exactly 0.0 or 1.0 in float64 — a real, mathematically
+// correct limit of N(d1) as |d1| grows, not a bug in blackscholes.ts. An
+// open-interval assertion here was failing deterministically against
+// today's real NVDA chain (2026-08-13 app audit, issue #19) for exactly
+// this reason; the premiums themselves reconcile correctly regardless.
+assert("all deltas well-formed: calls in [0,1], puts in [-1,0]", nearest.strikes.every((r) => r.call.delta >= 0 && r.call.delta <= 1 && r.put.delta >= -1 && r.put.delta <= 0));
 
 console.log(`\n${failures === 0 ? "ALL OPTIONS LIVE CHECKS PASSED ✅" : `${failures} CHECK(S) FAILED ❌`}`);
 process.exit(failures === 0 ? 0 : 1);
