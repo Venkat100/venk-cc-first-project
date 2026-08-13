@@ -188,13 +188,13 @@ function SimResultView({ result }: { result: SimResult }) {
                 <Link to="/app/stock/$symbol" params={{ symbol: result.symbol }}>
                   <Button className="w-full gap-2"><ShoppingCart className="h-4 w-4" /> Buy {result.symbol} now</Button>
                 </Link>
-                <p className="text-[11px] text-muted-foreground">Trade it at today's live price with your virtual $100k.</p>
+                <p className="text-[11px] text-muted-foreground">Trade it at today's live price with your virtual $25k.</p>
               </>
             ) : (
               <>
                 <p className="text-sm font-medium">Want to start for real (with fake money)?</p>
                 <Link to="/auth">
-                  <Button className="w-full gap-2"><Sparkles className="h-4 w-4" /> Sign up to trade with $100k</Button>
+                  <Button className="w-full gap-2"><Sparkles className="h-4 w-4" /> Sign up to trade with $25k</Button>
                 </Link>
                 <p className="text-[11px] text-muted-foreground">Free paper-trading account. No real money, ever.</p>
               </>

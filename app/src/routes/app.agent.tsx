@@ -318,7 +318,7 @@ function Agent() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm font-medium">Activate agent</p>
-                <p className="text-xs text-muted-foreground">Activation takes effect once the engine is live (coming soon).</p>
+                <p className="text-xs text-muted-foreground">Lets the agent trade on its own daily schedule, in addition to manual runs. Needs funding first.</p>
               </div>
               <Switch checked={config.enabled} disabled={updateMut.isPending} onCheckedChange={(v) => updateMut.mutate({ enabled: v })} />
             </div>
