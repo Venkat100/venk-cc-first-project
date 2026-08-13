@@ -5,11 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/PriceChart";
 import { WatchlistStar } from "@/components/WatchlistStar";
+import { ContentIndicator } from "@/components/ContentIndicator";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { FlashPrice } from "@/components/FlashPrice";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { MARKET_UNIVERSE } from "@/lib/marketData";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
+import { useContentAvailability } from "@/lib/marketData/useContentAvailability";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
 import { getStock, fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,9 @@ function Markets() {
   const quoteSymbols = active ? search.matches.map((m) => m.symbol) : [...universe];
   const quotesQ = useQuotes(quoteSymbols);
   const quotes = quotesQ.data;
+  const availabilityQ = useContentAvailability(quoteSymbols);
+  const newsSet = new Set(availabilityQ.data?.newsSymbols ?? []);
+  const insightSet = new Set(availabilityQ.data?.insightSymbols ?? []);
 
   const sectors = useMemo(
     () => ["All", ...Array.from(new Set(universe.map((s) => getStock(s)?.sector ?? "—")))],
@@ -122,7 +127,10 @@ function Markets() {
                             <Link to="/app/stock/$symbol" params={{ symbol: m.symbol }} className="flex min-w-0 items-center gap-2 sm:gap-3">
                               <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{m.symbol.slice(0, 2)}</div>
                               <div className="min-w-0">
-                                <div className="font-semibold">{m.symbol}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold">{m.symbol}</span>
+                                  <ContentIndicator hasNews={newsSet.has(m.symbol)} hasInsight={insightSet.has(m.symbol)} />
+                                </div>
                                 <div className="max-w-[90px] truncate text-xs text-muted-foreground sm:max-w-[260px]">{name}</div>
                               </div>
                             </Link>
@@ -159,7 +167,10 @@ function Markets() {
                             <Link to="/app/stock/$symbol" params={{ symbol: r.symbol }} className="flex min-w-0 items-center gap-2 sm:gap-3">
                               <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{r.symbol.slice(0, 2)}</div>
                               <div className="min-w-0">
-                                <div className="font-semibold">{r.symbol}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold">{r.symbol}</span>
+                                  <ContentIndicator hasNews={newsSet.has(r.symbol)} hasInsight={insightSet.has(r.symbol)} />
+                                </div>
                                 <div className="max-w-[90px] truncate text-xs text-muted-foreground sm:max-w-none">{r.name}</div>
                               </div>
                             </Link>

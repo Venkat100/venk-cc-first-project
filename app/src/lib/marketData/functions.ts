@@ -11,6 +11,7 @@ import { z } from "zod";
 import { providerCandles } from "./provider.server";
 import { providerQuotes, providerSearch, fhCompanyNews } from "./finnhub.server";
 import { durableCached, durablePeekMany, durablePutMany, TTL } from "./cache.server";
+import { getServiceClient } from "@/lib/supabase/admin.server";
 import type { Candle, Quote, SymbolMatch, NewsItem } from "./types";
 
 const RANGES = ["1D", "1W", "1M", "3M", "1Y", "ALL"] as const;
@@ -73,4 +74,36 @@ export const getCompanyNewsFn = createServerFn({ method: "POST" })
     } catch {
       return { ok: false, error: "Couldn't load news right now — the provider may be rate-limited. Try again shortly." };
     }
+  });
+
+// AUDIT.md Part 6(b) item 7 (2026-08-14 Tier-2 fix pass) — a small "News" /
+// "AI take" indicator on Markets/Watchlist rows, for the exact symbols we
+// can PROVE already have content ready to view. Deliberately NOT a fetch:
+// both reads are against tables this app already writes to as a SIDE
+// EFFECT of normal traffic — price_cache (news is durably cached there,
+// see fhCompanyNews/durableCached in finnhub.server.ts) and insights
+// (written once per symbol per day the first time anyone requests it, see
+// insights.server.ts). Zero Finnhub/Twelve Data/Anthropic calls here, ever
+// — this can only ever say "yes, definitely" or "not that we know of,"
+// never fabricate availability for a symbol nobody has touched yet.
+export type ContentAvailability = { newsSymbols: string[]; insightSymbols: string[] };
+const NEWS_FRESHNESS_MS = 24 * 60 * 60_000; // matches the file-header note in pruneCache.server.ts: nothing is ever READ past ~24h of staleness anyway, so this is the natural "is it still relevant" cutoff, not an arbitrary new number.
+
+export const getContentAvailabilityFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ symbols: z.array(z.string().min(1)).min(1).max(100) }))
+  .handler(async ({ data }): Promise<ContentAvailability> => {
+    const symbols = [...new Set(data.symbols.map((s) => s.toUpperCase()))];
+    const admin = getServiceClient();
+    const today = new Date().toISOString().slice(0, 10);
+    const newsCutoff = new Date(Date.now() - NEWS_FRESHNESS_MS).toISOString();
+
+    const [newsRes, insightRes] = await Promise.all([
+      admin.from("price_cache").select("symbol").eq("kind", "news").in("symbol", symbols).gte("fetched_at", newsCutoff),
+      admin.from("insights").select("symbol").eq("kind", "stock").eq("created_at", today).in("symbol", symbols),
+    ]);
+
+    return {
+      newsSymbols: [...new Set((newsRes.data ?? []).map((r) => r.symbol as string))],
+      insightSymbols: [...new Set((insightRes.data ?? []).map((r) => r.symbol as string))],
+    };
   });

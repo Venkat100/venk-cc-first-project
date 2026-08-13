@@ -10,9 +10,11 @@
 //  Call sites fetch via react-query and render loading/empty/error states.
 // ════════════════════════════════════════════════════════════════════════
 
-import { getQuotesFn, getCandlesFn, searchSymbolsFn, getCompanyNewsFn } from "./functions";
+import { getQuotesFn, getCandlesFn, searchSymbolsFn, getCompanyNewsFn, getContentAvailabilityFn, type ContentAvailability } from "./functions";
 import { getStock } from "@/lib/mockData";
 import type { Candle, Quote, Range, SymbolMatch, NewsItem } from "./types";
+
+export type { ContentAvailability } from "./functions";
 
 export type { Candle, Quote, Range, SymbolMatch, NewsItem } from "./types";
 
@@ -65,4 +67,13 @@ export async function getCompanyNews(symbol: string): Promise<NewsItem[]> {
   const res = await getCompanyNewsFn({ data: { symbol: symbol.toUpperCase() } });
   if (!res.ok) throw new Error(res.error);
   return res.items;
+}
+
+/** Which of these symbols already have fresh cached news / today's AI
+ *  insight — for the Markets/Watchlist row indicator. Never fetches from a
+ *  provider; a symbol simply won't appear if nobody's generated it yet. */
+export async function getContentAvailability(symbols: string[]): Promise<ContentAvailability> {
+  const list = Array.from(new Set(symbols.map((s) => s.toUpperCase())));
+  if (list.length === 0) return { newsSymbols: [], insightSymbols: [] };
+  return getContentAvailabilityFn({ data: { symbols: list } });
 }

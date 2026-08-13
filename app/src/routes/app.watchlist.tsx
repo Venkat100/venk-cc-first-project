@@ -8,8 +8,10 @@ import { Sparkline } from "@/components/PriceChart";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { FlashPrice } from "@/components/FlashPrice";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
+import { ContentIndicator } from "@/components/ContentIndicator";
 import { getWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/portfolio/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
+import { useContentAvailability } from "@/lib/marketData/useContentAvailability";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
 import { fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
@@ -27,6 +29,9 @@ function Watchlist() {
   const symbols = (watchlistQ.data ?? []).map((w) => w.symbol);
   const quotesQ = useQuotes(symbols);
   const quotes = quotesQ.data;
+  const availabilityQ = useContentAvailability(symbols);
+  const newsSet = new Set(availabilityQ.data?.newsSymbols ?? []);
+  const insightSet = new Set(availabilityQ.data?.insightSymbols ?? []);
 
   const [q, setQ] = useState("");
   const search = useSymbolSearch(q, 10);
@@ -95,7 +100,10 @@ function Watchlist() {
                         <Link to="/app/stock/$symbol" params={{ symbol: sym }} className="flex min-w-0 items-center gap-2 sm:gap-3">
                           <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-2 text-[10px] font-bold">{r.symbol.slice(0, 2)}</div>
                           <div className="min-w-0">
-                            <div className="font-semibold">{r.symbol}</div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold">{r.symbol}</span>
+                              <ContentIndicator hasNews={newsSet.has(r.symbol)} hasInsight={insightSet.has(r.symbol)} />
+                            </div>
                             <div className="max-w-[100px] truncate text-xs text-muted-foreground sm:max-w-[220px]">{r.name}</div>
                           </div>
                         </Link>
