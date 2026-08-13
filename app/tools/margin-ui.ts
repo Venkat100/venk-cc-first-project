@@ -5,13 +5,21 @@
 // back to confirm the UI matches it to the cent. Same hardened harness
 // (timeouts, step() logging, explicit process.exit()) as every other
 // live-verify script in this repo, for the same vite-node-hang reason.
+//
+// Moved from verify-margin-ui.ts to tools/margin-ui.ts (2026-08-14 hygiene
+// follow-up): this is an argv-driven CLI ops helper (create|state|force|
+// monitor|delete), not a self-checking test — it always "failed" when swept
+// up bare by the verify-*.ts glob, which every prior regression-suite run
+// had to individually footnote as a non-failure. Living outside that glob
+// means the full suite can now be 100% green with zero asterisks. Usage
+// unchanged: `npx vite-node tools/margin-ui.ts <create|state|force|monitor|delete> [...]`.
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
 import { getPositionsValue } from "@/lib/margin/valuation.server";
 import { runMarginMonitor } from "@/lib/margin/monitor.server";
 import { MARGIN_MAINTENANCE_PCT, MARGIN_WARNING_BUFFER_PCT } from "@/lib/margin/config.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser } from "../verify-harness";
 
 function ts() { return new Date().toISOString().slice(11, 23); }
 function withTimeout<T>(label: string, p: Promise<T>, ms = 15000): Promise<T> {
