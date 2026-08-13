@@ -79,6 +79,17 @@ create table if not exists public.admin_audit_log (
 -- not friction in practice — deleting any account that has ever performed
 -- an admin action will require a superuser to first decide what to do with
 -- that history, which is the correct default for an audit trail.
+--
+-- 🔄 SUPERSEDED 2026-08-13 by 0027_admin_audit_log_set_null.sql. In
+-- practice this protected the wrong thing: it made the ACCOUNT ROW
+-- undeletable rather than protecting the HISTORY, which blocked routine
+-- test-account cleanup and would collide with this product's own
+-- privacy-policy deletion right for any real admin. 0027 changes this to
+-- ON DELETE SET NULL — admin_email (already captured at write time, see
+-- above) is the durable, human-readable record of who acted; the audit
+-- HISTORY is what stays immutable, not the account. Left here unedited,
+-- as applied, for an accurate record of what actually ran — see 0027 for
+-- the corrected design and reasoning.
 
 create index if not exists admin_audit_log_created_idx on public.admin_audit_log (created_at desc);
 create index if not exists admin_audit_log_admin_idx on public.admin_audit_log (admin_id, created_at desc);

@@ -273,7 +273,7 @@ export type ScenarioTransaction = {
 
 export type AdminAuditLog = {
   id: string;
-  admin_id: string;
+  admin_id: string | null; // survives the admin account being deleted, via ON DELETE SET NULL (0027) — admin_email below is the durable identity record
   admin_email: string;
   action: string;
   target_user_id: string | null; // survives a target-user delete via ON DELETE SET NULL
