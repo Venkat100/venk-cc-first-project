@@ -187,10 +187,6 @@ export function totalReturn() {
   return { abs: val - cost, pct: cost > 0 ? ((val - cost) / cost) * 100 : 0 };
 }
 
-export function topMovers() {
-  return [...STOCKS].sort((a, b) => Math.abs(b.dayChangePct) - Math.abs(a.dayChangePct)).slice(0, 5);
-}
-
 export function fmtUSD(n: number, opts: Intl.NumberFormatOptions = {}) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2, ...opts });
 }

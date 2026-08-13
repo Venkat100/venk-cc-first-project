@@ -14,10 +14,11 @@ import { getMarginState } from "@/lib/margin/api";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useTickFlash } from "@/lib/marketData/useTickFlash";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
+import { MARKET_UNIVERSE } from "@/lib/marketData";
 import type { Holding } from "@/lib/supabase/types";
 import type { Quote } from "@/lib/marketData/types";
 import { useAuth } from "@/lib/auth/auth-context";
-import { topMovers, fmtUSD, fmtPct, fmtQty, sparkline, STARTING_CASH } from "@/lib/mockData";
+import { fmtUSD, fmtPct, fmtQty, sparkline, STARTING_CASH } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight, ArrowDownRight, Star, Wallet, Newspaper } from "lucide-react";
 
@@ -63,6 +64,23 @@ function Dashboard() {
   const quotesQ = useQuotes(symbols);
   const quotes = quotesQ.data;
   const pricesReady = (holdings.length === 0 || quotesQ.isSuccess) && optionPositionsQ.isSuccess;
+
+  // Top movers — the SAME curated MARKET_UNIVERSE + live-quotes pipeline
+  // Markets' "Popular" grid already uses, not a separate provider call
+  // surface. Ranks by real |dayChangePct|, top 5. Previously this widget
+  // rendered lib/mockData's hardcoded STOCKS array — a real, user-visible
+  // bug (found in the 2026-08-13 audit): it showed a DIFFERENT price for
+  // the same symbol than the live holdings table three inches away on the
+  // same screen. Real data or nothing, never fabricated numbers next to
+  // real ones.
+  const moversQ = useQuotes(MARKET_UNIVERSE as unknown as string[]);
+  const topMoverQuotes = useMemo(() => {
+    if (!moversQ.data) return [];
+    return Array.from(moversQ.data.values())
+      .filter((q) => q.price > 0)
+      .sort((a, b) => Math.abs(b.dayChangePct) - Math.abs(a.dayChangePct))
+      .slice(0, 5);
+  }, [moversQ.data]);
 
   const snapshotsQ = useQuery({ queryKey: ["snapshots"], queryFn: getSnapshots });
 
@@ -257,24 +275,29 @@ function Dashboard() {
               <CardTitle className="text-base">Top movers</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
-              {/* Market reference data — stays on the mock universe until Phase 5. */}
-              {topMovers().map((s) => {
-                const up = s.dayChangePct >= 0;
-                return (
-                  <Link key={s.symbol} to="/app/stock/$symbol" params={{ symbol: s.symbol }} className="flex items-center justify-between rounded-md px-2 py-2 hover:bg-accent">
-                    <div className="flex items-center gap-2">
-                      <div className={cn("grid h-7 w-7 place-items-center rounded-md", up ? "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]" : "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]")}>
-                        {up ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+              {moversQ.isLoading ? (
+                <LoadingState label="Loading…" />
+              ) : moversQ.isError ? (
+                <ErrorState message={(moversQ.error as Error)?.message} />
+              ) : (
+                topMoverQuotes.map((q) => {
+                  const up = q.dayChangePct >= 0;
+                  return (
+                    <Link key={q.symbol} to="/app/stock/$symbol" params={{ symbol: q.symbol }} className="flex items-center justify-between rounded-md px-2 py-2 hover:bg-accent">
+                      <div className="flex items-center gap-2">
+                        <div className={cn("grid h-7 w-7 place-items-center rounded-md", up ? "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]" : "bg-[color:var(--color-loss)]/15 text-[color:var(--color-loss)]")}>
+                          {up ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold">{q.symbol}</div>
+                          <div className="text-xs text-muted-foreground">{fmtUSD(q.price)}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-sm font-semibold">{s.symbol}</div>
-                        <div className="text-xs text-muted-foreground">{fmtUSD(s.price)}</div>
-                      </div>
-                    </div>
-                    <span className={cn("text-sm font-medium tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>{fmtPct(s.dayChangePct)}</span>
-                  </Link>
-                );
-              })}
+                      <span className={cn("text-sm font-medium tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>{fmtPct(q.dayChangePct)}</span>
+                    </Link>
+                  );
+                })
+              )}
             </CardContent>
           </Card>
         </div>
