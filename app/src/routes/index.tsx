@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, LineChart, FlaskConical, ShieldCheck, Sparkles, TrendingUp, BarChart3 } from "lucide-react";
+import { ArrowRight, LineChart, FlaskConical, ShieldCheck, Sparkles, TrendingUp, BarChart3, Bot, History, Landmark, SplitSquareHorizontal, Brain, BookOpen, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteFooter } from "@/components/SiteFooter";
 
@@ -125,9 +125,16 @@ function Landing() {
           </p>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {[
+              { icon: Bot, title: "AI portfolio agent", body: "An AI that runs its own sub-portfolio of your virtual cash — quant screening plus real news reasoning, autonomous or approve-first." },
+              { icon: History, title: "Scenario challenges", body: "Trade the 2008 crash, the 2020 COVID crash, or the 2022 bear market day-by-day, with real historical prices and no look-ahead." },
               { icon: LineChart, title: "Live-feeling markets", body: "Trade believable tickers with charts across 1D to 5Y ranges." },
               { icon: FlaskConical, title: "What-if simulator", body: "Backtest any amount, any date, any stock — compare vs. the S&P 500." },
+              { icon: SplitSquareHorizontal, title: "Options trading", body: "A real chain, priced live with Black-Scholes — buy and sell calls and puts on any stock or ETF." },
+              { icon: Landmark, title: "Margin", body: "Opt-in 2x leverage with real interest and maintenance requirements — learn what borrowing to invest actually costs." },
+              { icon: Brain, title: "AI stock insights", body: "A daily lean, drivers, and risks per stock — grounded in the stock's own measured price history, not just a vibe." },
               { icon: BarChart3, title: "Portfolio analytics", body: "Allocation by stock and sector. Full transaction history. P&L tracking." },
+              { icon: BookOpen, title: "Trade journal", body: "Write down your reasoning at the moment you trade, then see the outcome paired against it later." },
+              { icon: Compass, title: "Adaptive coaching", body: "Your own patterns — named from your real trades, never from whether you're up or down." },
               { icon: TrendingUp, title: "Watchlists & movers", body: "Curate tickers and track today's biggest movers at a glance." },
               { icon: ShieldCheck, title: "Risk-free by design", body: "$25,000 virtual cash. Reset to start fresh whenever you want." },
               { icon: Sparkles, title: "Built for learning", body: "Market & limit orders, position sizing, average cost — all the real concepts." },
