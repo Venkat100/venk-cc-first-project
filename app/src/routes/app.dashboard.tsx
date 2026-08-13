@@ -20,7 +20,8 @@ import type { Quote } from "@/lib/marketData/types";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct, fmtQty, sparkline, STARTING_CASH } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, ArrowDownRight, Star, Wallet, Newspaper } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Star, Wallet, Newspaper, History } from "lucide-react";
+import { CoachNudgeCard } from "@/components/coaching/CoachNudgeCard";
 
 export const Route = createFileRoute("/app/dashboard")({
   head: () => ({
@@ -189,9 +190,19 @@ function Dashboard() {
                   title="No holdings yet"
                   description="Start trading to build your portfolio — your positions will show up here."
                   action={
-                    <Link to="/app/markets" className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90">
-                      Browse markets
-                    </Link>
+                    <div className="flex flex-col items-center gap-2">
+                      <Link to="/app/markets" className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90">
+                        Browse markets
+                      </Link>
+                      {/* AUDIT.md Part 6(b) item 11 (2026-08-14 Tier-2 fix pass) — scenario
+                          challenges have had ZERO runs ever, despite being an internally-
+                          rated differentiator. One discreet entry point, seen only by a
+                          brand-new/empty account (never a returning trader), testing
+                          discoverability rather than nagging. */}
+                      <Link to="/app/scenarios" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                        <History className="h-3.5 w-3.5" /> Or try a scenario challenge — trade the 2008 crash risk-free
+                      </Link>
+                    </div>
                   }
                 />
               ) : quotesQ.isError ? (
