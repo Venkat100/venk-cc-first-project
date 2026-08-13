@@ -135,6 +135,16 @@ Sequencing logic: unblock strangers first → build the scaling foundation *befo
 
 **Build entitlement checks + usage metering into steps 6–10 as we go** — retrofitting them across a dozen features at step 11 is the expensive path.
 
+## 6a. CURRENT POSTURE (CTO, 2026-08-14) — NOW ACTUALLY OBSERVABLE
+
+Steps 1–10 shipped. **Payments (11) and paid data (12) deliberately deferred** — Venky's call, endorsed: build value first, charge once demand is proven. A full application audit (`AUDIT.md`), a Tier-1 fix pass, and a Tier-2 fix pass have all landed. The regression suite is 30/30 green with zero explained-away failures.
+
+**The audit's central finding was not missing features — it was invisibility, and until Tier 2, it was invisibility we couldn't even measure.** The landing page advertised 6 of ~13 built features, and **scenario challenges had literally zero runs, ever, by anyone**, despite being identified as the strongest differentiator — but the previous posture ("observe, don't build") was itself unactionable, because ~8 features including scenarios had NO instrumentation at all. Tier 1 fixed the worst credibility/discoverability bugs (landing grid 6→13, Top Movers mock-data bug, false "coming soon" on the live AI agent, Robinhood-style key stats, trustworthy admin analytics). **Tier 2 fixed the actual observation gap**: every previously-dark feature now fires a real `track()` event (`scenario_started`/`scenario_completed` chief among them), a zero-API-cost news/insight indicator now surfaces content passively on Markets/Watchlist, a discreet scenario entry point now sits on the Dashboard empty state, the sidebar is grouped so a new user has a sense of what to try first, and a proactive Coach nudge — gated on the Coach's own real statistical thresholds, never a fabricated trigger — now surfaces behavioural findings on Dashboard/Portfolio instead of requiring a user to remember `/app/coach` exists.
+
+**Recommended next posture: NOW actually observe, for real this time.** Before Tier 2, "watch whether scenario engagement changes" was a request to watch a number that didn't exist. It exists now. Give it real time under real traffic — weeks, not days — before building more surface area on top of it. The one open item from Tier 2 needing action outside code: migration `0028_coach_nudge_dismissals.sql` needs to be applied (Supabase SQL Editor) before the Coach nudge is live.
+
+Deferred-but-ready when demand justifies: payments, plus whatever the now-real scenario/coach-nudge/insight-indicator engagement numbers point to once there's enough traffic to read them.
+
 ## 6b. PRE-LAUNCH CHECKLIST — deferred to the very end (Venky's call, 2026-08-10)
 
 These two are **not code** and are deliberately parked until the build is essentially complete. Venky will have the email set up by then. **Neither may be skipped before opening public signup / charging money.**
