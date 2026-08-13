@@ -53,8 +53,7 @@ const CASCADE_TABLES = [
   "agent_snapshots", "agent_proposals", "option_positions", "option_transactions",
   "insights", "account_events", "margin_events", "rate_limit_events",
   "scenario_runs", "scenario_holdings", "scenario_transactions",
-  // "coach_nudge_dismissals" — 0028 migration written but NOT yet applied;
-  // add back once live (issue #25), same reasoning as verify-delete-cascade-v2.ts.
+  "coach_nudge_dismissals", // 0028, applied 2026-08-14 — see issue #25
 ] as const;
 const USER_COLUMN: Record<string, string> = { profiles: "id" };
 
