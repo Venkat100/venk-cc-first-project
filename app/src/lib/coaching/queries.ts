@@ -78,3 +78,23 @@ export async function getExperienceInputs(): Promise<ExperienceInputs> {
     currentDistinctHoldings: holdingsRes.data?.length ?? 0,
   };
 }
+
+// ── Coach nudge dismissal state (item 6, 2026-08-14 Tier-2 fix pass) ──────
+// Keyed by (lesson_key, n) — the exact sample size the underlying
+// MetricResult was computed from (see 0028's own migration comment for the
+// reasoning). Small table (at most 6 rows/user), so reading them all in one
+// round trip is simpler than a per-lesson lookup.
+
+/** lesson_key -> the n it was last dismissed at. */
+export async function getNudgeDismissals(): Promise<Map<string, number>> {
+  const { data, error } = await supabase.from("coach_nudge_dismissals").select("lesson_key, n");
+  if (error) throw error;
+  return new Map((data ?? []).map((r) => [r.lesson_key as string, r.n as number]));
+}
+
+/** Upsert — re-dismissing the same lesson_key just updates n/dismissed_at. */
+export async function dismissNudge(lessonKey: string, n: number): Promise<void> {
+  const userId = await currentUserId();
+  const { error } = await supabase.from("coach_nudge_dismissals").upsert({ user_id: userId, lesson_key: lessonKey, n, dismissed_at: new Date().toISOString() }, { onConflict: "user_id,lesson_key" });
+  if (error) throw error;
+}

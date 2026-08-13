@@ -52,7 +52,11 @@ const CASCADE_TABLES = [
   "agent_config", "agent_holdings", "agent_transactions", "agent_decisions",
   "agent_snapshots", "agent_proposals", "option_positions", "option_transactions",
   "insights", "account_events", "margin_events",
-  "rate_limit_events", // NEW this step
+  "rate_limit_events",
+  // "coach_nudge_dismissals" — 0028 migration written but NOT yet applied to
+  // the DB; add this back once it's live (tracked in issue #25). Adding it
+  // now would break every run of this script against the real, unmigrated
+  // schema — a self-inflicted regression, not a genuine one.
 ] as const;
 const SET_NULL_TABLES = ["analytics_events"] as const; // NEW this step, deliberate exception
 

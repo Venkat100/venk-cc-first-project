@@ -78,6 +78,13 @@ export type WatchlistItem = {
   created_at: string;
 };
 
+export type CoachNudgeDismissal = {
+  user_id: string;
+  lesson_key: string;
+  n: number;
+  dismissed_at: string;
+};
+
 export type PortfolioSnapshot = {
   id: string;
   user_id: string;
@@ -626,6 +633,20 @@ export type Database = {
           created_at?: string;
         };
         Update: { [_ in never]: never }; // structurally immutable — no update grant exists, ever
+        Relationships: [];
+      };
+      coach_nudge_dismissals: {
+        Row: CoachNudgeDismissal;
+        Insert: {
+          user_id: string;
+          lesson_key: string;
+          n: number;
+          dismissed_at?: string;
+        };
+        Update: {
+          n?: number;
+          dismissed_at?: string;
+        };
         Relationships: [];
       };
     };

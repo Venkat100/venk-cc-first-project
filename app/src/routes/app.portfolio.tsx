@@ -14,6 +14,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recha
 import { cn } from "@/lib/utils";
 import { OptionPositionsList } from "@/components/options/OptionPositionsList";
 import { OptionOrderPanel, type OrderPanelState } from "@/components/options/OptionOrderPanel";
+import { CoachNudgeCard } from "@/components/coaching/CoachNudgeCard";
 import { Wallet, Receipt, PieChart as PieIcon, LineChart, NotebookPen } from "lucide-react";
 
 export const Route = createFileRoute("/app/portfolio")({
@@ -76,6 +77,8 @@ function Portfolio() {
         <p className="text-sm text-muted-foreground">Allocation breakdown and full transaction history.</p>
         <MarketStatusBadge className="mt-1" />
       </div>
+
+      <CoachNudgeCard />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <DonutCard title="Allocation by stock" data={byStock} state={allocState} ready={allocationsReady} />

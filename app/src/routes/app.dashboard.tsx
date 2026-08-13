@@ -143,6 +143,8 @@ function Dashboard() {
         <Stat label="Total return" value={pricesReady ? `${retAbs >= 0 ? "+" : "−"}${fmtUSD(Math.abs(retAbs))}` : dash} sub={pricesReady ? fmtPct(retPct) : ""} tone={retAbs >= 0 ? "gain" : "loss"} />
       </div>
 
+      <CoachNudgeCard />
+
       <MarketBriefCard hasTracked={symbols.length > 0} />
 
       <div className="grid gap-6 lg:grid-cols-3">
