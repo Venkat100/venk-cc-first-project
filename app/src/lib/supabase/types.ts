@@ -37,6 +37,14 @@ export type Profile = {
   // itself mean an existing active options/margin user is locked out.
   options_unlocked_at: string | null;
   margin_unlocked_at: string | null;
+  // Super-admin console (0026_admin_console.sql). is_admin has NO client or
+  // service_role write grant anywhere — the only way it's ever set is a
+  // superuser SQL session, out of band. suspended_at is a denormalized
+  // display cache; the real login-blocking enforcement is Supabase Auth's
+  // own native ban (see that migration's header). Both are written only by
+  // admin_set_suspended (service_role RPC) — never a direct client update.
+  is_admin: boolean;
+  suspended_at: string | null; // timestamptz (ISO string)
 };
 
 export type Holding = {
@@ -260,6 +268,23 @@ export type ScenarioTransaction = {
   price: number;
   total: number;
   sim_date: string; // date (YYYY-MM-DD) — the in-scenario date, not wall-clock
+  created_at: string;
+};
+
+export type AdminAuditLog = {
+  id: string;
+  admin_id: string;
+  admin_email: string;
+  action: string;
+  target_user_id: string | null; // survives a target-user delete via ON DELETE SET NULL
+  target_email: string | null; // snapshotted at write time — survives the target row disappearing
+  // A concrete, shallow-primitive JSON shape (not `unknown`/`Record<string,
+  // unknown>`) so this type can cross the TanStack Start server-fn boundary
+  // (getAuditLogFn) — same fix as scenario_runs.final_score's narrowing
+  // (lib/scenarios/functions.ts), which hit the identical "must be provably
+  // serializable" validator error. Every value this admin console ever
+  // writes here is a plain string/number/boolean, matching this type.
+  detail: Record<string, string | number | boolean | null> | null;
   created_at: string;
 };
 
@@ -586,6 +611,21 @@ export type Database = {
           created_at?: string;
         };
         Update: { [_ in never]: never }; // append-only
+        Relationships: [];
+      };
+      admin_audit_log: {
+        Row: AdminAuditLog;
+        Insert: {
+          id?: string;
+          admin_id: string;
+          admin_email: string;
+          action: string;
+          target_user_id?: string | null;
+          target_email?: string | null;
+          detail?: Record<string, string | number | boolean | null> | null;
+          created_at?: string;
+        };
+        Update: { [_ in never]: never }; // structurally immutable — no update grant exists, ever
         Relationships: [];
       };
     };
