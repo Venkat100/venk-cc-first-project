@@ -22,7 +22,15 @@ export type AnalyticsEvent =
   | "first_trade"
   | "insight_viewed"
   | "agent_run"
-  | "option_trade";
+  | "option_trade"
+  // PLAN.md §6 step 10 (B4) — fired from lib/rateLimit/check.server.ts on
+  // both rejection branches (burst and daily). rate_limit_events itself
+  // only ever gets a row on an ALLOWED call (0019_rate_limits.sql's
+  // check_and_record_rate_limit inserts on the success path only), so
+  // rejections were otherwise invisible in the data — this is the only
+  // durable trace of a reject, needed for the admin usage dashboard's
+  // "rate-limit rejections" figure.
+  | "rate_limited";
 
 export async function track(
   event: AnalyticsEvent,

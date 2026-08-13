@@ -35,6 +35,7 @@
 // error-handling shape.
 
 import { getServiceClient } from "@/lib/supabase/admin.server";
+import { track } from "@/lib/analytics/track.server";
 
 export type RateLimitConfig = {
   action: string;
@@ -82,12 +83,14 @@ export async function checkAndRecordRateLimit(userId: string, cfg: RateLimitConf
 
   if (r.allowed) return { allowed: true };
   if (r.reason === "burst") {
+    void track("rate_limited", { userId, properties: { action: cfg.action, reason: "burst" } });
     return {
       allowed: false,
       reason: "burst",
       message: `You're doing that a bit fast — please wait about ${r.retry_after_seconds} seconds and try again.`,
     };
   }
+  void track("rate_limited", { userId, properties: { action: cfg.action, reason: "daily" } });
   return {
     allowed: false,
     reason: "daily",
