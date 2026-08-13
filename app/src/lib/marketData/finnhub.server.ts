@@ -14,7 +14,7 @@ import { requireServerEnv } from "./env.server";
 import { ProviderError, num } from "./provider.server";
 import { durableCached } from "./cache.server";
 import { RateLimiter, withRetry, withTimeout } from "./ratelimit.server";
-import type { Quote, SymbolMatch, NewsItem } from "./types";
+import type { Quote, SymbolMatch, NewsItem, NextEarnings, EarningsSurprise, RecommendationTrendPoint, StockEnrichment } from "./types";
 
 const FH_BASE = "https://finnhub.io/api/v1";
 
@@ -319,4 +319,146 @@ export async function providerSearch(query: string): Promise<SymbolMatch[]> {
       name: d.description || d.symbol,
       type: d.type,
     }));
+}
+
+// ── Stock page enrichment, phase 2 (2026-08-14) ──────────────────────────
+// PLAN.md app audit follow-up: a live probe of our EXISTING free Finnhub
+// key (no plan change) against 13 candidate endpoints across a mega-cap,
+// an ETF, and a mid-cap found 6 genuinely accessible on the free tier —
+// see AUDIT.md's stock-page-enrichment section for the full probe table.
+// Building 4 of the 6 here: next earnings date, EPS surprise history,
+// analyst recommendation trend, and peer tickers. DELIBERATELY SKIPPING
+// insider sentiment (MSPR) and insider transactions, though both are
+// free and accessible: they're advanced signals novices routinely
+// misread (an insider sale is usually scheduled 10b5-1 vesting, not a
+// bearish signal), and in a teaching product surfacing them without real
+// explanatory context invites exactly the wrong inference. Revisit later
+// WITH education attached, not before — not a technical limitation, a
+// deliberate one.
+//
+// All four are near-static (earnings dates/estimates, a quarter's actual
+// results, analyst opinion counts, and peer lists all change at most
+// once a day, usually far less) — cached for 24h, same durableCached
+// two-tier path as everything else in this file, same "genuinely empty
+// for ETFs, not an error" contract as fhFundamentals above.
+const ENRICHMENT_TTL = 24 * 60 * 60_000; // 24h
+
+async function fhNextEarnings(symbol: string): Promise<NextEarnings | undefined> {
+  // durableCached's L2 tier is a Postgres `payload jsonb NOT NULL` column,
+  // written via the Supabase client — a JS `null` (tried first, and JS
+  // `undefined` before that) both map to SQL NULL on that insert, not the
+  // valid JSON scalar `null`, so both failed the NOT NULL constraint the
+  // exact same way (confirmed live both times: "[price_cache] L2 write
+  // failed ... null value in column payload"). The durable half of the
+  // cache was silently never persisting the ETF case — every cold start
+  // would re-hit Finnhub for it. Fix: the OUTER cached value is always a
+  // real, non-null object (`{ earnings: ... }`); only the INNER field is
+  // ever null, which is fine — a JSON null nested inside a non-null jsonb
+  // object is a completely different thing from the column itself being
+  // SQL NULL. Unwrapped back to plain `NextEarnings | undefined` at the
+  // public return, matching this field's convention everywhere else.
+  // Cache kind renamed from "earningsCalendar" (this dev session's own
+  // stale rows, written under the broken pre-wrapper shape while chasing
+  // this exact bug, would otherwise shadow the fix for a full ENRICHMENT_TTL —
+  // just a namespace string, safe to rename, old rows age out naturally).
+  const cached = await durableCached("nextEarnings", symbol, "", ENRICHMENT_TTL, async (): Promise<{ earnings: NextEarnings | null }> => {
+    try {
+      const from = new Date();
+      const to = new Date(from.getTime() + 240 * 86_400_000); // ~8 months — comfortably spans one quarterly cycle even right after a print
+      const fmt = (d: Date) => d.toISOString().slice(0, 10);
+      const raw = await fhGet(`/calendar/earnings?symbol=${encodeURIComponent(symbol)}&from=${fmt(from)}&to=${fmt(to)}`);
+      const rows: any[] = Array.isArray(raw?.earningsCalendar) ? raw.earningsCalendar : [];
+      if (rows.length === 0) return { earnings: null }; // ETFs, or nothing scheduled in the window
+      const todayStr = fmt(from);
+      const upcoming = rows.filter((r) => typeof r?.date === "string" && r.date >= todayStr).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      const next = upcoming[0] ?? rows[0];
+      if (!next?.date) return { earnings: null };
+      return {
+        earnings: {
+          date: String(next.date),
+          hour: next.hour ? String(next.hour) : undefined,
+          epsEstimate: next.epsEstimate != null ? num(next.epsEstimate) : undefined,
+          revenueEstimate: next.revenueEstimate != null ? num(next.revenueEstimate) : undefined,
+        },
+      };
+    } catch {
+      return { earnings: null }; // best-effort
+    }
+  });
+  return cached.earnings ?? undefined;
+}
+
+async function fhEarningsSurprises(symbol: string): Promise<EarningsSurprise[]> {
+  return durableCached("earningsSurprises", symbol, "", ENRICHMENT_TTL, async () => {
+    try {
+      const raw = await fhGet(`/stock/earnings?symbol=${encodeURIComponent(symbol)}`);
+      const rows: any[] = Array.isArray(raw) ? raw : [];
+      return rows
+        .filter((r) => r?.period)
+        .sort((a, b) => String(b.period).localeCompare(String(a.period))) // newest first, don't trust provider order
+        .slice(0, 4)
+        .map((r) => ({
+          period: String(r.period),
+          quarter: r.quarter != null ? num(r.quarter) : undefined,
+          year: r.year != null ? num(r.year) : undefined,
+          estimate: r.estimate != null ? num(r.estimate) : undefined,
+          actual: r.actual != null ? num(r.actual) : undefined,
+          surprisePercent: r.surprisePercent != null ? num(r.surprisePercent) : undefined,
+        }));
+    } catch {
+      return []; // best-effort — empty is also the genuine ETF shape
+    }
+  });
+}
+
+async function fhRecommendationTrend(symbol: string): Promise<RecommendationTrendPoint[]> {
+  return durableCached("recommendationTrend", symbol, "", ENRICHMENT_TTL, async () => {
+    try {
+      const raw = await fhGet(`/stock/recommendation?symbol=${encodeURIComponent(symbol)}`);
+      const rows: any[] = Array.isArray(raw) ? raw : [];
+      return rows
+        .filter((r) => r?.period)
+        .sort((a, b) => String(b.period).localeCompare(String(a.period))) // newest first
+        .slice(0, 4)
+        .map((r) => ({
+          period: String(r.period),
+          strongBuy: num(r.strongBuy ?? 0),
+          buy: num(r.buy ?? 0),
+          hold: num(r.hold ?? 0),
+          sell: num(r.sell ?? 0),
+          strongSell: num(r.strongSell ?? 0),
+        }));
+    } catch {
+      return [];
+    }
+  });
+}
+
+async function fhPeers(symbol: string): Promise<string[]> {
+  const sym = symbol.toUpperCase();
+  return durableCached("peers", sym, "", ENRICHMENT_TTL, async () => {
+    try {
+      const raw = await fhGet(`/stock/peers?symbol=${encodeURIComponent(sym)}`);
+      const rows: string[] = Array.isArray(raw) ? raw.map((s) => String(s).toUpperCase()) : [];
+      // Finnhub includes the requested symbol itself in the list — exclude it,
+      // dedupe, and cap to a sensible "related stocks" row length.
+      return [...new Set(rows.filter((s) => s && s !== sym))].slice(0, 6);
+    } catch {
+      return [];
+    }
+  });
+}
+
+/** All 4 phase-2 enrichment datasets for one symbol, fetched in parallel —
+ *  each independently cached (24h), each independently best-effort, so one
+ *  failing/empty field never blocks the other three. */
+export async function fhStockEnrichment(symbol: string): Promise<StockEnrichment> {
+  const sym = symbol.toUpperCase();
+  const [nextEarnings, earningsSurprises, recommendationTrend, peers] = await Promise.all([
+    fhNextEarnings(sym),
+    fhEarningsSurprises(sym),
+    fhRecommendationTrend(sym),
+    fhPeers(sym),
+  ]);
+  return { nextEarnings, earningsSurprises, recommendationTrend, peers };
 }

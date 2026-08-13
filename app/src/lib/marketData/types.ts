@@ -78,3 +78,50 @@ export type NewsItem = {
   /** Link to the original article. Absent → render as plain text, not a dead link. */
   url?: string;
 };
+
+// Stock page enrichment, phase 2 (2026-08-14) — Finnhub's free tier beyond
+// /quote and /stock/metric (see enrichment.server.ts's header for the full
+// probe results). All four are GENUINELY EMPTY for ETFs/funds (200 with an
+// empty array/no row, not an error) — callers must hide the section
+// entirely rather than render a placeholder, same rule as Quote's
+// fundamentals fields above.
+
+export type NextEarnings = {
+  /** YYYY-MM-DD. */
+  date: string;
+  /** "bmo" (before market open) | "amc" (after market close) | "dmh" (during market hours) — Finnhub's own vocabulary, passed through as-is. */
+  hour?: string;
+  epsEstimate?: number;
+  revenueEstimate?: number;
+};
+
+export type EarningsSurprise = {
+  /** Quarter-end date, YYYY-MM-DD. */
+  period: string;
+  quarter?: number;
+  year?: number;
+  estimate?: number;
+  actual?: number;
+  /** Percent, e.g. 4.19 for a 4.19% beat. Negative = miss. */
+  surprisePercent?: number;
+};
+
+export type RecommendationTrendPoint = {
+  /** First-of-month date this snapshot represents, YYYY-MM-DD. */
+  period: string;
+  strongBuy: number;
+  buy: number;
+  hold: number;
+  sell: number;
+  strongSell: number;
+};
+
+export type StockEnrichment = {
+  nextEarnings?: NextEarnings;
+  /** Most recent first, at most 4 quarters. */
+  earningsSurprises: EarningsSurprise[];
+  /** Most recent first, at most 4 months. */
+  recommendationTrend: RecommendationTrendPoint[];
+  /** Related tickers, excludes the symbol itself. */
+  peers: string[];
+};
