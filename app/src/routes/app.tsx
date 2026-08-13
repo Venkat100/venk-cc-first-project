@@ -39,6 +39,24 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { profile } = useAuth();
+  const mobileNavItems = [
+    { to: "/app/dashboard", label: "Dashboard" },
+    { to: "/app/markets", label: "Markets" },
+    { to: "/app/simulator", label: "Simulator" },
+    { to: "/app/agent", label: "AI Agent" },
+    { to: "/app/portfolio", label: "Portfolio" },
+    { to: "/app/margin", label: "Margin" },
+    { to: "/app/options", label: "Options" },
+    { to: "/app/journal", label: "Journal" },
+    { to: "/app/coach", label: "Coach" },
+    { to: "/app/scenarios", label: "Scenarios" },
+    { to: "/app/watchlist", label: "Watchlist" },
+    { to: "/app/settings", label: "Settings" },
+    // Purely UX — see AppSidebar.tsx's identical comment on why hiding
+    // this is not the security boundary.
+    ...(profile?.is_admin ? [{ to: "/app/admin", label: "Admin" }] : []),
+  ];
   return (
     <AuthGate>
       <div className="flex min-h-screen w-full bg-background text-foreground">
@@ -50,24 +68,7 @@ function AppLayout() {
           </main>
           <SiteFooter />
         </div>
-        <MobileNavOverlay
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          items={[
-            { to: "/app/dashboard", label: "Dashboard" },
-            { to: "/app/markets", label: "Markets" },
-            { to: "/app/simulator", label: "Simulator" },
-            { to: "/app/agent", label: "AI Agent" },
-            { to: "/app/portfolio", label: "Portfolio" },
-            { to: "/app/margin", label: "Margin" },
-            { to: "/app/options", label: "Options" },
-            { to: "/app/journal", label: "Journal" },
-            { to: "/app/coach", label: "Coach" },
-            { to: "/app/scenarios", label: "Scenarios" },
-            { to: "/app/watchlist", label: "Watchlist" },
-            { to: "/app/settings", label: "Settings" },
-          ]}
-        />
+        <MobileNavOverlay open={mobileOpen} onClose={() => setMobileOpen(false)} items={mobileNavItems} />
       </div>
     </AuthGate>
   );

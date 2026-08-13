@@ -30,9 +30,15 @@ import { Route as AppJournalRouteImport } from './routes/app.journal'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 import { Route as AppCoachRouteImport } from './routes/app.coach'
 import { Route as AppAgentRouteImport } from './routes/app.agent'
+import { Route as AppAdminRouteImport } from './routes/app.admin'
 import { Route as AppScenariosIndexRouteImport } from './routes/app.scenarios.index'
+import { Route as AppAdminIndexRouteImport } from './routes/app.admin.index'
 import { Route as AppStockSymbolRouteImport } from './routes/app.stock.$symbol'
 import { Route as AppScenariosRunIdRouteImport } from './routes/app.scenarios.$runId'
+import { Route as AppAdminUsersRouteImport } from './routes/app.admin.users'
+import { Route as AppAdminAuditRouteImport } from './routes/app.admin.audit'
+import { Route as AppAdminUsersIndexRouteImport } from './routes/app.admin.users.index'
+import { Route as AppAdminUsersUserIdRouteImport } from './routes/app.admin.users.$userId'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -139,10 +145,20 @@ const AppAgentRoute = AppAgentRouteImport.update({
   path: '/agent',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppScenariosIndexRoute = AppScenariosIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AppScenariosRoute,
+} as any)
+const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAdminRoute,
 } as any)
 const AppStockSymbolRoute = AppStockSymbolRouteImport.update({
   id: '/stock/$symbol',
@@ -154,6 +170,26 @@ const AppScenariosRunIdRoute = AppScenariosRunIdRouteImport.update({
   path: '/$runId',
   getParentRoute: () => AppScenariosRoute,
 } as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminAuditRoute = AppAdminAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminUsersIndexRoute = AppAdminUsersIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAdminUsersRoute,
+} as any)
+const AppAdminUsersUserIdRoute = AppAdminUsersUserIdRouteImport.update({
+  id: '/$userId',
+  path: '/$userId',
+  getParentRoute: () => AppAdminUsersRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -164,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/simulator': typeof SimulatorRoute
   '/terms': typeof TermsRoute
+  '/app/admin': typeof AppAdminRouteWithChildren
   '/app/agent': typeof AppAgentRoute
   '/app/coach': typeof AppCoachRoute
   '/app/dashboard': typeof AppDashboardRoute
@@ -177,9 +214,14 @@ export interface FileRoutesByFullPath {
   '/app/simulator': typeof AppSimulatorRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app/': typeof AppIndexRoute
+  '/app/admin/audit': typeof AppAdminAuditRoute
+  '/app/admin/users': typeof AppAdminUsersRouteWithChildren
   '/app/scenarios/$runId': typeof AppScenariosRunIdRoute
   '/app/stock/$symbol': typeof AppStockSymbolRoute
+  '/app/admin/': typeof AppAdminIndexRoute
   '/app/scenarios/': typeof AppScenariosIndexRoute
+  '/app/admin/users/$userId': typeof AppAdminUsersUserIdRoute
+  '/app/admin/users/': typeof AppAdminUsersIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -201,9 +243,13 @@ export interface FileRoutesByTo {
   '/app/simulator': typeof AppSimulatorRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app': typeof AppIndexRoute
+  '/app/admin/audit': typeof AppAdminAuditRoute
   '/app/scenarios/$runId': typeof AppScenariosRunIdRoute
   '/app/stock/$symbol': typeof AppStockSymbolRoute
+  '/app/admin': typeof AppAdminIndexRoute
   '/app/scenarios': typeof AppScenariosIndexRoute
+  '/app/admin/users/$userId': typeof AppAdminUsersUserIdRoute
+  '/app/admin/users': typeof AppAdminUsersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -215,6 +261,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/simulator': typeof SimulatorRoute
   '/terms': typeof TermsRoute
+  '/app/admin': typeof AppAdminRouteWithChildren
   '/app/agent': typeof AppAgentRoute
   '/app/coach': typeof AppCoachRoute
   '/app/dashboard': typeof AppDashboardRoute
@@ -228,9 +275,14 @@ export interface FileRoutesById {
   '/app/simulator': typeof AppSimulatorRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app/': typeof AppIndexRoute
+  '/app/admin/audit': typeof AppAdminAuditRoute
+  '/app/admin/users': typeof AppAdminUsersRouteWithChildren
   '/app/scenarios/$runId': typeof AppScenariosRunIdRoute
   '/app/stock/$symbol': typeof AppStockSymbolRoute
+  '/app/admin/': typeof AppAdminIndexRoute
   '/app/scenarios/': typeof AppScenariosIndexRoute
+  '/app/admin/users/$userId': typeof AppAdminUsersUserIdRoute
+  '/app/admin/users/': typeof AppAdminUsersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -243,6 +295,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/simulator'
     | '/terms'
+    | '/app/admin'
     | '/app/agent'
     | '/app/coach'
     | '/app/dashboard'
@@ -256,9 +309,14 @@ export interface FileRouteTypes {
     | '/app/simulator'
     | '/app/watchlist'
     | '/app/'
+    | '/app/admin/audit'
+    | '/app/admin/users'
     | '/app/scenarios/$runId'
     | '/app/stock/$symbol'
+    | '/app/admin/'
     | '/app/scenarios/'
+    | '/app/admin/users/$userId'
+    | '/app/admin/users/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -280,9 +338,13 @@ export interface FileRouteTypes {
     | '/app/simulator'
     | '/app/watchlist'
     | '/app'
+    | '/app/admin/audit'
     | '/app/scenarios/$runId'
     | '/app/stock/$symbol'
+    | '/app/admin'
     | '/app/scenarios'
+    | '/app/admin/users/$userId'
+    | '/app/admin/users'
   id:
     | '__root__'
     | '/'
@@ -293,6 +355,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/simulator'
     | '/terms'
+    | '/app/admin'
     | '/app/agent'
     | '/app/coach'
     | '/app/dashboard'
@@ -306,9 +369,14 @@ export interface FileRouteTypes {
     | '/app/simulator'
     | '/app/watchlist'
     | '/app/'
+    | '/app/admin/audit'
+    | '/app/admin/users'
     | '/app/scenarios/$runId'
     | '/app/stock/$symbol'
+    | '/app/admin/'
     | '/app/scenarios/'
+    | '/app/admin/users/$userId'
+    | '/app/admin/users/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -471,12 +539,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgentRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/admin': {
+      id: '/app/admin'
+      path: '/admin'
+      fullPath: '/app/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/scenarios/': {
       id: '/app/scenarios/'
       path: '/'
       fullPath: '/app/scenarios/'
       preLoaderRoute: typeof AppScenariosIndexRouteImport
       parentRoute: typeof AppScenariosRoute
+    }
+    '/app/admin/': {
+      id: '/app/admin/'
+      path: '/'
+      fullPath: '/app/admin/'
+      preLoaderRoute: typeof AppAdminIndexRouteImport
+      parentRoute: typeof AppAdminRoute
     }
     '/app/stock/$symbol': {
       id: '/app/stock/$symbol'
@@ -492,8 +574,66 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppScenariosRunIdRouteImport
       parentRoute: typeof AppScenariosRoute
     }
+    '/app/admin/users': {
+      id: '/app/admin/users'
+      path: '/users'
+      fullPath: '/app/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/app/admin/audit': {
+      id: '/app/admin/audit'
+      path: '/audit'
+      fullPath: '/app/admin/audit'
+      preLoaderRoute: typeof AppAdminAuditRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/app/admin/users/': {
+      id: '/app/admin/users/'
+      path: '/'
+      fullPath: '/app/admin/users/'
+      preLoaderRoute: typeof AppAdminUsersIndexRouteImport
+      parentRoute: typeof AppAdminUsersRoute
+    }
+    '/app/admin/users/$userId': {
+      id: '/app/admin/users/$userId'
+      path: '/$userId'
+      fullPath: '/app/admin/users/$userId'
+      preLoaderRoute: typeof AppAdminUsersUserIdRouteImport
+      parentRoute: typeof AppAdminUsersRoute
+    }
   }
 }
+
+interface AppAdminUsersRouteChildren {
+  AppAdminUsersUserIdRoute: typeof AppAdminUsersUserIdRoute
+  AppAdminUsersIndexRoute: typeof AppAdminUsersIndexRoute
+}
+
+const AppAdminUsersRouteChildren: AppAdminUsersRouteChildren = {
+  AppAdminUsersUserIdRoute: AppAdminUsersUserIdRoute,
+  AppAdminUsersIndexRoute: AppAdminUsersIndexRoute,
+}
+
+const AppAdminUsersRouteWithChildren = AppAdminUsersRoute._addFileChildren(
+  AppAdminUsersRouteChildren,
+)
+
+interface AppAdminRouteChildren {
+  AppAdminAuditRoute: typeof AppAdminAuditRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRouteWithChildren
+  AppAdminIndexRoute: typeof AppAdminIndexRoute
+}
+
+const AppAdminRouteChildren: AppAdminRouteChildren = {
+  AppAdminAuditRoute: AppAdminAuditRoute,
+  AppAdminUsersRoute: AppAdminUsersRouteWithChildren,
+  AppAdminIndexRoute: AppAdminIndexRoute,
+}
+
+const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
+  AppAdminRouteChildren,
+)
 
 interface AppScenariosRouteChildren {
   AppScenariosRunIdRoute: typeof AppScenariosRunIdRoute
@@ -510,6 +650,7 @@ const AppScenariosRouteWithChildren = AppScenariosRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRouteWithChildren
   AppAgentRoute: typeof AppAgentRoute
   AppCoachRoute: typeof AppCoachRoute
   AppDashboardRoute: typeof AppDashboardRoute
@@ -527,6 +668,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRouteWithChildren,
   AppAgentRoute: AppAgentRoute,
   AppCoachRoute: AppCoachRoute,
   AppDashboardRoute: AppDashboardRoute,

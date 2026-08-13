@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, LineChart, FlaskConical, PieChart, Star, Settings, Sparkles, Bot, Landmark, SplitSquareHorizontal, BookOpen, Compass, History } from "lucide-react";
+import { LayoutDashboard, LineChart, FlaskConical, PieChart, Star, Settings, Sparkles, Bot, Landmark, SplitSquareHorizontal, BookOpen, Compass, History, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth/auth-context";
 
 const items = [
   { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -19,6 +20,11 @@ const items = [
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { profile } = useAuth();
+  // Purely a UX convenience — hiding this item is not the security
+  // boundary. Every admin server function independently re-checks
+  // is_admin server-side (lib/admin/requireAdmin.server.ts).
+  const navItems = profile?.is_admin ? [...items, { to: "/app/admin", label: "Admin", icon: ShieldAlert }] : items;
 
   return (
     <aside className="hidden md:flex md:flex-col w-60 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
@@ -32,7 +38,7 @@ export function AppSidebar() {
         </div>
       </div>
       <nav className="flex-1 px-3 py-2 space-y-0.5">
-        {items.map((it) => {
+        {navItems.map((it) => {
           const Icon = it.icon;
           const active = pathname === it.to || (it.to !== "/app/dashboard" && pathname.startsWith(it.to));
           return (
