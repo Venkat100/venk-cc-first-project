@@ -8,6 +8,7 @@ import { z } from "zod";
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { getPositionsValue } from "./valuation.server";
 import { MARGIN_INTEREST_RATE, MARGIN_MAINTENANCE_PCT, MARGIN_MAX_LEVERAGE, MARGIN_WARNING_BUFFER_PCT } from "./config.server";
+import { track } from "@/lib/analytics/track.server";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -112,6 +113,7 @@ export const setMarginEnabledFn = createServerFn({ method: "POST" })
       const { data: rpc, error } = await admin.rpc("set_margin_enabled", { p_user_id: userId, p_enabled: data.enabled });
       if (error) return { ok: false, error: friendly(error.message) };
       const r = rpc as Record<string, unknown>;
+      if (data.enabled) void track("margin_enabled", { userId });
       return { ok: true, marginEnabled: Boolean(r.margin_enabled), marginLoan: Number(r.margin_loan) };
     } catch (e) {
       return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };

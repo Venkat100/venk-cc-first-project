@@ -6,6 +6,7 @@
 // rows must set user_id (the RLS `with check` enforces it equals auth.uid()).
 
 import { supabase } from "@/lib/supabase/client";
+import { trackClientEvent } from "@/lib/analytics/api";
 import type { Holding, Transaction, WatchlistItem } from "@/lib/supabase/types";
 
 async function currentUserId(): Promise<string> {
@@ -54,6 +55,7 @@ export async function addToWatchlist(symbol: string): Promise<void> {
       { onConflict: "user_id,symbol", ignoreDuplicates: true },
     );
   if (error) throw error;
+  trackClientEvent("watchlist_add", { symbol: symbol.toUpperCase() });
 }
 
 /** Remove a symbol from the watchlist. */

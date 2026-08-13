@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { getServiceClient, verifyUser } from "@/lib/supabase/admin.server";
 import { checkAnswers, quizFor, type Feature } from "./quiz";
+import { track } from "@/lib/analytics/track.server";
 
 function friendly(token: string): string {
   if (token.includes("profile_not_found")) return "We couldn't find your account.";
@@ -45,6 +46,7 @@ export const unlockFeatureFn = createServerFn({ method: "POST" })
       const admin = getServiceClient();
       const { data: rpc, error } = await admin.rpc("unlock_feature", { p_user_id: userId, p_feature: feature });
       if (error) return { ok: false, error: friendly(error.message) };
+      void track("feature_unlocked", { userId, properties: { feature } });
       return { ok: true, passed: true, unlockedAt: String(rpc) };
     } catch (e) {
       return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };

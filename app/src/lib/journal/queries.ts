@@ -5,6 +5,7 @@
 // `watchlist` (see lib/portfolio/queries.ts). No server function needed.
 
 import { supabase } from "@/lib/supabase/client";
+import { trackClientEvent } from "@/lib/analytics/api";
 import type { JournalEntry } from "@/lib/supabase/types";
 
 async function currentUserId(): Promise<string> {
@@ -50,6 +51,11 @@ export async function createJournalEntry(input: NewJournalEntry): Promise<Journa
     .select("*")
     .single();
   if (error) throw error;
+  // Symbol + link presence only — never body/title (journal privacy boundary).
+  trackClientEvent("journal_entry_created", {
+    symbol: input.symbol?.toUpperCase() ?? null,
+    linkedToTrade: !!(input.transactionId || input.optionTransactionId),
+  });
   return data;
 }
 

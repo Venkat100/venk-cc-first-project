@@ -12,13 +12,14 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useTrackOnce } from "@/lib/analytics/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
-import { getBehavioralAnalytics, type BehavioralAnalytics } from "@/lib/behavioral/api";
+import { getBehavioralAnalytics } from "@/lib/behavioral/api";
 import { getExperienceLevel } from "@/lib/coaching/api";
-import { pickTopLesson, type LessonKey } from "@/lib/coaching/priority";
+import { pickTopLesson } from "@/lib/coaching/priority";
 import type { ExperienceLevel, ExperienceLevelResult } from "@/lib/coaching/level";
 import {
   dispositionCard,
@@ -27,6 +28,7 @@ import {
   revengeTradingCard,
   winRateCard,
   journalCorrelationCard,
+  CARD_BUILDERS,
   type Card as PatternCard,
 } from "@/lib/behavioral/copy";
 import { Compass, Sparkles, GraduationCap, CheckCircle2 } from "lucide-react";
@@ -36,19 +38,9 @@ export const Route = createFileRoute("/app/coach")({
   component: Coach,
 });
 
-// Reuses step 7's own card-builder for each pattern — the "top lesson" is
-// the SAME sentence a user would see in the full breakdown below, just
-// surfaced first. No separate copy to keep in sync.
-const CARD_BUILDERS: Record<LessonKey, (a: BehavioralAnalytics) => PatternCard> = {
-  disposition: (a) => dispositionCard(a.disposition),
-  revengeTrading: (a) => revengeTradingCard(a.revengeTrading),
-  overTrading: (a) => overTradingCard(a.overTrading),
-  concentration: (a) => concentrationCard(a.concentration),
-  winRate: (a) => winRateCard(a.winRate),
-  journalCorrelation: (a) => journalCorrelationCard(a.journalCorrelation),
-};
-
 function Coach() {
+  useTrackOnce("coach_visited");
+
   const q = useQuery({ queryKey: ["behavioralAnalytics"], queryFn: getBehavioralAnalytics });
   const levelQ = useQuery({ queryKey: ["experienceLevel"], queryFn: getExperienceLevel });
 

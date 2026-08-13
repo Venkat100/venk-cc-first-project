@@ -24,6 +24,7 @@ import type { Candle } from "@/lib/marketData/types";
 import { getScenario, scenarioSymbolSet, type Scenario } from "./catalog";
 import { maxStepIndex, cutoffDateForStep, sliceUpToDate, closeOnOrBefore, closeOnExact } from "./calendar";
 import { computeScenarioScore, type ScenarioScore } from "./scoring";
+import { track } from "@/lib/analytics/track.server";
 import type { ScenarioRun } from "@/lib/supabase/types";
 
 // Historical data for a FIXED, already-elapsed date range never changes —
@@ -107,6 +108,7 @@ export const startScenarioRunFn = createServerFn({ method: "POST" })
         p_starting_cash: scenario.startingCash,
       });
       if (rpc.error) return { ok: false, error: friendly(rpc.error.message) };
+      void track("scenario_started", { userId, properties: { scenarioId: scenario.id } });
       return { ok: true, run: toPublicRun(rpc.data as ScenarioRun) };
     } catch (e) {
       return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };
@@ -224,6 +226,7 @@ export const advanceScenarioStepFn = createServerFn({ method: "POST" })
           score = await scoreCompletedRun(admin, userId, run, scenario);
           const fin = await admin.rpc("finalize_scenario_run", { p_user_id: userId, p_run_id: run.id, p_final_score: score });
           if (!fin.error) run = fin.data as ScenarioRun;
+          void track("scenario_completed", { userId, properties: { scenarioId: scenario.id } });
         }
       }
 

@@ -30,7 +30,26 @@ export type AnalyticsEvent =
   // rejections were otherwise invisible in the data — this is the only
   // durable trace of a reject, needed for the admin usage dashboard's
   // "rate-limit rejections" figure.
-  | "rate_limited";
+  | "rate_limited"
+  // AUDIT.md Part 6(c) item 9 (2026-08-14 Tier-2 fix pass) — the ~8
+  // previously-uninstrumented features. `insight_generated` fires ONLY on a
+  // genuine cache-miss/fresh-Claude-call (see insights.server.ts) — distinct
+  // from the existing `insight_viewed`, which fires on every view including
+  // cache hits. `feature_unlocked` covers BOTH options and margin (the same
+  // unlockFeatureFn handles both, parameterized by `feature`), so a single
+  // event name with a property is more useful than two near-duplicate names.
+  | "insight_generated"
+  | "scenario_started"
+  | "scenario_completed"
+  | "coach_visited"
+  | "watchlist_add"
+  | "margin_enabled"
+  | "feature_unlocked"
+  | "journal_entry_created"
+  // Item 6 (2026-08-14) — the proactive Coach nudge card on Dashboard/Portfolio.
+  | "coach_nudge_shown"
+  | "coach_nudge_clicked"
+  | "coach_nudge_dismissed";
 
 export async function track(
   event: AnalyticsEvent,

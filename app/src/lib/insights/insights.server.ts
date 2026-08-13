@@ -181,6 +181,10 @@ export async function getStockInsight(symbol: string, userId?: string): Promise<
     // 3) Persist so every later request today — in ANY invocation, for ANY user —
     //    is served from the DB without another Claude call.
     await writeInsightRow(admin, { user_id: null, kind: "stock", symbol: sym, payload: insight, created_at: day });
+    // Fires ONLY on this genuine cache-miss/fresh-Claude-call path — distinct
+    // from `insight_viewed` (functions.ts), which fires on every view
+    // including cache hits. This is the real per-symbol generation cost signal.
+    void track("insight_generated", { userId, properties: { symbol: sym } });
     return insight;
   });
 }

@@ -6,7 +6,8 @@
 
 import { fmtPct } from "@/lib/mockData";
 import { WINDOW_TRADES_AFTER_LOSS } from "./metrics";
-import type { MetricResult, DispositionData, OverTradingData, ConcentrationData, RevengeTradingData, WinRateData, JournalCorrelationData } from "./metrics";
+import type { MetricResult, DispositionData, OverTradingData, ConcentrationData, RevengeTradingData, WinRateData, JournalCorrelationData, BehavioralAnalytics } from "./metrics";
+import type { LessonKey } from "@/lib/coaching/priority";
 
 export type Card = {
   title: string;
@@ -132,3 +133,16 @@ export function journalCorrelationCard(r: MetricResult<JournalCorrelationData>):
     detail: `${d.notedN} journalled closed trades, ${d.unnotedN} without a note.`,
   };
 }
+
+// Shared between the Coach page's own "Top Lesson" card and the Dashboard/
+// Portfolio nudge (item 6, 2026-08-14 Tier-2 fix pass) — ONE source of the
+// per-pattern headline sentence, so the nudge can never say something
+// different from what the Coach page itself says about the same finding.
+export const CARD_BUILDERS: Record<LessonKey, (a: BehavioralAnalytics) => Card> = {
+  disposition: (a) => dispositionCard(a.disposition),
+  revengeTrading: (a) => revengeTradingCard(a.revengeTrading),
+  overTrading: (a) => overTradingCard(a.overTrading),
+  concentration: (a) => concentrationCard(a.concentration),
+  winRate: (a) => winRateCard(a.winRate),
+  journalCorrelation: (a) => journalCorrelationCard(a.journalCorrelation),
+};
