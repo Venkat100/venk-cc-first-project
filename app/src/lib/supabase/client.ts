@@ -26,6 +26,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
+// Same audit that found admin.server.ts's getServiceClient() had no fetch
+// timeout (2026-08-12, a real multi-hour server-side hang) applies here
+// too: without this, a stalled connection leaves a signed-in user's tab
+// spinning on an auth/query call indefinitely, with nothing converting it
+// into a retryable error. 30s (vs. 20s server-side) since this client also
+// carries genuinely larger payloads over the user's own, more variable,
+// network conditions.
+const BROWSER_FETCH_TIMEOUT_MS = 30_000;
+
+async function timedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BROWSER_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error(`Request timed out after ${BROWSER_FETCH_TIMEOUT_MS}ms — please check your connection and try again.`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     // Persist the session in localStorage and refresh tokens automatically so
@@ -37,4 +61,5 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     flowType: "pkce",
   },
+  global: { fetch: timedFetch },
 });

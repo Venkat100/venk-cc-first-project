@@ -9,10 +9,49 @@ import { requireServerEnv } from "@/lib/marketData/env.server";
 // The project URL is public (also used by the browser client), safe to inline.
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
+// ROOT CAUSE of two separate multi-hour silent hangs (2026-08-11 scenario
+// verification, 2026-08-12 admin console verification): this client had NO
+// timeout on ANY call — auth admin API, postgrest, rpc, all of it — so a
+// stalled connection waited forever with nothing to convert it into a
+// rejection. The first incident fixed the equivalent bug in
+// provider.server.ts's raw fetch() calls but explicitly left this client
+// untouched ("a residual risk, deliberately not touched to avoid
+// regressions across every feature using getServiceClient()") — that
+// deferral is exactly what caused the second incident, and this ALSO
+// affects PRODUCTION, not just verify scripts: every server function in
+// this app goes through getServiceClient(), so an unresponsive-but-open
+// connection to Supabase could hang a real request indefinitely until
+// Vercel's own function timeout kills it, with none of our own code ever
+// getting a chance to return a clean error.
+//
+// Supabase's own JS client accepts a custom fetch via `global.fetch`
+// (SupabaseClientOptions) — supabase-js routes EVERY call (auth.*, .from(),
+// .rpc()) through this one function, so wrapping it here is a single,
+// unavoidable choke point rather than something each call site could
+// forget, matching the "push the timeout down into the shared primitive"
+// principle rather than relying on every caller to remember a wrapper.
+const SERVICE_CLIENT_FETCH_TIMEOUT_MS = 20_000;
+
+async function timedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SERVICE_CLIENT_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error(`Supabase service-role request timed out after ${SERVICE_CLIENT_FETCH_TIMEOUT_MS}ms`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** A Supabase client authenticated with the service_role key (bypasses RLS). */
 export function getServiceClient(): SupabaseClient {
   return createClient(SUPABASE_URL, requireServerEnv("SUPABASE_SERVICE_ROLE_KEY"), {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: timedFetch },
   });
 }
 

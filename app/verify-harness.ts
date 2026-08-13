@@ -104,12 +104,22 @@ export async function createTestUser(
   password: string,
   extraMetadata: Record<string, unknown> = {},
 ): Promise<{ uid: string; email: string }> {
-  const res = await admin.auth.admin.createUser({
-    email,
-    password,
-    email_confirm: true,
-    user_metadata: { terms_accepted_version: "test-harness", ...extraMetadata },
-  });
+  // Belt-and-suspenders on top of getServiceClient's own fetch-level timeout
+  // (admin.server.ts) — this is a SHARED PRIMITIVE every verify script
+  // calls, so its own hard ceiling means it can never hang past 25s no
+  // matter what timeout (if any) the passed-in `admin` client carries.
+  // 2026-08-12: a 4h24m silent hang traced to exactly this call path is why
+  // this exists — see HANDOFF's verification-harness rule.
+  const res = await withTimeout(
+    `createTestUser(${email})`,
+    admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { terms_accepted_version: "test-harness", ...extraMetadata },
+    }),
+    25_000,
+  );
   if (res.error || !res.data.user) {
     throw new Error(`createTestUser(${email}) failed: ${res.error?.message ?? "no user returned"}`);
   }
