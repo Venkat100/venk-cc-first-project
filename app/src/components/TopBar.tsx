@@ -188,23 +188,30 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   );
 }
 
-export function MobileNavOverlay({ open, onClose, items }: {
+export function MobileNavOverlay({ open, onClose, sections }: {
   open: boolean;
   onClose: () => void;
-  items: { to: string; label: string }[];
+  sections: { label: string; items: { to: string; label: string }[] }[];
 }) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 md:hidden">
       <div className="absolute inset-0 bg-background/80 backdrop-blur" onClick={onClose} />
-      <div className="absolute left-0 top-0 h-full w-72 border-r border-border bg-sidebar p-4">
+      <div className="absolute left-0 top-0 h-full w-72 overflow-y-auto border-r border-border bg-sidebar p-4">
         <div className="flex items-center justify-between">
           <span className="font-semibold">Menu</span>
           <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-md hover:bg-accent"><X className="h-4 w-4" /></button>
         </div>
-        <nav className="mt-4 space-y-1">
-          {items.map((it) => (
-            <Link key={it.to} to={it.to} onClick={onClose} className="block rounded-md px-3 py-2 text-sm hover:bg-accent">{it.label}</Link>
+        <nav className="mt-4 space-y-4">
+          {sections.map((section) => (
+            <div key={section.label}>
+              <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{section.label}</p>
+              <div className="space-y-1">
+                {section.items.map((it) => (
+                  <Link key={it.to} to={it.to} onClick={onClose} className="block rounded-md px-3 py-2 text-sm hover:bg-accent">{it.label}</Link>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
       </div>
