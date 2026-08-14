@@ -1,0 +1,22 @@
+<!--
+  My PaperTrader — horizontal lockup, LIGHT backgrounds.
+  Uses the SOLID icon (the outlined version's thin border disappears on white)
+  and a darker green for "Trader" so it stays legible and passes contrast.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 56" width="300" height="56" role="img" aria-label="My PaperTrader">
+  <title>My PaperTrader</title>
+
+  <g transform="translate(4 4)">
+    <rect width="48" height="48" rx="12" fill="#16A34A"/>
+    <path d="M11 33l9-10 6 6 11-15" fill="none" stroke="#F0FDF4" stroke-width="4"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M31 14h6v6" fill="none" stroke="#F0FDF4" stroke-width="4"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <text x="66" y="36"
+        font-family="Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="24" letter-spacing="-0.5">
+    <tspan fill="#8A939C" font-weight="500">My </tspan><tspan fill="#0B0D0E" font-weight="650">Paper</tspan><tspan fill="#16A34A" font-weight="650">Trader</tspan>
+  </text>
+</svg>

@@ -1,0 +1,20 @@
+<!--
+  My PaperTrader — primary icon (outlined).
+  Concept: "Fold Line" — the ascending trend line IS the crease in a folded
+  sheet of paper. The soft ghost line beneath it reads as the fold's shadow.
+  Use on DARK surfaces at 24px and above (app header, sidebar, nav).
+  For favicons / very small sizes use icon-solid.svg instead.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="My PaperTrader">
+  <title>My PaperTrader</title>
+  <rect width="48" height="48" rx="12" fill="#0E1512" stroke="#22C55E" stroke-width="1.5"/>
+  <!-- fold shadow -->
+  <path d="M11 35.5l9-10 6 6 11-15" fill="none" stroke="#E8FDF0" stroke-width="1"
+        stroke-linecap="round" stroke-linejoin="round" opacity=".3"/>
+  <!-- crease / trend line -->
+  <path d="M11 33l9-10 6 6 11-15" fill="none" stroke="#22C55E" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- arrow head -->
+  <path d="M31 14h6v6" fill="none" stroke="#22C55E" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

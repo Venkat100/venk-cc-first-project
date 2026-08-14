@@ -1,0 +1,15 @@
+<!--
+  My PaperTrader — monochrome icon.
+  Single-colour, no container. Inherits colour from context via currentColor,
+  so it can be tinted anywhere (dark on light, white on dark, watermarks,
+  print, embroidery, one-colour partner placements).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="My PaperTrader">
+  <title>My PaperTrader</title>
+  <rect x="0.75" y="0.75" width="46.5" height="46.5" rx="11.25" fill="none"
+        stroke="currentColor" stroke-width="1.5"/>
+  <path d="M11 33l9-10 6 6 11-15" fill="none" stroke="currentColor" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M31 14h6v6" fill="none" stroke="currentColor" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
