@@ -142,8 +142,12 @@ function Auth() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Left brand panel */}
-      <div className="relative hidden overflow-hidden border-r border-border bg-sidebar lg:flex lg:flex-col lg:justify-between p-10">
-        <Link to="/" className="flex items-center gap-2">
+      <div className="relative hidden overflow-hidden border-r border-border bg-sidebar lg:flex lg:flex-col p-10">
+        {/* Absolutely positioned, out of flow, so AuthFeatureShowcase's
+           flex-1 below centers against the FULL panel height rather than
+           just the space left over after the logo's flex row (2026-08-15
+           follow-up — centering the showcase, not leaving it bottom-left). */}
+        <Link to="/" className="absolute left-10 top-10 z-10 flex items-center gap-2">
           <BrandIcon size={36} />
           <BrandWordmark />
         </Link>

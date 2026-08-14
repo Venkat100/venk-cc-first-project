@@ -29,7 +29,11 @@ const SLIDES = [
   { icon: BookOpen, title: "Journal & coaching", body: "Write down your reasoning at the moment you trade — Coach names your own patterns from what you actually did, never from whether you're up or down." },
 ] as const;
 
-const SLIDE_MS = 5500;
+// 4s — fast enough to feel alive, still comfortably readable (a heading
+// plus two lines of body text) with margin before the 700ms crossfade
+// eats into reading time. Do not go below 4s; reading speed is the
+// constraint here, not preference (2026-08-15 follow-up — was 5.5s).
+const SLIDE_MS = 4000;
 
 export function AuthFeatureShowcase() {
   const reducedMotion = usePrefersReducedMotion();
@@ -50,45 +54,52 @@ export function AuthFeatureShowcase() {
   const slide = SLIDES[activeIndex];
 
   return (
-    <div
-      className="w-full max-w-sm"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
-      {/* `key` forces a remount on every slide change, which is what
-         restarts the CSS enter animation below — simplest possible
-         crossfade with zero JS animation library and zero new
-         dependency. Suppressed entirely under reduced motion, both here
-         (no class applied) and structurally (activeIndex never changes,
-         so this element never remounts in the first place). */}
+    // Centered in the FULL left panel, not just the space below the logo —
+    // the logo is absolutely positioned in auth.tsx, out of flow, so this
+    // flex-1 centers against the whole panel height. (2026-08-15 follow-up:
+    // was bottom-left via justify-between, read as a corner-parked widget.)
+    <div className="flex flex-1 items-center justify-center">
       <div
-        key={activeIndex}
-        className={cn(
-          "rounded-xl border border-border bg-card p-6",
-          !reducedMotion && "animate-in fade-in duration-700",
-        )}
+        className="max-w-[480px] text-center"
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
       >
-        <div className="grid h-11 w-11 place-items-center rounded-lg bg-primary/15 text-[color:var(--color-primary)]">
-          <slide.icon className="h-5 w-5" />
+        {/* `key` forces a remount on every slide change, which is what
+           restarts the CSS enter animation below — simplest possible
+           crossfade with zero JS animation library and zero new
+           dependency. Suppressed entirely under reduced motion, both here
+           (no class applied) and structurally (activeIndex never changes,
+           so this element never remounts in the first place). */}
+        <div key={activeIndex} className={cn(!reducedMotion && "animate-in fade-in duration-700")}>
+          {/* Card chrome (border + bg-card) dropped deliberately at this size
+             (2026-08-15 follow-up): centered and this large, a bordered box
+             reads as an embedded UI widget parked on the page. Floating
+             directly on the panel's own background — which already carries
+             the decorative gradient — reads as a composed editorial moment
+             instead, and the icon badge alone still gives it enough visual
+             anchor without a full rectangle around the text. */}
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-primary/15 text-[color:var(--color-primary)]">
+            <slide.icon className="h-8 w-8" />
+          </div>
+          <h3 className="mt-6 text-3xl font-semibold tracking-tight">{slide.title}</h3>
+          <p className="mt-3 text-base leading-relaxed text-muted-foreground">{slide.body}</p>
         </div>
-        <h3 className="mt-4 text-lg font-semibold">{slide.title}</h3>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{slide.body}</p>
-      </div>
 
-      {!reducedMotion && (
-        <div className="mt-4 flex gap-1.5">
-          {SLIDES.map((s, i) => (
-            <button
-              key={s.title}
-              type="button"
-              aria-label={`Show slide ${i + 1}: ${s.title}`}
-              aria-current={i === activeIndex}
-              onClick={() => setIndex(i)}
-              className={cn("h-1.5 rounded-full transition-all", i === activeIndex ? "w-6 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground/40")}
-            />
-          ))}
-        </div>
-      )}
+        {!reducedMotion && (
+          <div className="mt-6 flex justify-center gap-1.5">
+            {SLIDES.map((s, i) => (
+              <button
+                key={s.title}
+                type="button"
+                aria-label={`Show slide ${i + 1}: ${s.title}`}
+                aria-current={i === activeIndex}
+                onClick={() => setIndex(i)}
+                className={cn("h-1.5 rounded-full transition-all", i === activeIndex ? "w-6 bg-primary" : "w-1.5 bg-border hover:bg-muted-foreground/40")}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
