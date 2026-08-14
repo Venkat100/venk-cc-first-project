@@ -1,8 +1,8 @@
-# PaperTrader
+# My PaperTrader
 
 **Practice investing with virtual money — and let an AI manage a portfolio for you.**
 
-PaperTrader is a full-stack paper-trading platform with an autonomous AI portfolio agent. Users get a virtual cash balance, trade real stocks and ETFs at live market prices, track a portfolio with live profit/loss, run historical "what-if" simulations, and can hand a slice of their virtual cash to an AI agent that builds and manages a portfolio on its own.
+My PaperTrader is a full-stack paper-trading platform with an autonomous AI portfolio agent. Users get a virtual cash balance, trade real stocks and ETFs at live market prices, track a portfolio with live profit/loss, run historical "what-if" simulations, and can hand a slice of their virtual cash to an AI agent that builds and manages a portfolio on its own.
 
 It is an **educational simulation** — no real money, no brokerage connection, nothing executed against real markets. All cash and holdings are virtual.
 
@@ -46,7 +46,7 @@ All market-data and AI keys are server-only (never shipped to the browser), pric
 
 ## Not financial advice
 
-PaperTrader is an educational simulation. The AI agent trades virtual money only and can lose it; nothing here is financial advice, and no agent can guarantee gains. The value is intelligent, transparent, risk-managed practice — not a real brokerage.
+My PaperTrader is an educational simulation. The AI agent trades virtual money only and can lose it; nothing here is financial advice, and no agent can guarantee gains. The value is intelligent, transparent, risk-managed practice — not a real brokerage.
 
 ---
 
