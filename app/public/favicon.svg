@@ -1,0 +1,15 @@
+<!--
+  My PaperTrader — solid icon.
+  Same "Fold Line" mark, inverted: solid green field, dark crease.
+  The outlined version loses its 1.5px border below ~24px, so use THIS for
+  favicons, app icons, PWA manifest icons, social avatars, and anywhere the
+  mark renders small or on an unpredictable background.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="My PaperTrader">
+  <title>My PaperTrader</title>
+  <rect width="48" height="48" rx="12" fill="#22C55E"/>
+  <path d="M11 33l9-10 6 6 11-15" fill="none" stroke="#05140B" stroke-width="4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M31 14h6v6" fill="none" stroke="#05140B" stroke-width="4"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

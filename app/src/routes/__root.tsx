@@ -75,15 +75,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "PaperTrader — Practice investing risk-free" },
+      { title: "My PaperTrader — Practice investing risk-free" },
       { name: "description", content: "Simulate portfolios, test what-if scenarios, and learn investing with $25,000 in virtual cash. No real money, no risk." },
-      { name: "author", content: "PaperTrader" },
-      { property: "og:title", content: "PaperTrader — Practice investing risk-free" },
+      { name: "author", content: "My PaperTrader" },
+      { property: "og:title", content: "My PaperTrader — Practice investing risk-free" },
       { property: "og:description", content: "Trade with virtual money. Run what-if simulations against real market history." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
+      // icon-solid.svg (brand/README.md) — the outlined mark's 1.5px border
+      // disappears at favicon sizes, so the favicon uses the solid variant.
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" },
