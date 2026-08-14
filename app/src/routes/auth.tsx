@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AuthFeatureShowcase } from "@/components/AuthFeatureShowcase";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -148,12 +149,14 @@ function Auth() {
           </div>
           <span className="font-semibold">PaperTrader</span>
         </Link>
-        <div>
-          <p className="text-2xl font-semibold leading-snug">
-            "I tested 14 strategies before risking a dollar. PaperTrader made it click."
-          </p>
-          <p className="mt-3 text-sm text-muted-foreground">— a curious investor</p>
-        </div>
+        {/* Was a fabricated testimonial ("a curious investor") — this
+           product is careful about honesty everywhere else (no invented
+           AI cost numbers, no fake analyst price targets, real Top Movers
+           data, etc.), so a made-up quote here was inconsistent with that.
+           Removed rather than "transparently reframed" — a labeled-fake
+           quote still isn't worth the space a real feature tour earns
+           instead (2026-08-15). */}
+        <AuthFeatureShowcase />
         <div
           aria-hidden
           className="pointer-events-none absolute -bottom-32 -right-32 h-96 w-96 rounded-full opacity-30"
