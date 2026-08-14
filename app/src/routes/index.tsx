@@ -2,13 +2,14 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, LineChart, FlaskConical, ShieldCheck, Sparkles, TrendingUp, BarChart3, Bot, History, Landmark, SplitSquareHorizontal, Brain, BookOpen, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteFooter } from "@/components/SiteFooter";
+import { BrandIcon, BrandWordmark } from "@/components/Brand";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "PaperTrader — Practice investing risk-free" },
+      { title: "My PaperTrader — Practice investing risk-free" },
       { name: "description", content: "Trade stocks with $25,000 in virtual cash. Run what-if simulations against real market history. No real money, no risk." },
-      { property: "og:title", content: "PaperTrader — Practice investing risk-free" },
+      { property: "og:title", content: "My PaperTrader — Practice investing risk-free" },
       { property: "og:description", content: "Test what-if scenarios and learn investing with virtual money." },
     ],
   }),
@@ -21,10 +22,8 @@ function Landing() {
       {/* Nav */}
       <header className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
         <div className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <span className="text-base font-semibold tracking-tight">PaperTrader</span>
+          <BrandIcon size={36} />
+          <BrandWordmark className="text-base" />
         </div>
         <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
           <a href="#features" className="hover:text-foreground">Features</a>

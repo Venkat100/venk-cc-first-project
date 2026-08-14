@@ -8,8 +8,8 @@ import disclaimerContent from "../../../legal/disclaimer.md?raw";
 export const Route = createFileRoute("/disclaimer")({
   head: () => ({
     meta: [
-      { title: "Risk & Educational Disclaimer — PaperTrader" },
-      { name: "description", content: "PaperTrader's Risk & Educational Disclaimer." },
+      { title: "Risk & Educational Disclaimer — My PaperTrader" },
+      { name: "description", content: "My PaperTrader's Risk & Educational Disclaimer." },
     ],
   }),
   component: DisclaimerPage,

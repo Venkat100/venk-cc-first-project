@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/app/margin")({
-  head: () => ({ meta: [{ title: "Margin · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Margin · My PaperTrader" }] }),
   component: MarginPage,
 });
 

@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/app/admin")({
-  head: () => ({ meta: [{ title: "Admin · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Admin · My PaperTrader" }] }),
   component: () => (
     <AdminGate>
       <AdminShell />

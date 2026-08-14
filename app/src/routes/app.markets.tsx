@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { Search, SearchX, SplitSquareHorizontal } from "lucide-react";
 
 export const Route = createFileRoute("/app/markets")({
-  head: () => ({ meta: [{ title: "Markets · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Markets · My PaperTrader" }] }),
   component: Markets,
 });
 

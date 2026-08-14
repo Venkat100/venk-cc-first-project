@@ -14,19 +14,19 @@
 
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { friendlyError } from "./auth";
+import { BrandIcon, BrandWordmark } from "@/components/Brand";
 
 export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
-      { title: "Reset password · PaperTrader" },
-      { name: "description", content: "Set a new password for your PaperTrader account." },
+      { title: "Reset password · My PaperTrader" },
+      { name: "description", content: "Set a new password for your My PaperTrader account." },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -124,10 +124,8 @@ function ResetPassword() {
     <div className="grid min-h-screen place-items-center p-6">
       <div className="w-full max-w-md">
         <Link to="/" className="mb-6 flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <span className="font-semibold">PaperTrader</span>
+          <BrandIcon size={32} />
+          <BrandWordmark />
         </Link>
 
         {state === "checking" && (

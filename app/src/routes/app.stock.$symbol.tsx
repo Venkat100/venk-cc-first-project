@@ -40,7 +40,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/app/stock/$symbol")({
   loader: ({ params }) => ({ symbol: params.symbol.toUpperCase() }),
   head: ({ loaderData }) => ({
-    meta: [{ title: `${loaderData?.symbol ?? "Stock"} · PaperTrader` }],
+    meta: [{ title: `${loaderData?.symbol ?? "Stock"} · My PaperTrader` }],
   }),
   component: StockDetail,
 });

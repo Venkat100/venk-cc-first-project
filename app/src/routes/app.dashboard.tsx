@@ -25,7 +25,7 @@ import { CoachNudgeCard } from "@/components/coaching/CoachNudgeCard";
 
 export const Route = createFileRoute("/app/dashboard")({
   head: () => ({
-    meta: [{ title: "Dashboard · PaperTrader" }],
+    meta: [{ title: "Dashboard · My PaperTrader" }],
   }),
   component: Dashboard,
 });

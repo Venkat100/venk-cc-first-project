@@ -26,7 +26,7 @@ import { History, Play, RotateCcw, Trophy } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/scenarios/")({
-  head: () => ({ meta: [{ title: "Scenario Challenges · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Scenario Challenges · My PaperTrader" }] }),
   component: ScenariosPage,
 });
 

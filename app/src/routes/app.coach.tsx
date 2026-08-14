@@ -34,7 +34,7 @@ import {
 import { Compass, Sparkles, GraduationCap, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/app/coach")({
-  head: () => ({ meta: [{ title: "Coach · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Coach · My PaperTrader" }] }),
   component: Coach,
 });
 

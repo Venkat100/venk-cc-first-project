@@ -19,7 +19,7 @@ import { Star, Plus, X, Search, SearchX, Check } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/watchlist")({
-  head: () => ({ meta: [{ title: "Watchlist · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Watchlist · My PaperTrader" }] }),
   component: Watchlist,
 });
 

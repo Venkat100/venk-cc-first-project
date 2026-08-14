@@ -25,7 +25,7 @@ import { fmtUSD } from "@/lib/mockData";
 import { SplitSquareHorizontal, Search, SearchX, X } from "lucide-react";
 
 export const Route = createFileRoute("/app/options")({
-  head: () => ({ meta: [{ title: "Options · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Options · My PaperTrader" }] }),
   // Lets Markets deep-link straight into a symbol's chain (?symbol=NVDA)
   // instead of landing a user on an empty search box.
   validateSearch: (search: Record<string, unknown>) => ({

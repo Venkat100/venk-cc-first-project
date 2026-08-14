@@ -18,7 +18,7 @@ import { useQuotes } from "@/lib/marketData/useQuotes";
 import type { JournalEntry } from "@/lib/supabase/types";
 
 export const Route = createFileRoute("/app/journal")({
-  head: () => ({ meta: [{ title: "Journal · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Journal · My PaperTrader" }] }),
   // Lets the transaction-history note indicator and the stock page deep-link
   // straight into a symbol's entries (?symbol=NVDA), same convention as
   // /app/options.

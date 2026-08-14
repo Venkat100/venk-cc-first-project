@@ -37,7 +37,7 @@ const RESET_AFFECTED_QUERY_KEYS = [
 ] as const;
 
 export const Route = createFileRoute("/app/settings")({
-  head: () => ({ meta: [{ title: "Settings · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Settings · My PaperTrader" }] }),
   component: Settings,
 });
 

@@ -8,8 +8,8 @@ import privacyContent from "../../../legal/privacy.md?raw";
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
-      { title: "Privacy Policy — PaperTrader" },
-      { name: "description", content: "PaperTrader's Privacy Policy." },
+      { title: "Privacy Policy — My PaperTrader" },
+      { name: "description", content: "My PaperTrader's Privacy Policy." },
     ],
   }),
   component: PrivacyPage,

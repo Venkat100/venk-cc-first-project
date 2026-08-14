@@ -1,12 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuthFeatureShowcase } from "@/components/AuthFeatureShowcase";
+import { BrandIcon, BrandWordmark } from "@/components/Brand";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -19,7 +19,7 @@ export const LEGAL_VERSION = "2026-08-09";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Sign in · PaperTrader" },
+      { title: "Sign in · My PaperTrader" },
       { name: "description", content: "Sign in or create a paper trading account." },
     ],
   }),
@@ -144,10 +144,8 @@ function Auth() {
       {/* Left brand panel */}
       <div className="relative hidden overflow-hidden border-r border-border bg-sidebar lg:flex lg:flex-col lg:justify-between p-10">
         <Link to="/" className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-            <Sparkles className="h-4 w-4" />
-          </div>
-          <span className="font-semibold">PaperTrader</span>
+          <BrandIcon size={36} />
+          <BrandWordmark />
         </Link>
         {/* Was a fabricated testimonial ("a curious investor") — this
            product is careful about honesty everywhere else (no invented
@@ -168,12 +166,10 @@ function Auth() {
       <div className="flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <Link to="/" className="mb-6 flex items-center gap-2 lg:hidden">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <span className="font-semibold">PaperTrader</span>
+            <BrandIcon size={32} />
+            <BrandWordmark />
           </Link>
-          <h1 className="text-2xl font-semibold tracking-tight">Welcome to PaperTrader</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Welcome to My PaperTrader</h1>
           <p className="mt-1 text-sm text-muted-foreground">Practice investing risk-free. Always.</p>
 
           <Tabs defaultValue="signin" className="mt-6">
@@ -256,7 +252,7 @@ function Auth() {
                     <Link to="/privacy" target="_blank" className="text-foreground underline underline-offset-2 hover:opacity-80">
                       Privacy Policy
                     </Link>
-                    , and I understand PaperTrader is an educational simulation, not financial advice.
+                    , and I understand My PaperTrader is an educational simulation, not financial advice.
                   </Label>
                 </div>
                 <Button type="submit" disabled={loading || !termsAccepted} className="w-full">{loading ? "Creating account…" : "Create account"}</Button>

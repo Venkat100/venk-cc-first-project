@@ -18,7 +18,7 @@ import { CoachNudgeCard } from "@/components/coaching/CoachNudgeCard";
 import { Wallet, Receipt, PieChart as PieIcon, LineChart, NotebookPen } from "lucide-react";
 
 export const Route = createFileRoute("/app/portfolio")({
-  head: () => ({ meta: [{ title: "Portfolio · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Portfolio · My PaperTrader" }] }),
   component: Portfolio,
 });
 

@@ -1,4 +1,4 @@
-// Mock data for PaperTrader. Swap to real APIs later.
+// Mock data for My PaperTrader. Swap to real APIs later.
 
 export type Stock = {
   symbol: string;

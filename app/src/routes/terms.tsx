@@ -8,8 +8,8 @@ import termsContent from "../../../legal/terms.md?raw";
 export const Route = createFileRoute("/terms")({
   head: () => ({
     meta: [
-      { title: "Terms of Service — PaperTrader" },
-      { name: "description", content: "PaperTrader's Terms of Service." },
+      { title: "Terms of Service — My PaperTrader" },
+      { name: "description", content: "My PaperTrader's Terms of Service." },
     ],
   }),
   component: TermsPage,

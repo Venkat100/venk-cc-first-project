@@ -1,7 +1,8 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, LineChart, FlaskConical, PieChart, Star, Settings, Sparkles, Bot, Landmark, SplitSquareHorizontal, BookOpen, Compass, History, ShieldAlert } from "lucide-react";
+import { LayoutDashboard, LineChart, FlaskConical, PieChart, Star, Settings, Bot, Landmark, SplitSquareHorizontal, BookOpen, Compass, History, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/auth-context";
+import { BrandIcon, BrandWordmark } from "@/components/Brand";
 
 // AUDIT.md Part 6(b) item 6 (2026-08-14 Tier-2 fix pass): 12 flat, equal-
 // weight items gave a new user no signal about what to try first. Grouped
@@ -55,11 +56,9 @@ export function AppSidebar() {
   return (
     <aside className="hidden md:flex md:flex-col w-60 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-5 py-5">
-        <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-          <Sparkles className="h-4 w-4" />
-        </div>
+        <BrandIcon size={36} />
         <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold tracking-tight">PaperTrader</span>
+          <BrandWordmark className="text-sm" />
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">paper · v1</span>
         </div>
       </div>

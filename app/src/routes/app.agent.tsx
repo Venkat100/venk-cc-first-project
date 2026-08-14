@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye, Scissors, PauseCircle, ClipboardCheck, Check, X } from "lucide-react";
 
 export const Route = createFileRoute("/app/agent")({
-  head: () => ({ meta: [{ title: "AI Agent · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "AI Agent · My PaperTrader" }] }),
   component: Agent,
 });
 

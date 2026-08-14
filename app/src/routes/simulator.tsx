@@ -1,15 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SimulatorPanel } from "@/components/SimulatorPanel";
 import { useAuth } from "@/lib/auth/auth-context";
+import { BrandIcon, BrandWordmark } from "@/components/Brand";
 
 // PUBLIC route (NOT under /app) — usable while logged out. The auth gate only
 // wraps /app/*, so this page is reachable by anyone.
 export const Route = createFileRoute("/simulator")({
   head: () => ({
     meta: [
-      { title: "What-If Simulator — PaperTrader" },
+      { title: "What-If Simulator — My PaperTrader" },
       { name: "description", content: "See what investing in any stock back then would be worth today, vs. the S&P 500. Free, no account needed." },
     ],
   }),
@@ -23,8 +23,8 @@ function PublicSimulator() {
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <Link to="/" className="flex items-center gap-2">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground"><Sparkles className="h-4 w-4" /></div>
-            <span className="font-semibold">PaperTrader</span>
+            <BrandIcon size={32} />
+            <BrandWordmark />
           </Link>
           <div className="flex items-center gap-2">
             {session ? (

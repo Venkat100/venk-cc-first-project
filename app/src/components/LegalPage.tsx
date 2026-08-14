@@ -2,10 +2,10 @@ import type { ComponentPropsWithoutRef } from "react";
 import { Link } from "@tanstack/react-router";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SiteFooter } from "@/components/SiteFooter";
 import { useAuth } from "@/lib/auth/auth-context";
+import { BrandIcon, BrandWordmark } from "@/components/Brand";
 
 // Maps markdown structure to the app's existing Tailwind design tokens, so
 // every legal page (terms/privacy/disclaimer) gets identical, on-brand
@@ -60,10 +60,8 @@ export function LegalPage({ content }: { content: string }) {
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <Link to="/" className="flex items-center gap-2">
-            <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <span className="font-semibold">PaperTrader</span>
+            <BrandIcon size={32} />
+            <BrandWordmark />
           </Link>
           <div className="flex items-center gap-2">
             {session ? (

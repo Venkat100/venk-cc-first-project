@@ -32,7 +32,7 @@ import { toast } from "sonner";
 import { ChevronsRight, TrendingUp, TrendingDown, History, Trophy, Info } from "lucide-react";
 
 export const Route = createFileRoute("/app/scenarios/$runId")({
-  head: () => ({ meta: [{ title: "Scenario Challenge · PaperTrader" }] }),
+  head: () => ({ meta: [{ title: "Scenario Challenge · My PaperTrader" }] }),
   component: ScenarioRunPage,
 });
 
