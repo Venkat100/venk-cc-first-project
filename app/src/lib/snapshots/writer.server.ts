@@ -90,8 +90,13 @@ export async function runSnapshots(opts: { onlyUserId?: string } = {}): Promise<
   // "union of symbols, one price pass" discipline as equities above) —
   // reuses the exact live-Black-Scholes valuation the UI reads
   // (lib/options/valuation.server.ts), so the value chart agrees with what
-  // Dashboard/Portfolio show right now, not an approximation of it.
-  const optionsValueByUser = await getOptionsValueByUser();
+  // Dashboard/Portfolio show right now, not an approximation of it. Scoped
+  // by the SAME `one` used for profiles/holdings/agent_holdings above — a
+  // real bug, not just a test-timing issue: this call previously ignored
+  // `onlyUserId` entirely, so even an on-demand single-user snapshot fanned
+  // out to live-price the WHOLE database's option book (see
+  // getOptionsValueByUser's own doc comment, 2026-08-15 fix).
+  const optionsValueByUser = await getOptionsValueByUser(one);
 
   const todayRows: Array<{ user_id: string; total_value: number; cash: number; holdings_value: number; captured_at: string }> = [];
   const baselineRows: typeof todayRows = [];

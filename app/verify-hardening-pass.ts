@@ -27,12 +27,12 @@ import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
 import { createTestUser } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
-import { providerQuotes } from "@/lib/marketData/finnhub.server";
+import { providerQuotes, fetchStats } from "@/lib/marketData/finnhub.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
 import { STARTING_CASH } from "@/lib/mockData";
 import { getPositionsValue } from "@/lib/margin/valuation.server";
-import { getEnrichedOptionPositions } from "@/lib/options/valuation.server";
+import { getEnrichedOptionPositions, getOptionsValueByUser } from "@/lib/options/valuation.server";
 import { runExpiryProcessing } from "@/lib/options/expiry.server";
 import { runInterestAccrual } from "@/lib/margin/interest.server";
 import { runMarginMonitor } from "@/lib/margin/monitor.server";
@@ -227,8 +227,41 @@ async function main() {
     assert("positionsValue (margin engine) === holdingsValue+optionsValue (Dashboard), within live-quote drift", closeToLive(positionsValue, holdingsValue + optionsValue), `${positionsValue} vs ${holdingsValue + optionsValue}`);
     assert("Dashboard total === Margin page equity, within live-quote drift", closeToLive(dashboardTotal, marginEquity), `${dashboardTotal} vs ${marginEquity}`);
 
+    // ── PROOF that getOptionsValueByUser is now genuinely scoped (2026-08-15
+    // root-cause fix for this script's intermittent step timeouts) ─────────
+    // Seed a SECOND throwaway user with an option position on a DIFFERENT
+    // underlying, so the scoping assertions below are exercised against a
+    // real multi-user options book, not a vacuously-empty one. Direct
+    // insert (service_role has full CRUD on option_positions — a mutable
+    // current-state table, unlike the append-only `transactions` ledger) —
+    // no need to execute a real second trade just to prove a query filter.
+    const { uid: otherUid } = await step("seed a SECOND throwaway user (for the options-scoping proof)", 15000, () => createTestUser(admin, `pt-hardening-other-${stamp}@example.org`, "OtherUserPass!234"));
+    const { error: seedOtherOptErr } = await admin.from("option_positions").insert({
+      user_id: otherUid, contract_id: `MSFT-OTHER-${stamp}`, symbol: "MSFT", opt_type: "call",
+      strike: 400, expiry: expiry.expiry, contracts: 1, avg_premium: 10,
+    });
+    if (seedOtherOptErr) throw new Error(`seed other user's option_positions row failed: ${seedOtherOptErr.message}`);
+    const multiUserCount = (await admin.from("option_positions").select("user_id", { count: "exact", head: true }).in("user_id", [uid, otherUid])).count ?? 0;
+    assert("both throwaway users genuinely have an open option_positions row (scoping test isn't vacuous)", multiUserCount === 2, String(multiUserCount));
+
+    const scopedFetchesBefore = fetchStats().total;
+    const scopedMap = await step("getOptionsValueByUser(uid) — SCOPED call, must ignore the other user's MSFT position entirely", 20000, () => getOptionsValueByUser(uid));
+    const scopedFetches = fetchStats().total - scopedFetchesBefore;
+    assert("scoped call's returned map has NO entry for the other user", !scopedMap.has(otherUid), JSON.stringify([...scopedMap.keys()]));
+    assert("scoped call's returned map DOES have an entry for our own user", scopedMap.has(uid), JSON.stringify([...scopedMap.keys()]));
+    console.log(`  scoped getOptionsValueByUser(uid): ${scopedFetches} provider fetches (only NVDA — our own position's underlying, never MSFT)`);
+
+    const unscopedFetchesBefore = fetchStats().total;
+    const unscopedMap = await step("getOptionsValueByUser() — UNSCOPED call (the real daily-cron path), must STILL include both users", 20000, () => getOptionsValueByUser());
+    const unscopedFetches = fetchStats().total - unscopedFetchesBefore;
+    assert("unscoped call's returned map DOES include the other user (real production cron behavior preserved)", unscopedMap.has(otherUid), JSON.stringify([...unscopedMap.keys()]));
+    assert("unscoped call's returned map DOES include our own user too", unscopedMap.has(uid), JSON.stringify([...unscopedMap.keys()]));
+    console.log(`  unscoped getOptionsValueByUser(): ${unscopedFetches} provider fetches (NVDA + MSFT — the whole book, as intended for the real cron)`);
+
+    await step("cleanup: delete the second throwaway user (cascades its option_positions row)", 15000, () => admin.auth.admin.deleteUser(otherUid));
+
     // What the daily snapshot writer computes (the FIXED code, real function call).
-    const snapSummary = await step("runSnapshots({onlyUserId}) — the real writer, post-fix", 25000, () => runSnapshots({ onlyUserId: uid }));
+    const snapSummary = await step("runSnapshots({onlyUserId}) — the real writer, post-fix, now correctly scoped end-to-end", 25000, () => runSnapshots({ onlyUserId: uid }));
     assert("snapshot written for this user", snapSummary.snapshotsWritten === 1, JSON.stringify(snapSummary));
     const today = new Date().toISOString().slice(0, 10);
     const { data: snapRow } = await admin.from("portfolio_snapshots").select("total_value, cash, holdings_value").eq("user_id", uid).eq("captured_at", today).single();

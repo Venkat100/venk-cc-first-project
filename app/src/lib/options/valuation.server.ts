@@ -155,14 +155,31 @@ export async function getEnrichedOptionPositions(userId: string): Promise<Enrich
   return enrichPositions(rows, quotes, vols);
 }
 
-/** ALL users' option positions, live-priced with ONE quote/vol fetch for the
- *  UNION of every symbol anyone holds — the options-book counterpart to how
- *  the snapshot writer already batches equity holdings (see
- *  lib/snapshots/writer.server.ts). Returns each user's TOTAL options market
- *  value, keyed by user_id. */
-export async function getOptionsValueByUser(): Promise<Map<string, number>> {
+/** ALL users' option positions (or just ONE user's, when `onlyUserId` is
+ *  given), live-priced with ONE quote/vol fetch for the UNION of every
+ *  symbol involved — the options-book counterpart to how the snapshot
+ *  writer already batches equity holdings (see lib/snapshots/writer.server.ts,
+ *  which scopes profiles/holdings/agent_holdings by the SAME parameter name).
+ *  Returns each user's TOTAL options market value, keyed by user_id.
+ *
+ *  `onlyUserId` fixed 2026-08-15: this function previously took no
+ *  parameter and ALWAYS fetched + live-priced the entire database's option
+ *  book, even when its one caller (runSnapshots) was explicitly asked to
+ *  scope to a single user — silently contradicting that call's own "don't
+ *  fan out a price fetch across the whole user base" design intent (see
+ *  writer.server.ts's header) for the options leg specifically, while the
+ *  equities leg right next to it was correctly scoped. Root-caused as the
+ *  actual source of verify-hardening-pass.ts's intermittent step timeouts:
+ *  elapsed time (and Finnhub/Twelve-Data call volume) scaled with however
+ *  many DISTINCT option symbols were open across every real + leftover-test
+ *  account in the database at that moment — not with the one throwaway
+ *  test user's own single position — which is exactly the kind of
+ *  invisible, run-to-run-varying cost that produces a genuinely
+ *  intermittent (not reproducible in isolation with a clean DB) failure. */
+export async function getOptionsValueByUser(onlyUserId?: string): Promise<Map<string, number>> {
   const admin = getServiceClient();
-  const { data, error } = await admin.from("option_positions").select("*");
+  const q = admin.from("option_positions").select("*");
+  const { data, error } = await (onlyUserId ? q.eq("user_id", onlyUserId) : q);
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as OptionPositionRow[];
   const totals = new Map<string, number>();
