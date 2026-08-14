@@ -160,46 +160,67 @@ function StockDetail() {
         </div>
       </div>
 
+      {/* Layout note (2026-08-15, "move News/About into the right column"):
+         BOTH direct children below use `contents` at mobile widths, which
+         removes the wrapper div from the box model and promotes its own
+         children straight into THIS grid — so at <lg every card here
+         (chart/order-panel/key-stats/earnings/insight/about/news/tabs) is a
+         genuine sibling grid item, ordered purely by its own `order-N`
+         class, and the grid's own `gap-6` spaces them uniformly. That's how
+         the order panel can land between the chart and Key Stats on mobile
+         while still living in a separate right-hand column at `lg:` and up,
+         where each wrapper switches to `lg:flex lg:flex-col` (a real
+         two-column layout again) and every child's `lg:order-none` hands
+         control back to plain DOM order within its own column. No content
+         is duplicated — each section renders in exactly one place, this
+         class combination only changes ITS POSITION per breakpoint. */}
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-6">
-          <Card>
-            <CardContent className="p-3 sm:p-5">
-              <LivePriceChart symbol={symbol} height={340} defaultRange="3M" quote={quote} />
-            </CardContent>
-          </Card>
+        <div className="contents lg:flex lg:flex-col lg:gap-6">
+          <div className="order-1 lg:order-none">
+            <Card>
+              <CardContent className="p-3 sm:p-5">
+                <LivePriceChart symbol={symbol} height={340} defaultRange="3M" quote={quote} />
+              </CardContent>
+            </Card>
+          </div>
 
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Key stats</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              {quote ? (
-                <>
-                  <Stat label="Open" value={quote.open != null ? fmtUSD(quote.open) : "—"} />
-                  <Stat label="Day high" value={quote.high != null ? fmtUSD(quote.high) : "—"} />
-                  <Stat label="Day low" value={quote.low != null ? fmtUSD(quote.low) : "—"} />
-                  <Stat label="Prev close" value={quote.previousClose != null ? fmtUSD(quote.previousClose) : "—"} />
-                  <Stat label="Market cap" value={quote.marketCap != null ? `$${fmtCompact(quote.marketCap)}` : "—"} />
-                  <Stat label="52-wk range" value={quote.week52Low != null && quote.week52High != null ? `${fmtUSD(quote.week52Low)} – ${fmtUSD(quote.week52High)}` : "—"} />
-                  <FundamentalsRow quote={quote} />
-                </>
-              ) : (
-                <div className="col-span-full"><LoadingState label="Loading stats…" /></div>
-              )}
-            </CardContent>
-          </Card>
+          <div className="order-3 lg:order-none">
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="text-base">Key stats</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {quote ? (
+                  <>
+                    <Stat label="Open" value={quote.open != null ? fmtUSD(quote.open) : "—"} />
+                    <Stat label="Day high" value={quote.high != null ? fmtUSD(quote.high) : "—"} />
+                    <Stat label="Day low" value={quote.low != null ? fmtUSD(quote.low) : "—"} />
+                    <Stat label="Prev close" value={quote.previousClose != null ? fmtUSD(quote.previousClose) : "—"} />
+                    <Stat label="Market cap" value={quote.marketCap != null ? `$${fmtCompact(quote.marketCap)}` : "—"} />
+                    <Stat label="52-wk range" value={quote.week52Low != null && quote.week52High != null ? `${fmtUSD(quote.week52Low)} – ${fmtUSD(quote.week52High)}` : "—"} />
+                    <FundamentalsRow quote={quote} />
+                  </>
+                ) : (
+                  <div className="col-span-full"><LoadingState label="Loading stats…" /></div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-          <EarningsAndAnalystsCard data={enrichmentQ.data} isLoading={enrichmentQ.isLoading} />
+          <div className="order-4 lg:order-none">
+            <EarningsAndAnalystsCard data={enrichmentQ.data} isLoading={enrichmentQ.isLoading} />
+          </div>
 
-          <InsightCard symbol={symbol} />
+          <div className="order-5 lg:order-none">
+            <InsightCard symbol={symbol} />
+          </div>
 
-          <Card>
+          <div className="order-8 lg:order-none">
+            <Card>
             <CardContent className="p-3 sm:p-5">
               <Tabs defaultValue="position">
                 <div className="overflow-x-auto">
                   <TabsList className="w-max">
                     <TabsTrigger value="position">Your position</TabsTrigger>
                     <TabsTrigger value="options">Options</TabsTrigger>
-                    <TabsTrigger value="news">News</TabsTrigger>
-                    <TabsTrigger value="about">About</TabsTrigger>
                     <TabsTrigger value="trades">Recent trades</TabsTrigger>
                     <TabsTrigger value="journal">Journal{symbolJournalEntries.length > 0 ? ` (${symbolJournalEntries.length})` : ""}</TabsTrigger>
                   </TabsList>
@@ -247,12 +268,6 @@ function StockDetail() {
                       )}
                     </div>
                   </UnlockGate>
-                </TabsContent>
-                <TabsContent value="news" className="mt-4">
-                  <NewsTab symbol={symbol} />
-                </TabsContent>
-                <TabsContent value="about" className="mt-4">
-                  <AboutTab symbol={symbol} quote={quote} peers={enrichmentQ.data?.peers ?? []} />
                 </TabsContent>
                 <TabsContent value="trades" className="mt-4">
                   {recent.length ? (
@@ -323,20 +338,33 @@ function StockDetail() {
                 </TabsContent>
               </Tabs>
             </CardContent>
-          </Card>
+            </Card>
+          </div>
         </div>
 
-        <OrderPanel
-          price={quote?.price ?? 0}
-          symbol={symbol}
-          buyingPower={buyingPower}
-          positionQty={position?.quantity ?? 0}
-          ready={!!quote}
-          cashBalance={cashBalance}
-          marginLoan={marginLoan}
-          marginEnabled={marginEnabled}
-          interestRate={interestRate}
-        />
+        <div className="contents lg:flex lg:flex-col lg:gap-6">
+          <div className="order-2 lg:order-none">
+            <OrderPanel
+              price={quote?.price ?? 0}
+              symbol={symbol}
+              buyingPower={buyingPower}
+              positionQty={position?.quantity ?? 0}
+              ready={!!quote}
+              cashBalance={cashBalance}
+              marginLoan={marginLoan}
+              marginEnabled={marginEnabled}
+              interestRate={interestRate}
+            />
+          </div>
+
+          <div className="order-6 lg:order-none">
+            <AboutCard symbol={symbol} quote={quote} peers={enrichmentQ.data?.peers ?? []} />
+          </div>
+
+          <div className="order-7 lg:order-none">
+            <NewsCard symbol={symbol} />
+          </div>
+        </div>
       </div>
 
       <OptionOrderPanel state={orderPanel} onClose={() => setOrderPanel({ open: false })} />
@@ -590,45 +618,65 @@ function FundamentalsRow({ quote }: { quote: Quote }) {
   );
 }
 
-function NewsTab({ symbol }: { symbol: string }) {
+// Moved out of the tab bar into the right column, below the order panel
+// (2026-08-15, "News tab is too hidden" — Venky). Redesigned for the
+// column's ~350px width rather than the old full-width tab layout:
+// headline truncated to 2 lines (`line-clamp-2`, so a long headline
+// doesn't push the source/time off screen or blow out row height), no
+// separate wide "meta" row layout needed since everything already stacks
+// naturally at this width. Still opens externally (`target="_blank"
+// rel="noopener noreferrer"`) exactly as before.
+function NewsCard({ symbol }: { symbol: string }) {
   const newsQ = useQuery({ queryKey: ["news", symbol], queryFn: () => getCompanyNews(symbol), staleTime: 10 * 60_000, retry: 1 });
 
-  // isPending (not isLoading): isLoading is isPending && isFetching, which
-  // goes false during the gap between retry attempts even though we still
-  // have neither data nor a settled error — that gap would otherwise flash
-  // the empty state instead of the spinner.
-  if (newsQ.isPending) return <LoadingState label="Loading news…" />;
+  if (newsQ.isPending) {
+    return (
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Newspaper className="h-4 w-4" /> News</CardTitle></CardHeader>
+        <CardContent><LoadingState label="Loading news…" /></CardContent>
+      </Card>
+    );
+  }
   if (newsQ.isError) {
     return (
-      <div className="space-y-3">
-        <ErrorState message={(newsQ.error as Error)?.message ?? "Couldn't load news right now."} />
-        <div className="text-center"><Button variant="outline" size="sm" onClick={() => newsQ.refetch()}>Try again</Button></div>
-      </div>
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Newspaper className="h-4 w-4" /> News</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <ErrorState message={(newsQ.error as Error)?.message ?? "Couldn't load news right now."} />
+          <div className="text-center"><Button variant="outline" size="sm" onClick={() => newsQ.refetch()}>Try again</Button></div>
+        </CardContent>
+      </Card>
     );
   }
   const items = newsQ.data ?? [];
-  if (items.length === 0) {
-    return <EmptyState icon={Newspaper} title="No recent news" description={`No recent news for ${symbol} in the last week.`} />;
-  }
+  // Genuinely no news this week (or an ETF with none at all) — hide the
+  // whole card rather than an empty heading, same rule as Key Stats and
+  // the Earnings & analysts card.
+  if (items.length === 0) return null;
   return (
-    <ul className="divide-y divide-border/60">
-      {items.map((n, i) => <NewsRow key={i} item={n} />)}
-    </ul>
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-base flex items-center gap-2"><Newspaper className="h-4 w-4" /> News</CardTitle></CardHeader>
+      <CardContent className="p-0 pb-2">
+        <ul className="divide-y divide-border/60 px-5">
+          {items.slice(0, 8).map((n, i) => <NewsRowCompact key={i} item={n} />)}
+        </ul>
+      </CardContent>
+    </Card>
   );
 }
 
-function NewsRow({ item }: { item: NewsItem }) {
+function NewsRowCompact({ item }: { item: NewsItem }) {
   const meta = [item.source, fmtRelativeTime(item.datetime)].filter(Boolean).join(" · ");
   const body = (
-    <>
-      <p className={cn("text-sm font-medium leading-snug", item.url && "group-hover:underline")}>{item.headline}</p>
+    <div className="min-w-0 flex-1">
+      <p className={cn("line-clamp-2 text-sm font-medium leading-snug", item.url && "group-hover:underline")}>{item.headline}</p>
       {meta && <p className="mt-1 text-xs text-muted-foreground">{meta}</p>}
-    </>
+    </div>
   );
   return (
-    <li className="py-3 first:pt-0 last:pb-0">
+    <li className="py-3 first:pt-3 last:pb-0">
       {item.url ? (
-        <a href={item.url} target="_blank" rel="noopener noreferrer" className="group flex items-start justify-between gap-2">
+        <a href={item.url} target="_blank" rel="noopener noreferrer" className="group flex items-start gap-2">
           {body}
           <ExternalLink className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
         </a>
@@ -639,61 +687,83 @@ function NewsRow({ item }: { item: NewsItem }) {
   );
 }
 
-function AboutTab({ symbol, quote, peers }: { symbol: string; quote?: Quote; peers: string[] }) {
-  if (!quote) return <LoadingState label="Loading company info…" />;
-  // Finnhub's /stock/profile2 is empty for ETFs/funds — no sector, no market
-  // cap, no country. Degrade to a clear fund label instead of blank gaps.
-  const isLikelyFund = !quote.marketCap && (!quote.sector || quote.sector === "—");
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        {quote.logo ? (
-          <img src={quote.logo} alt={symbol} className="h-11 w-11 shrink-0 rounded-xl bg-white object-contain p-1" />
-        ) : (
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-2 text-xs font-bold">{symbol.slice(0, 2)}</div>
-        )}
-        <div className="min-w-0">
-          <p className="truncate font-medium text-foreground">{quote.name}</p>
-          <p className="text-xs text-muted-foreground">{symbol}{quote.exchange ? ` · ${quote.exchange}` : ""}</p>
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Sector / type" value={isLikelyFund ? "Exchange-traded fund" : (quote.sector ?? "—")} />
-        <Stat label="Market cap" value={quote.marketCap != null ? `$${fmtCompact(quote.marketCap)}` : "—"} />
-        <Stat label="Country" value={quote.country ?? "—"} />
-        {quote.ipo && <Stat label="IPO date" value={quote.ipo} />}
-      </div>
-
-      {quote.weburl && (
-        <a href={quote.weburl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-[color:var(--color-primary)] hover:underline">
-          <Globe className="h-3.5 w-3.5" /> Visit website
-        </a>
-      )}
-
-      {/* Peers, phase 2 (2026-08-14): genuinely empty for ETFs — hide the
-         whole section rather than an empty heading, same rule as everywhere
-         else in this enrichment pass. */}
-      {peers.length > 0 && (
-        <div>
-          <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Related stocks</p>
-          <div className="flex flex-wrap gap-2">
-            {peers.map((p) => (
-              <Link
-                key={p}
-                to="/app/stock/$symbol"
-                params={{ symbol: p }}
-                className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]"
-              >
-                {p}
-              </Link>
-            ))}
+// Moved out of the tab bar into the right column, below the order panel
+// (2026-08-15, "About tab is too hidden" — Venky), first in that column,
+// News second. Already mostly label/value pairs, so it reads fine at the
+// column's ~350px width without a redesign — `sm:grid-cols-3` from the old
+// wide-tab layout never actually triggered at this width anyway (640px
+// breakpoint, this column never gets that wide), so it's replaced with an
+// explicit single-column stack rather than left as dead/misleading markup.
+// No "hide entirely" case: unlike News, a loaded quote ALWAYS has at least
+// a name/logo/exchange to show — even the ETF degradation path below
+// renders a real, useful "Exchange-traded fund" label, never a blank card.
+function AboutCard({ symbol, quote, peers }: { symbol: string; quote?: Quote; peers: string[] }) {
+  const body = !quote ? (
+    <LoadingState label="Loading company info…" />
+  ) : (
+    (() => {
+      // Finnhub's /stock/profile2 is empty for ETFs/funds — no sector, no
+      // market cap, no country. Degrade to a clear fund label instead of
+      // blank gaps.
+      const isLikelyFund = !quote.marketCap && (!quote.sector || quote.sector === "—");
+      return (
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            {quote.logo ? (
+              <img src={quote.logo} alt={symbol} className="h-11 w-11 shrink-0 rounded-xl bg-white object-contain p-1" />
+            ) : (
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-surface-2 text-xs font-bold">{symbol.slice(0, 2)}</div>
+            )}
+            <div className="min-w-0">
+              <p className="truncate font-medium text-foreground">{quote.name}</p>
+              <p className="text-xs text-muted-foreground">{symbol}{quote.exchange ? ` · ${quote.exchange}` : ""}</p>
+            </div>
           </div>
-        </div>
-      )}
 
-      <p className="text-[11px] text-muted-foreground">Live quote &amp; company profile from Finnhub; historical price chart from Twelve Data.</p>
-    </div>
+          <div className="grid grid-cols-1 gap-3">
+            <Stat label="Sector / type" value={isLikelyFund ? "Exchange-traded fund" : (quote.sector ?? "—")} />
+            <Stat label="Market cap" value={quote.marketCap != null ? `$${fmtCompact(quote.marketCap)}` : "—"} />
+            <Stat label="Country" value={quote.country ?? "—"} />
+            {quote.ipo && <Stat label="IPO date" value={quote.ipo} />}
+          </div>
+
+          {quote.weburl && (
+            <a href={quote.weburl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-[color:var(--color-primary)] hover:underline">
+              <Globe className="h-3.5 w-3.5" /> Visit website
+            </a>
+          )}
+
+          {/* Peers, phase 2 (2026-08-14): genuinely empty for ETFs — hide the
+             whole section rather than an empty heading, same rule as everywhere
+             else in this enrichment pass. */}
+          {peers.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Related stocks</p>
+              <div className="flex flex-wrap gap-2">
+                {peers.map((p) => (
+                  <Link
+                    key={p}
+                    to="/app/stock/$symbol"
+                    params={{ symbol: p }}
+                    className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium hover:border-[color:var(--color-primary)] hover:text-[color:var(--color-primary)]"
+                  >
+                    {p}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <p className="text-[11px] text-muted-foreground">Live quote &amp; company profile from Finnhub; historical price chart from Twelve Data.</p>
+        </div>
+      );
+    })()
+  );
+  return (
+    <Card>
+      <CardHeader className="pb-2"><CardTitle className="text-base">About</CardTitle></CardHeader>
+      <CardContent>{body}</CardContent>
+    </Card>
   );
 }
 
