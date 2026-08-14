@@ -1,6 +1,6 @@
 # CLAUDE.md — Context for Claude Code
 
-You are the implementation agent for **PaperTrader**, a full-stack paper-trading web app. **Read `HANDOFF.md` FIRST** (it's the living memory of the project — current state, decisions, where we left off), then `README.md`, `ARCHITECTURE.md`, and `ROADMAP.md` before starting work. This file is the quick-reference.
+You are the implementation agent for **My PaperTrader**, a full-stack paper-trading web app. **Read `HANDOFF.md` FIRST** (it's the living memory of the project — current state, decisions, where we left off), then `README.md`, `ARCHITECTURE.md`, and `ROADMAP.md` before starting work. This file is the quick-reference.
 
 ## What this project is
 A paper-trading platform: users trade real tickers at live prices with virtual money (new accounts start with $25,000; accounts created before 2026-08-09 keep their original $100,000 — see `profiles.starting_capital`), track a live portfolio, and run "what-if I had invested back then" simulations. No real money, no real brokerage — it's a simulation/education tool.

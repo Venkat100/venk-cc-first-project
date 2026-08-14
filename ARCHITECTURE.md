@@ -1,6 +1,6 @@
 # Architecture
 
-This is the technical blueprint for PaperTrader. It's written to be read by both Venky and the Claude Code agent.
+This is the technical blueprint for My PaperTrader. It's written to be read by both Venky and the Claude Code agent.
 
 ---
 
