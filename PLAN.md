@@ -147,6 +147,14 @@ Steps 1–10 shipped. **Payments (11) and paid data (12) deliberately deferred**
 
 Deferred-but-ready when demand justifies: payments, insider sentiment/transactions (with education), plus whatever the now-real scenario/coach-nudge/insight-indicator engagement numbers point to once there's enough traffic to read them.
 
+## 6c. WATCHLIST — `verify-hardening-pass.ts` flakiness (CTO, 2026-08-13)
+
+This script has now flaked ~6 times across sessions, each for a different reason. Three were GENUINE bugs it surfaced and we fixed: live-price drift (cached-vs-live comparison), an over-tight timeout budget, and — the big one — `getOptionsValueByUser()` silently ignoring its `onlyUserId` scope and pricing the entire database's option book on every scoped call (a real production correctness bug, 25s → 2s after fixing). The remainder look like ordinary transient network variance.
+
+**Decision: do NOT split it pre-emptively.** It's a test script — zero direct user impact; the risk is second-order (a suite that cries wolf may let a real regression through). The systematic causes are fixed, splitting wouldn't remove network variance, and this script covers the money paths (margin, snapshots, options valuation, liquidation) where a refactor could quietly drop coverage.
+
+**Trigger to act: if it flakes TWO more times, split it** into smaller focused scripts — by then we'll know which steps are actually unreliable, making the seams informed rather than guessed. Track occurrences here.
+
 ## 6b. PRE-LAUNCH CHECKLIST — deferred to the very end (Venky's call, 2026-08-10)
 
 These two are **not code** and are deliberately parked until the build is essentially complete. Venky will have the email set up by then. **Neither may be skipped before opening public signup / charging money.**
