@@ -2,7 +2,7 @@
 
 **Last updated:** 9 August 2026
 
-This policy explains what PaperTrader (mypapertrader.com), operated by Venkat Praveen, collects about you, why, and what you can do about it. We've written it in plain English on purpose.
+This policy explains what My PaperTrader (mypapertrader.com), operated by Venkat Praveen, collects about you, why, and what you can do about it. We've written it in plain English on purpose.
 
 **The short version:** we collect the minimum needed to run a trading simulator — your email, what you traded (with virtual money), and basic usage data. We don't sell it, we don't advertise to you, and you can delete all of it yourself at any time.
 
@@ -47,7 +47,7 @@ We do not use your data to train AI models.
 
 ## 3. Who we share it with
 
-We use these third-party services ("subprocessors") to operate PaperTrader. Each receives only what it needs:
+We use these third-party services ("subprocessors") to operate My PaperTrader. Each receives only what it needs:
 
 | Service | What it handles | What it receives |
 |---|---|---|
@@ -107,7 +107,7 @@ No system is perfectly secure, but if we discover a breach affecting your person
 
 ## 9. Children
 
-PaperTrader is not intended for anyone under 18, and we do not knowingly collect data from children. If you believe a child has created an account, contact us and we'll remove it.
+My PaperTrader is not intended for anyone under 18, and we do not knowingly collect data from children. If you believe a child has created an account, contact us and we'll remove it.
 
 ## 10. Changes to this policy
 

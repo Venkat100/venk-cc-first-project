@@ -2,25 +2,25 @@
 
 **Last updated:** 9 August 2026
 
-PaperTrader is a **learning tool**. This page explains, plainly, what that means and where its limits are. It's short on purpose — please read all of it.
+My PaperTrader is a **learning tool**. This page explains, plainly, what that means and where its limits are. It's short on purpose — please read all of it.
 
 ---
 
 ## No real money. No real trades.
 
-Every balance, position, and trade in PaperTrader is simulated. You cannot deposit or withdraw money. Nothing you do here reaches a real exchange. Your virtual balance has no cash value and cannot be redeemed or transferred.
+Every balance, position, and trade in My PaperTrader is simulated. You cannot deposit or withdraw money. Nothing you do here reaches a real exchange. Your virtual balance has no cash value and cannot be redeemed or transferred.
 
 We are **not** a broker, dealer, exchange, bank, or investment adviser, and we are not registered as any of those.
 
 ## Nothing here is financial advice
 
-PaperTrader does not know your income, debts, goals, tax situation, time horizon, or risk tolerance — and it does not know what you should do with your money. Nothing in the app is a recommendation to buy or sell any security.
+My PaperTrader does not know your income, debts, goals, tax situation, time horizon, or risk tolerance — and it does not know what you should do with your money. Nothing in the app is a recommendation to buy or sell any security.
 
 If you want advice about your real money, talk to a qualified, licensed financial professional.
 
 ## About the AI features
 
-PaperTrader includes AI-generated analysis: per-stock leanings (bullish/bearish/neutral), a daily market brief, and an autonomous agent that makes simulated trading decisions.
+My PaperTrader includes AI-generated analysis: per-stock leanings (bullish/bearish/neutral), a daily market brief, and an autonomous agent that makes simulated trading decisions.
 
 - This content is **produced by software**. It can be wrong, incomplete, or based on stale or inaccurate information.
 - A "bullish" lean is **not a prediction** and **not a recommendation**. It is a machine-generated reading of recent news and price signals, shown to help you learn how such analysis is constructed and where it fails.
@@ -33,7 +33,7 @@ Where we show measured historical figures — for example, how a stock behaved i
 
 ## About option prices
 
-Option premiums in PaperTrader are **not live market quotes**. Real-time option chains are a premium data product we don't license. Instead we **estimate** premiums using a standard pricing model (Black-Scholes) driven by the live underlying price and estimated volatility.
+Option premiums in My PaperTrader are **not live market quotes**. Real-time option chains are a premium data product we don't license. Instead we **estimate** premiums using a standard pricing model (Black-Scholes) driven by the live underlying price and estimated volatility.
 
 The mechanics you learn — strikes, expiries, time decay, exercise, how leverage magnifies both directions — are real and transferable. The exact prices are approximations and will differ from a real broker's.
 
@@ -55,6 +55,6 @@ Prices, charts, company data, and news come from third-party providers and may b
 
 ---
 
-**In one sentence:** use PaperTrader to learn how markets work and how you behave, not to decide what to do with your savings.
+**In one sentence:** use My PaperTrader to learn how markets work and how you behave, not to decide what to do with your savings.
 
 Questions: **support@mypapertrader.com**
