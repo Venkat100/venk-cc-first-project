@@ -9,6 +9,7 @@ import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { getOptionPositions, getOptionTransactions, type OptionTransaction } from "@/lib/options/queries";
 import { getNotedTransactionIds } from "@/lib/journal/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
+import { displaySector } from "@/lib/marketData/sector";
 import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
@@ -53,7 +54,8 @@ function Portfolio() {
     const map = new Map<string, number>();
     for (const h of holdings) {
       const q = quoteOf(quotes, h.symbol);
-      map.set(q.sector, (map.get(q.sector) ?? 0) + q.price * h.quantity);
+      const label = displaySector(q);
+      map.set(label, (map.get(label) ?? 0) + q.price * h.quantity);
     }
     return Array.from(map, ([name, value]) => ({ name, value: +value.toFixed(2) }));
   }, [holdings, quotes]);
@@ -131,7 +133,7 @@ function Portfolio() {
                   return (
                     <tr key={h.symbol} className="border-b border-border/60 last:border-0">
                       <td className="px-4 py-3 font-semibold">{q.symbol}</td>
-                      <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{q.sector}</td>
+                      <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{displaySector(q)}</td>
                       <td className="hidden py-3 text-right tabular sm:table-cell">{fmtQty(h.quantity)}</td>
                       <td className="hidden py-3 text-right tabular md:table-cell">{fmtUSD(h.avg_cost)}</td>
                       <td className="hidden py-3 text-right tabular sm:table-cell"><FlashPrice value={q.price} className="px-1">{fmtUSD(q.price)}</FlashPrice></td>

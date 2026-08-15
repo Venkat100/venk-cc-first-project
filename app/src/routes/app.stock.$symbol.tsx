@@ -13,6 +13,7 @@ import { StockInsightBody, AiDisclaimer } from "@/components/InsightUI";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { getCompanyNews, getStockEnrichment, type NewsItem, type Quote, type StockEnrichment, type NextEarnings, type EarningsSurprise, type RecommendationTrendPoint } from "@/lib/marketData";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
+import { isLikelyFund } from "@/lib/marketData/sector";
 import { useTickFlash } from "@/lib/marketData/useTickFlash";
 import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
@@ -704,8 +705,11 @@ function AboutCard({ symbol, quote, peers }: { symbol: string; quote?: Quote; pe
     (() => {
       // Finnhub's /stock/profile2 is empty for ETFs/funds — no sector, no
       // market cap, no country. Degrade to a clear fund label instead of
-      // blank gaps.
-      const isLikelyFund = !quote.marketCap && (!quote.sector || quote.sector === "—");
+      // blank gaps. `isLikelyFund` is the one shared detection mechanism
+      // (lib/marketData/sector.ts) — also used by the Portfolio page's
+      // "Allocation by sector" chart, so a fund is never misdetected
+      // differently in two places.
+      const isFund = isLikelyFund(quote);
       return (
         <div className="space-y-4">
           <div className="flex items-center gap-3">
@@ -721,7 +725,7 @@ function AboutCard({ symbol, quote, peers }: { symbol: string; quote?: Quote; pe
           </div>
 
           <div className="grid grid-cols-1 gap-3">
-            <Stat label="Sector / type" value={isLikelyFund ? "Exchange-traded fund" : (quote.sector ?? "—")} />
+            <Stat label="Sector / type" value={isFund ? "Exchange-traded fund" : (quote.sector && quote.sector !== "—" ? quote.sector : "Unclassified")} />
             <Stat label="Market cap" value={quote.marketCap != null ? `$${fmtCompact(quote.marketCap)}` : "—"} />
             <Stat label="Country" value={quote.country ?? "—"} />
             {quote.ipo && <Stat label="IPO date" value={quote.ipo} />}
