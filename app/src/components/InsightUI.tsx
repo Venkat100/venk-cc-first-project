@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus, History, AlertTriangle, Eye, BarChart3 } from "lucide-react";
 import { fmtPct } from "@/lib/mockData";
-import type { StockInsight, MarketBrief, InsightLean, MeasuredHistory } from "@/lib/insights/types";
+import type { StockInsight, InsightLean, MeasuredHistory } from "@/lib/insights/types";
 
 const LEAN: Record<InsightLean, { label: string; cls: string; icon: typeof TrendingUp }> = {
   bullish: { label: "Bullish lean", cls: "bg-[color:var(--color-gain)]/15 text-[color:var(--color-gain)]", icon: TrendingUp },
@@ -109,33 +109,6 @@ export function StockInsightBody({ insight }: { insight: StockInsight }) {
       <p className="text-[11px] text-muted-foreground">
         Generated {new Date(insight.generatedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · refreshes daily
       </p>
-      <AiDisclaimer />
-    </div>
-  );
-}
-
-export function MarketBriefBody({ brief, createdAt }: { brief: MarketBrief; createdAt: string }) {
-  return (
-    <div className="space-y-3">
-      <p className="text-sm font-medium leading-relaxed">{brief.headline_takeaway}</p>
-      {brief.items?.length > 0 && (
-        <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border">
-          {brief.items.map((it, i) => (
-            <li key={i} className="px-3 py-2">
-              <div className="flex items-baseline gap-2">
-                <span className="font-semibold">{it.symbol}</span>
-                <span className="text-sm text-foreground/90">{it.one_line_what_happened}</span>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">{it.why_it_matters}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-      {brief.overall_note && <p className="text-sm text-muted-foreground">{brief.overall_note}</p>}
-      {/* createdAt is a date-only (UTC-midnight) string — format in UTC or it
-          can render a day early in timezones behind UTC (same bug as H4b's
-          simulator date fix). */}
-      <p className="text-[11px] text-muted-foreground">For {new Date(createdAt).toLocaleDateString(undefined, { timeZone: "UTC", month: "short", day: "numeric" })}</p>
       <AiDisclaimer />
     </div>
   );

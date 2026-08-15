@@ -195,7 +195,8 @@ const BRIEF_SYSTEM = [
   "You are a research analyst for an EDUCATIONAL paper-trading simulator writing a concise daily MARKET BRIEF — ANALYSIS, NOT ADVICE.",
   "You are given a user's tracked symbols (their holdings + watchlist) and each one's recent news.",
   "Write: a one-line headline_takeaway; an item ONLY for symbols that have meaningful news (one_line_what_happened grounded in the headlines + a short why_it_matters); and a short overall_note.",
-  "HARD RULES: Ground everything in the provided headlines — do NOT invent facts, figures, or events. No directive language ('you should'/buy/sell). SKIP symbols with no real news rather than inventing. Keep every line short. Output MUST match the JSON schema exactly.",
+  "Some entries in per_symbol_news are marked is_market_wide:true — broad-market fallback symbols (e.g. a major index ETF), not the user's own holdings or watchlist. Treat them exactly like any other symbol: write an item if there's real, meaningful news for them, skip them if there isn't. Do NOT decide whether to include them based on how many of the user's OWN symbols already have items — that decision is made separately, outside this response; your only job here is to report whether each given symbol, market-wide or not, has real news.",
+  "HARD RULES: Ground everything in the provided headlines — do NOT invent facts, figures, or events. No directive language ('you should'/buy/sell). SKIP symbols with no real news rather than inventing. Keep every line short. Output MUST match the JSON schema exactly. Never include a URL or link in any field — none will be shown to you, and any you wrote would be fabricated.",
 ].join(" ");
 
 const BRIEF_SCHEMA = {
@@ -220,6 +221,32 @@ const BRIEF_SCHEMA = {
 export type BriefSummary = { day: string; usersConsidered: number; briefsWritten: number; skipped: number; errors: string[] };
 
 const MAX_BRIEF_SYMBOLS = 12;
+
+// Broad-market fallback, used ONLY to pad out a thin brief (Part 4) — real
+// index-tracking ETFs with reliably real news coverage, not synthetic
+// "indices". Deliberately small (2 symbols): "a small number of broad-market
+// items", not a second feed. A user whose own tracked-symbol count is at or
+// above THIN_TRACKED_THRESHOLD never triggers this at all — zero added
+// Finnhub calls for the common case of an already-substantive watchlist.
+const MARKET_WIDE_SYMBOLS = ["SPY", "QQQ"] as const;
+const THIN_TRACKED_THRESHOLD = 3;
+// Whether a market-wide item actually appears in the FINAL brief is decided
+// HERE, in code, from the real count of the user's own items Claude wrote —
+// never left to the model's own judgment. An earlier version asked Claude to
+// self-apply this threshold and it didn't reliably comply (verified live: a
+// 1-symbol user with exactly one real own-item still got no market-wide
+// item, even though the prompt said "fewer than 2" should include one).
+// Deterministic filtering removes that failure mode entirely.
+const MIN_OWN_ITEMS_BEFORE_MARKET_WIDE = 2;
+
+/** First article with a real URL for this symbol, or undefined. Picks
+ *  deterministically from the SAME news payload already fetched for
+ *  generation — never asks Claude for a link, which would fabricate a
+ *  plausible-looking one instead of reporting "no article found". */
+function pickArticle(items: { url?: string; source?: string }[]): { url: string; source?: string } | undefined {
+  const found = items.find((n) => n.url);
+  return found?.url ? { url: found.url, source: found.source } : undefined;
+}
 
 /** Generate + store today's brief for every user with holdings or a watchlist.
  *  Folded into the daily agent-thinker cron. `onlyUserIds` scopes it (tests). */
@@ -257,10 +284,26 @@ export async function runDailyBriefs(opts: { onlyUserIds?: string[] } = {}): Pro
       continue;
     }
     try {
-      const news = await Promise.all(
-        symbols.map(async (s) => ({ symbol: s, news: (await fhCompanyNews(s).catch(() => [])).map((n) => ({ headline: n.headline, summary: n.summary })) })),
-      );
-      const userContent = JSON.stringify({ symbols, per_symbol_news: news, task: "Write the daily brief JSON. Only include items for symbols with real news." });
+      // Thin tracked list → also fetch the small market-wide fallback set,
+      // so a 1-symbol portfolio's brief has something to draw on beyond a
+      // single item. `durableCached` (inside fhCompanyNews) means this is at
+      // most 2 extra live Finnhub calls PER CALENDAR DAY globally (1h TTL),
+      // not per user — every user after the first that day hits cache.
+      const marketWideSymbols = symbols.length < THIN_TRACKED_THRESHOLD ? MARKET_WIDE_SYMBOLS.filter((s) => !set.has(s)) : [];
+      const marketWideSet = new Set<string>(marketWideSymbols);
+
+      const fetchNews = async (s: string, isMarketWide: boolean) => {
+        const items = await fhCompanyNews(s).catch(() => []);
+        return { symbol: s, items, is_market_wide: isMarketWide };
+      };
+      const news = await Promise.all([...symbols.map((s) => fetchNews(s, false)), ...marketWideSymbols.map((s) => fetchNews(s, true))]);
+      const newsBySymbol = new Map(news.map((n) => [n.symbol, n.items]));
+
+      const userContent = JSON.stringify({
+        symbols,
+        per_symbol_news: news.map((n) => ({ symbol: n.symbol, is_market_wide: n.is_market_wide, news: n.items.map((it) => ({ headline: it.headline, summary: it.summary })) })),
+        task: "Write the daily brief JSON. Only include items for symbols with real news, subject to the market-wide inclusion rule in the system prompt.",
+      });
 
       _claudeCalls++;
       const res = await client().messages.create({
@@ -272,7 +315,23 @@ export async function runDailyBriefs(opts: { onlyUserIds?: string[] } = {}): Pro
       });
       const text = res.content.find((b) => b.type === "text");
       if (!text || text.type !== "text") throw new Error("empty brief");
-      const brief = JSON.parse(text.text) as MarketBrief;
+      const parsed = JSON.parse(text.text) as MarketBrief;
+
+      // Attach real article links + the market-wide flag DETERMINISTICALLY
+      // IN CODE from the same fetched news, never from Claude's output (the
+      // schema has no url/source field at all — Claude cannot echo or
+      // invent one).
+      const tagged = parsed.items.map((it) => {
+        const sym = it.symbol.toUpperCase();
+        const article = pickArticle(newsBySymbol.get(sym) ?? []);
+        return { ...it, symbol: sym, article_url: article?.url, article_source: article?.source, isMarketWide: marketWideSet.has(sym) };
+      });
+      // Only keep market-wide items when the user's OWN items are genuinely
+      // thin — see MIN_OWN_ITEMS_BEFORE_MARKET_WIDE's comment. Your-holdings
+      // items always come first.
+      const ownItems = tagged.filter((it) => !it.isMarketWide);
+      const marketWideItems = ownItems.length < MIN_OWN_ITEMS_BEFORE_MARKET_WIDE ? tagged.filter((it) => it.isMarketWide) : [];
+      const brief: MarketBrief = { ...parsed, items: [...ownItems, ...marketWideItems] };
 
       await writeInsightRow(admin, { user_id: userId, kind: "brief", symbol: null, payload: brief, created_at: day });
       briefsWritten++;

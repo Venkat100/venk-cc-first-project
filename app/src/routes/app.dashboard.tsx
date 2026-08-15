@@ -5,10 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sparkline } from "@/components/PriceChart";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
-import { MarketBriefBody, AiDisclaimer } from "@/components/InsightUI";
+import { MarketBriefCard } from "@/components/MarketBriefCard";
 import { getHoldings, getWatchlist } from "@/lib/portfolio/queries";
 import { getOptionPositions } from "@/lib/options/queries";
-import { getTodaysBrief } from "@/lib/insights/api";
 import { getSnapshots } from "@/lib/snapshots/queries";
 import { getMarginState } from "@/lib/margin/api";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
@@ -20,7 +19,7 @@ import type { Quote } from "@/lib/marketData/types";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct, fmtQty, sparkline, STARTING_CASH } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, ArrowDownRight, Star, Wallet, Newspaper, History } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Star, Wallet, History } from "lucide-react";
 import { CoachNudgeCard } from "@/components/coaching/CoachNudgeCard";
 
 export const Route = createFileRoute("/app/dashboard")({
@@ -316,35 +315,6 @@ function Dashboard() {
         </div>
       </div>
     </div>
-  );
-}
-
-function MarketBriefCard({ hasTracked }: { hasTracked: boolean }) {
-  const briefQ = useQuery({ queryKey: ["todaysBrief"], queryFn: getTodaysBrief });
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2"><Newspaper className="h-4 w-4 text-[color:var(--color-primary)]" /> Today's market brief</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {briefQ.isLoading ? (
-          <LoadingState label="Loading your brief…" />
-        ) : briefQ.isError ? (
-          <ErrorState message="Couldn't load your brief right now." />
-        ) : briefQ.data ? (
-          <MarketBriefBody brief={briefQ.data.brief} createdAt={briefQ.data.createdAt} />
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">
-              {hasTracked
-                ? "Your AI market brief arrives after each market day — a quick read on the news moving your holdings and watchlist."
-                : "Add holdings or watchlist tickers and your AI market brief — a quick read on the news moving them — will arrive after each market day."}
-            </p>
-            <AiDisclaimer />
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
