@@ -142,7 +142,17 @@ function Auth() {
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Left brand panel */}
-      <div className="relative hidden overflow-hidden border-r border-border bg-sidebar lg:flex lg:flex-col p-10">
+      {/* `overflow-clip`, not `overflow-hidden` (2026-08-15 graphic-pass fix):
+         the decorative gradient glow below is deliberately positioned
+         `-bottom-32 -right-32`, spilling past the panel's own box on purpose
+         — with `overflow-hidden` that still makes the panel a genuine
+         scroll container (scrollHeight > clientHeight), and focusing a dot
+         button (real click OR keyboard Tab) triggers the browser's default
+         scroll-into-view on that container, silently shifting scrollTop and
+         clipping the logo off the top. `overflow-clip` clips identically but
+         never creates a scroll container in the first place — immune to
+         this regardless of how tall any future content here gets. */}
+      <div className="relative hidden overflow-clip border-r border-border bg-sidebar lg:flex lg:flex-col p-10">
         {/* Absolutely positioned, out of flow, so AuthFeatureShowcase's
            flex-1 below centers against the FULL panel height rather than
            just the space left over after the logo's flex row (2026-08-15

@@ -201,3 +201,33 @@
     animation: none;
   }
 }
+
+/* Auth showcase (2026-08-15 follow-up) — each slide's graphic gets one
+   quick "draws itself in" stroke on entry, layered under the whole slide's
+   own rise-and-fade (tw-animate-css's animate-in/fade-in/slide-in-from-*,
+   applied via className in AuthFeatureShowcase.tsx). pathLength=1 on the
+   marked elements normalizes stroke-dasharray so this works off any
+   element's real geometry without per-shape math. Only elements with
+   [data-draw] animate — deliberately not every stroke in a graphic, so six
+   slides' worth of motion stays "quick and understated," not a multi-part
+   show. Reduced motion disables it outright, same convention as the
+   price-flash animations above. */
+@keyframes showcase-draw-in {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.svg-draw-in [data-draw] {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: showcase-draw-in 650ms ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .svg-draw-in [data-draw] {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
