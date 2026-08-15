@@ -15,7 +15,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
@@ -154,9 +154,8 @@ function ResetPassword() {
             <form onSubmit={(e) => { e.preventDefault(); void handleSubmit(); }} className="mt-6 space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="new-password">New password</Label>
-                <Input
+                <PasswordInput
                   id="new-password"
-                  type="password"
                   autoComplete="new-password"
                   placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`}
                   value={password}
@@ -165,9 +164,8 @@ function ResetPassword() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="confirm-password">Confirm new password</Label>
-                <Input
+                <PasswordInput
                   id="confirm-password"
-                  type="password"
                   autoComplete="new-password"
                   placeholder="Repeat your new password"
                   value={confirm}

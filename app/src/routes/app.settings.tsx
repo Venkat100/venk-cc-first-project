@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
@@ -220,15 +221,15 @@ function Settings() {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="current-password">Current password</Label>
-                <Input id="current-password" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                <PasswordInput id="current-password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="new-password-settings">New password</Label>
-                <Input id="new-password-settings" type="password" autoComplete="new-password" placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                <PasswordInput id="new-password-settings" autoComplete="new-password" placeholder={`Min ${MIN_PASSWORD_LENGTH} characters`} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="confirm-password-settings">Confirm new password</Label>
-                <Input id="confirm-password-settings" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                <PasswordInput id="confirm-password-settings" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
               </div>
             </div>
             <Button onClick={() => void handleChangePassword()} disabled={changingPassword} className="w-fit">
