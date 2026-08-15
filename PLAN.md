@@ -147,13 +147,22 @@ Steps 1–10 shipped. **Payments (11) and paid data (12) deliberately deferred**
 
 Deferred-but-ready when demand justifies: payments, insider sentiment/transactions (with education), plus whatever the now-real scenario/coach-nudge/insight-indicator engagement numbers point to once there's enough traffic to read them.
 
-## 6c. WATCHLIST — `verify-hardening-pass.ts` flakiness (CTO, 2026-08-13)
+## 6c. WATCHLIST — `verify-hardening-pass.ts` flakiness — ✅ CLOSED, split 2026-08-15
 
-This script has now flaked ~6 times across sessions, each for a different reason. Three were GENUINE bugs it surfaced and we fixed: live-price drift (cached-vs-live comparison), an over-tight timeout budget, and — the big one — `getOptionsValueByUser()` silently ignoring its `onlyUserId` scope and pricing the entire database's option book on every scoped call (a real production correctness bug, 25s → 2s after fixing). The remainder look like ordinary transient network variance.
+This script had flaked ~6 times across sessions by 2026-08-13, each for a different reason. Three were GENUINE bugs it surfaced and we fixed: live-price drift (cached-vs-live comparison), an over-tight timeout budget, and — the big one — `getOptionsValueByUser()` silently ignoring its `onlyUserId` scope and pricing the entire database's option book on every scoped call (a real production correctness bug, 25s → 2s after fixing). The remainder looked like ordinary transient network variance.
 
-**Decision: do NOT split it pre-emptively.** It's a test script — zero direct user impact; the risk is second-order (a suite that cries wolf may let a real regression through). The systematic causes are fixed, splitting wouldn't remove network variance, and this script covers the money paths (margin, snapshots, options valuation, liquidation) where a refactor could quietly drop coverage.
+**Original decision (2026-08-13): do NOT split it pre-emptively.** Trigger to act: if it flaked TWO more times, split it — by then we'd know which steps were actually unreliable, making the seams informed rather than guessed.
 
-**Trigger to act: if it flakes TWO more times, split it** into smaller focused scripts — by then we'll know which steps are actually unreliable, making the seams informed rather than guessed. Track occurrences here.
+**Trigger fired.** It flaked twice more after that: once during the rebrand pass (2026-08-15), once during the sector-allocation-dash fix (2026-08-15) — both `STEP TIMEOUT` on `runMarginMonitor`, both clean on isolated re-run. Diagnosed the seams from the actual flake history (`runMarginMonitor` timeouts recurred in the margin-call-liquidation scenario; the one earlier historical flake was a `runSnapshots` timeout, downstream of the since-fixed `getOptionsValueByUser` bug, in the 4-way-reconciliation scenario) rather than splitting on arbitrary line counts.
+
+**Split into 5 independently-runnable scripts**, each self-seeding/self-cleaning with no shared state:
+- `verify-hardening-valuation.ts` — seed + 4-way valuation reconciliation (Dashboard/Margin/snapshot agreement, options-scoping proof, agent isolation)
+- `verify-hardening-expiry.ts` — expired option settles while a margin loan is outstanding
+- `verify-hardening-liquidation.ts` — margin call liquidation sells an option position (the recently-flaky scenario, now isolated)
+- `verify-hardening-cron-chain.ts` — full daily cron chain in real production order (contains both functions that have ever timed out here)
+- `verify-hardening-reset.ts` — reset with stocks + options + margin loan + agent all active
+
+All 36 original assertions preserved with an explicit old→new mapping (issue #35) — zero coverage dropped. Verified: full 31-script suite run 3 consecutive times, green on all three; the previously-flaky steps' elapsed times reported each run to show the margin under budget. `tsc --noEmit`/`npm run build` clean. Watchlist item closed — this section is historical record now, not an open trigger.
 
 ## 6b. PRE-LAUNCH CHECKLIST — deferred to the very end (Venky's call, 2026-08-10)
 
