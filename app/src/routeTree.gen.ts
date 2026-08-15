@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as SimulatorRouteImport } from './routes/simulator'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PrivacyRouteImport } from './routes/privacy'
@@ -19,6 +20,7 @@ import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppWatchlistRouteImport } from './routes/app.watchlist'
+import { Route as AppSupportRouteImport } from './routes/app.support'
 import { Route as AppSimulatorRouteImport } from './routes/app.simulator'
 import { Route as AppSettingsRouteImport } from './routes/app.settings'
 import { Route as AppScenariosRouteImport } from './routes/app.scenarios'
@@ -43,6 +45,11 @@ import { Route as AppAdminUsersUserIdRouteImport } from './routes/app.admin.user
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SimulatorRoute = SimulatorRouteImport.update({
@@ -88,6 +95,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppWatchlistRoute = AppWatchlistRouteImport.update({
   id: '/watchlist',
   path: '/watchlist',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSupportRoute = AppSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSimulatorRoute = AppSimulatorRouteImport.update({
@@ -199,6 +211,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/simulator': typeof SimulatorRoute
+  '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/app/admin': typeof AppAdminRouteWithChildren
   '/app/agent': typeof AppAgentRoute
@@ -212,6 +225,7 @@ export interface FileRoutesByFullPath {
   '/app/scenarios': typeof AppScenariosRouteWithChildren
   '/app/settings': typeof AppSettingsRoute
   '/app/simulator': typeof AppSimulatorRoute
+  '/app/support': typeof AppSupportRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app/': typeof AppIndexRoute
   '/app/admin/audit': typeof AppAdminAuditRoute
@@ -230,6 +244,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/simulator': typeof SimulatorRoute
+  '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/app/agent': typeof AppAgentRoute
   '/app/coach': typeof AppCoachRoute
@@ -241,6 +256,7 @@ export interface FileRoutesByTo {
   '/app/portfolio': typeof AppPortfolioRoute
   '/app/settings': typeof AppSettingsRoute
   '/app/simulator': typeof AppSimulatorRoute
+  '/app/support': typeof AppSupportRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app': typeof AppIndexRoute
   '/app/admin/audit': typeof AppAdminAuditRoute
@@ -260,6 +276,7 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/simulator': typeof SimulatorRoute
+  '/support': typeof SupportRoute
   '/terms': typeof TermsRoute
   '/app/admin': typeof AppAdminRouteWithChildren
   '/app/agent': typeof AppAgentRoute
@@ -273,6 +290,7 @@ export interface FileRoutesById {
   '/app/scenarios': typeof AppScenariosRouteWithChildren
   '/app/settings': typeof AppSettingsRoute
   '/app/simulator': typeof AppSimulatorRoute
+  '/app/support': typeof AppSupportRoute
   '/app/watchlist': typeof AppWatchlistRoute
   '/app/': typeof AppIndexRoute
   '/app/admin/audit': typeof AppAdminAuditRoute
@@ -294,6 +312,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/reset-password'
     | '/simulator'
+    | '/support'
     | '/terms'
     | '/app/admin'
     | '/app/agent'
@@ -307,6 +326,7 @@ export interface FileRouteTypes {
     | '/app/scenarios'
     | '/app/settings'
     | '/app/simulator'
+    | '/app/support'
     | '/app/watchlist'
     | '/app/'
     | '/app/admin/audit'
@@ -325,6 +345,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/reset-password'
     | '/simulator'
+    | '/support'
     | '/terms'
     | '/app/agent'
     | '/app/coach'
@@ -336,6 +357,7 @@ export interface FileRouteTypes {
     | '/app/portfolio'
     | '/app/settings'
     | '/app/simulator'
+    | '/app/support'
     | '/app/watchlist'
     | '/app'
     | '/app/admin/audit'
@@ -354,6 +376,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/reset-password'
     | '/simulator'
+    | '/support'
     | '/terms'
     | '/app/admin'
     | '/app/agent'
@@ -367,6 +390,7 @@ export interface FileRouteTypes {
     | '/app/scenarios'
     | '/app/settings'
     | '/app/simulator'
+    | '/app/support'
     | '/app/watchlist'
     | '/app/'
     | '/app/admin/audit'
@@ -387,6 +411,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SimulatorRoute: typeof SimulatorRoute
+  SupportRoute: typeof SupportRoute
   TermsRoute: typeof TermsRoute
 }
 
@@ -397,6 +422,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/simulator': {
@@ -460,6 +492,13 @@ declare module '@tanstack/react-router' {
       path: '/watchlist'
       fullPath: '/app/watchlist'
       preLoaderRoute: typeof AppWatchlistRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/support': {
+      id: '/app/support'
+      path: '/support'
+      fullPath: '/app/support'
+      preLoaderRoute: typeof AppSupportRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/simulator': {
@@ -662,6 +701,7 @@ interface AppRouteChildren {
   AppScenariosRoute: typeof AppScenariosRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRoute
   AppSimulatorRoute: typeof AppSimulatorRoute
+  AppSupportRoute: typeof AppSupportRoute
   AppWatchlistRoute: typeof AppWatchlistRoute
   AppIndexRoute: typeof AppIndexRoute
   AppStockSymbolRoute: typeof AppStockSymbolRoute
@@ -680,6 +720,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppScenariosRoute: AppScenariosRouteWithChildren,
   AppSettingsRoute: AppSettingsRoute,
   AppSimulatorRoute: AppSimulatorRoute,
+  AppSupportRoute: AppSupportRoute,
   AppWatchlistRoute: AppWatchlistRoute,
   AppIndexRoute: AppIndexRoute,
   AppStockSymbolRoute: AppStockSymbolRoute,
@@ -695,6 +736,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SimulatorRoute: SimulatorRoute,
+  SupportRoute: SupportRoute,
   TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport

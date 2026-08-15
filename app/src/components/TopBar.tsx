@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Search, SearchX, Sun, Moon, Bell, Menu, X } from "lucide-react";
+import { Search, SearchX, Sun, Moon, Bell, Menu, X, Settings as SettingsIcon, HelpCircle, LogOut } from "lucide-react";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
 import { WatchlistStar } from "@/components/WatchlistStar";
 import { applyTheme, getTheme, type Theme } from "@/lib/theme";
@@ -176,10 +176,16 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
             {email && <span className="truncate text-xs font-normal text-muted-foreground">{email}</span>}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => navigate({ to: "/app/settings" })}>
+          <DropdownMenuItem onClick={() => navigate({ to: "/app/settings" })} className="gap-2">
+            <SettingsIcon className="h-4 w-4" />
             Settings
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => void handleSignOut()}>
+          <DropdownMenuItem onClick={() => navigate({ to: "/app/support" })} className="gap-2">
+            <HelpCircle className="h-4 w-4" />
+            Support
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => void handleSignOut()} className="gap-2">
+            <LogOut className="h-4 w-4" />
             Log out
           </DropdownMenuItem>
         </DropdownMenuContent>
