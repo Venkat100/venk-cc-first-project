@@ -13,12 +13,42 @@ import { getServiceClient, logIfFailed } from "@/lib/supabase/admin.server";
 import { fhCompanyNews, providerQuotes } from "@/lib/marketData/finnhub.server";
 import { scoreCandidates, type Candidate, type UniverseData } from "./quant.server";
 import { claudeReason, agentModel, type ClaudeReasoning } from "./anthropic.server";
-import { planRebalance, DRIFT_BAND, COOLDOWN_DAYS, type PlanTarget, type PlanHolding } from "./rebalance";
+import { planRebalance, DRIFT_BAND, COOLDOWN_DAYS, MIN_HOLDING_DAYS, MIN_TRADE_DOLLARS, type PlanTarget, type PlanHolding } from "./rebalance";
 import { GUARDRAILS, round2, executePlan, type Guardrails, type ThinkerExecution } from "./execute.server";
 import { writeProposal } from "./proposals.server";
 import type { AgentMode, AgentProposalTarget, AgentProposalTrade, RiskLevel } from "@/lib/supabase/types";
 
 export type { ThinkerExecution } from "./execute.server";
+
+/** For each given (currently held) symbol, find when the CURRENT position was
+ *  most recently opened from zero — the timestamp of the buy that took
+ *  quantity from 0 to positive, ignoring any earlier exit→rebuy cycle before
+ *  that. No `opened_at` column exists on `agent_holdings` (it only tracks
+ *  current state), so this replays the symbol's own append-only transaction
+ *  ledger — the same technique the behavioral-analytics module already uses
+ *  to reconstruct position lifecycle from a ledger with no separate lot
+ *  tracking (see lib/behavioral/metrics.ts). Feeds the minimum-holding-period
+ *  membership-stickiness guard in rebalance.ts (issue #39). */
+async function getPositionOpenedAt(admin: ReturnType<typeof getServiceClient>, userId: string, symbols: string[]): Promise<Map<string, Date>> {
+  const result = new Map<string, Date>();
+  if (symbols.length === 0) return result;
+  const { data } = await admin
+    .from("agent_transactions")
+    .select("symbol, side, quantity, created_at")
+    .eq("user_id", userId)
+    .in("symbol", symbols)
+    .order("created_at", { ascending: true });
+  const running = new Map<string, number>();
+  for (const t of data ?? []) {
+    const sym = String(t.symbol);
+    const prevQty = running.get(sym) ?? 0;
+    // A small epsilon, not a strict ===0, since these are running sums of
+    // 6dp-rounded fractional quantities across potentially many trades.
+    if (prevQty <= 1e-9 && t.side === "buy") result.set(sym, new Date(t.created_at));
+    running.set(sym, prevQty + (t.side === "buy" ? Number(t.quantity) : -Number(t.quantity)));
+  }
+  return result;
+}
 
 export type ThinkerResult = {
   ran: boolean;
@@ -168,8 +198,10 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
       : `Added to meet the ${risk} diversification / minimum-holdings guardrail (quant rank ${bySym.get(s)!.score}).`,
   }));
   const planHoldings: PlanHolding[] = holdings.map((h) => ({ symbol: h.symbol, quantity: h.quantity, price: px(h.symbol) }));
+  const positionOpenedAt = await getPositionOpenedAt(admin, userId, holdings.map((h) => h.symbol));
 
-  // 5) PLAN the minimal trades (drift band + prefer-cash + cooldown) then EXECUTE.
+  // 5) PLAN the minimal trades (drift band + prefer-cash + cooldown + minimum
+  //    holding period) then EXECUTE.
   const plan = planRebalance({
     targets: planTargets,
     holdings: planHoldings,
@@ -178,6 +210,7 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
     cashBuffer: g.cashBuffer,
     maxPosition: g.maxPosition,
     cooldown,
+    positionOpenedAt,
   });
 
   // All names skipped on cooldown — AI picks dropped during construction plus
@@ -240,10 +273,35 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
     }), errors);
   }
 
+  // Same transparency for names protected by the minimum holding period
+  // (issue #39 — membership stickiness) — would otherwise have been exited
+  // as "no longer in the target portfolio."
+  for (const s of plan.heldByMinPeriod) {
+    logIfFailed(`log min-holding-period decision for ${s}`, await admin.from("agent_decisions").insert({
+      user_id: userId,
+      action: "hold",
+      symbol: s,
+      rationale: `Kept ${s}: protected by the ${MIN_HOLDING_DAYS}-day minimum holding period (would otherwise have been exited as no longer in the target set).`,
+      signals: { reason: "min_holding_period", days: MIN_HOLDING_DAYS },
+    }), errors);
+  }
+
   // 6) overall rebalance decision entry
-  const summary =
-    executed.length === 0
-      ? `Portfolio within drift bands — no trades needed.${cooldownSkipped.length ? ` (${cooldownSkipped.length} name(s) on re-entry cooldown.)` : ""}`
+  // Genuinely-underfunded case (issue #38b): every candidate that needed
+  // buying was blocked by MIN_TRADE_DOLLARS, not merely "already at target."
+  // Distinguishable message + a suggested minimum, instead of the generic
+  // "no trades needed" a healthy at-target agent would ALSO show — that
+  // false-healthy message is exactly what let a real $1,000 balanced agent
+  // trade nothing for 3+ weeks with zero user-facing signal (AGENT-AUDIT.md
+  // Part 3). Suggested minimum: enough investable cash (after the risk
+  // level's own cash buffer) to give each of its minHoldings positions at
+  // least one real (non-dust) MIN_TRADE_DOLLARS-sized slice, rounded up to a
+  // clean $5 for presentation.
+  const suggestedMinFunding = plan.underfunded ? Math.ceil((MIN_TRADE_DOLLARS * g.minHoldings) / (1 - g.cashBuffer) / 5) * 5 : undefined;
+  const summary = plan.underfunded
+    ? `Cannot construct a ${risk} portfolio at this funding level — every target position would be smaller than the $${MIN_TRADE_DOLLARS} minimum trade size. Consider funding at least $${suggestedMinFunding} for this risk level.`
+    : executed.length === 0
+      ? `Portfolio within drift bands — no trades needed.${cooldownSkipped.length ? ` (${cooldownSkipped.length} name(s) on re-entry cooldown.)` : ""}${plan.heldByMinPeriod.length ? ` (${plan.heldByMinPeriod.length} name(s) protected by the minimum holding period.)` : ""}`
       : `${reasoning.commentary} — Adjusted ${executed.length} position(s); held ${plan.held.length} within the ±${(DRIFT_BAND * 100).toFixed(0)}pp drift band.`;
   logIfFailed("log overall rebalance decision", await admin.from("agent_decisions").insert({
     user_id: userId,
@@ -258,6 +316,9 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
       trades: executed.map((e) => ({ symbol: e.symbol, side: e.side, qty: e.quantity })),
       held_within_band: plan.held,
       cooldown_skipped: cooldownSkipped,
+      held_by_min_period: plan.heldByMinPeriod,
+      underfunded: plan.underfunded,
+      suggested_min_funding: suggestedMinFunding ?? null,
       agent_cash_before: round2(agentCashBefore),
       agent_cash_after: round2(agentCashAfter),
     },

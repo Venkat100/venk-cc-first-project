@@ -39,6 +39,7 @@ import { runWatchdog, type WatchdogSources } from "./watchdog.server";
 import { runMarginMonitor } from "@/lib/margin/monitor.server";
 import { isUsMarketOpen } from "@/lib/marketData/marketHours";
 import { recordHeartbeat } from "@/lib/health/heartbeat.server";
+import { track } from "@/lib/analytics/track.server";
 
 // Re-exported for backward compatibility — the actual definition moved to
 // lib/marketData/marketHours.ts (PLAN.md §6 step 3) so the client-side live-
@@ -96,6 +97,12 @@ export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUs
   for (const c of cfgs ?? []) {
     try {
       const r = await runThinker(c.user_id, { prefetch });
+      // issue #40: this was the ONLY gap — the manual "Run agent now" button
+      // (lib/agent/functions.ts) already fired this same event, but the
+      // cron path (responsible for effectively all real agent Claude calls
+      // in production, per AGENT-AUDIT.md Part 5) never did, so the admin
+      // cost dashboard was silently blind to the majority of real spend.
+      void track("agent_run", { userId: c.user_id, properties: { ran: r.ran, aiUsed: r.aiUsed, source: "cron" } });
       const trades = r.executed?.length ?? 0;
       tradesTotal += trades;
       if (r.proposed) proposalsTotal += 1;

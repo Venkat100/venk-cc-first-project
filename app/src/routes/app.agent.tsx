@@ -18,7 +18,7 @@ import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import type { RiskLevel, AgentMode, AgentDecision } from "@/lib/supabase/types";
 import { toast } from "sonner";
-import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye, Scissors, PauseCircle, ClipboardCheck, Check, X } from "lucide-react";
+import { Bot, ShieldAlert, AlertTriangle, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye, Scissors, PauseCircle, ClipboardCheck, Check, X } from "lucide-react";
 
 export const Route = createFileRoute("/app/agent")({
   head: () => ({ meta: [{ title: "AI Agent · My PaperTrader" }] }),
@@ -74,6 +74,16 @@ function Agent() {
   const totalValue = agentCash + holdingsValue;
   const retAbs = totalValue - allocated;
   const retPct = allocated > 0 ? (retAbs / allocated) * 100 : 0;
+
+  // Underfunded signal (issue #38b) — the most recent 'rebalance' decision is
+  // always the last thing a thinker run logs (see thinker.server.ts), so it's
+  // the freshest read on whether the agent could construct a portfolio at its
+  // current funding level. A banner here, not just a decision-log line, is
+  // the point: the whole bug this closes was that "can't afford anything" and
+  // "healthy and at target" looked identical unless a user went digging.
+  const latestRebalance = (decisionsQ.data ?? []).find((d) => d.action === "rebalance");
+  const underfundedSignals = latestRebalance?.signals as { underfunded?: boolean; suggested_min_funding?: number } | null | undefined;
+  const isUnderfunded = underfundedSignals?.underfunded === true;
 
   const updateMut = useMutation({
     mutationFn: updateAgentConfig,
@@ -208,6 +218,19 @@ function Agent() {
           <span className="font-semibold">Educational simulation.</span> The agent trades virtual money only and can lose it. This is not financial advice.
         </p>
       </div>
+
+      {/* Underfunded — a distinct, more visible signal than the decision log
+         alone, since "can't afford anything" and "healthy and at target"
+         used to render identically. */}
+      {isUnderfunded && (
+        <div className="flex items-start gap-3 rounded-lg border border-[color:var(--color-warning,#b45309)]/40 bg-[color:var(--color-warning,#b45309)]/10 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--color-warning,#d97706)]" />
+          <p className="text-sm text-foreground">
+            <span className="font-semibold">This account is too small to invest.</span> Every target position would fall below the minimum trade size for a {config?.risk_level ?? ""} portfolio.
+            {underfundedSignals?.suggested_min_funding ? ` Consider funding at least ${fmtUSD(underfundedSignals.suggested_min_funding)}.` : ""}
+          </p>
+        </div>
+      )}
 
       {/* Summary header — agent value, return vs allocated, invested/cash split */}
       {(allocated > 0 || totalValue > 0) && (
