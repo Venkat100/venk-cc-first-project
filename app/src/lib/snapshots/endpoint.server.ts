@@ -108,10 +108,15 @@ export async function handleSnapshotRequest(request: Request): Promise<Response>
     analyticsPrune = { error: e instanceof Error ? e.message : "analytics_events prune failed." };
   }
 
+  // AWAITED, not fire-and-forget (2026-08-16, same fix as agent-thinker's
+  // endpoint — see AGENT-AUDIT.md Part 1): this endpoint's own heartbeat
+  // happened to land fresh in the audit's sample, but an un-awaited write
+  // right before `return` is a race against the same serverless-teardown
+  // risk regardless of which invocation currently gets lucky.
   if (snapshotResult.ok) {
-    void recordHeartbeat("snapshot", "ok", { summary: snapshotResult.summary });
+    await recordHeartbeat("snapshot", "ok", { summary: snapshotResult.summary });
     return json({ ok: true, summary: snapshotResult.summary, expiry, interest, margin, priceCachePrune, rateLimitPrune, analyticsPrune }, 200);
   }
-  void recordHeartbeat("snapshot", "error", { error: snapshotResult.error });
+  await recordHeartbeat("snapshot", "error", { error: snapshotResult.error });
   return json({ ok: false, error: snapshotResult.error, expiry, interest, margin, priceCachePrune, rateLimitPrune, analyticsPrune }, 500);
 }

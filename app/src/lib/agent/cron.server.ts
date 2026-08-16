@@ -200,10 +200,17 @@ export async function handleAgentThinkerRequest(request: Request): Promise<Respo
     } catch (e) {
       briefs = { error: e instanceof Error ? e.message : "brief job failed" };
     }
-    void recordHeartbeat("agent-thinker", "ok", { eligible: summary.eligible, processed: summary.processed });
+    // AWAITED (audit finding, 2026-08-16): a fire-and-forget `void` write here
+    // was silently lost on most invocations — the serverless function can be
+    // frozen/torn down right after `return` fires, before an un-awaited
+    // promise's network round-trip to Supabase completes. The heartbeat sat
+    // stale for 5 days while the underlying cron ran correctly every single
+    // day (confirmed via real `agent_decisions` rows) — a false "stale" signal
+    // on /api/health, not a real outage. See AGENT-AUDIT.md Part 1.
+    await recordHeartbeat("agent-thinker", "ok", { eligible: summary.eligible, processed: summary.processed });
     return json({ ok: true, summary, briefs }, 200);
   } catch (e) {
-    void recordHeartbeat("agent-thinker", "error", { error: e instanceof Error ? e.message : String(e) });
+    await recordHeartbeat("agent-thinker", "error", { error: e instanceof Error ? e.message : String(e) });
     return json({ ok: false, error: e instanceof Error ? e.message : "Agent thinker batch failed." }, 500);
   }
 }
