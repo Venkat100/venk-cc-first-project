@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus, History, AlertTriangle, Eye, BarChart3 } from "lucide-react";
 import { fmtPct } from "@/lib/mockData";
-import { formatInstant } from "@/lib/format/datetime";
+import { formatInstant, nextUtcMidnightIso } from "@/lib/format/datetime";
 import type { StockInsight, InsightLean, MeasuredHistory } from "@/lib/insights/types";
 
 const LEAN: Record<InsightLean, { label: string; cls: string; icon: typeof TrendingUp }> = {
@@ -108,7 +108,11 @@ export function StockInsightBody({ insight }: { insight: StockInsight }) {
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        Generated {formatInstant(insight.generatedAt)} · refreshes daily
+        {/* Shared across every trader viewing this symbol, at most once per
+            UTC day — "refreshes daily" alone implies more than that shared
+            cache actually promises, so state the next real rollover instead
+            of leaving it vague. */}
+        Generated {formatInstant(insight.generatedAt)} · next refresh {formatInstant(nextUtcMidnightIso())}
       </p>
       <AiDisclaimer />
     </div>

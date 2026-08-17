@@ -81,6 +81,19 @@ const INSIGHT_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+/** Cheap existence check for today's cached insight — a single indexed
+ *  SELECT, never a Claude call, never touches the A2 rate limit. Lets the
+ *  UI show an honest pre-click state ("today's analysis is ready" vs "no
+ *  analysis yet today") instead of a generic "Get AI insight" button that
+ *  implies the click itself does the (possibly already-done) work. */
+export async function stockInsightStatus(symbol: string): Promise<{ exists: boolean; generatedAt?: string }> {
+  const sym = symbol.toUpperCase();
+  const admin = getServiceClient();
+  const { data } = await admin.from("insights").select("payload").eq("kind", "stock").eq("symbol", sym).eq("created_at", today()).maybeSingle();
+  const payload = data?.payload as StockInsight | undefined;
+  return payload ? { exists: true, generatedAt: payload.generatedAt } : { exists: false };
+}
+
 /** On-demand insight — at most ONE Claude call per symbol per day GLOBALLY.
  *
  *  The `insights` table (kind='stock') is the source of truth for "already

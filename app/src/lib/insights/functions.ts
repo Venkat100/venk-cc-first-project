@@ -6,7 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { verifyUser } from "@/lib/supabase/admin.server";
-import { getStockInsight } from "./insights.server";
+import { getStockInsight, stockInsightStatus } from "./insights.server";
 import { track } from "@/lib/analytics/track.server";
 import type { StockInsight } from "./types";
 
@@ -24,5 +24,24 @@ export const getStockInsightFn = createServerFn({ method: "POST" })
       return { ok: true, insight };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : "Couldn't generate an insight right now." };
+    }
+  });
+
+export type InsightStatusResponse = { ok: true; exists: boolean; generatedAt?: string } | { ok: false; error: string };
+
+/** Pre-click status check — never calls Claude, never counts against the
+ *  insight rate limit (see stockInsightStatus's own comment). Lets the UI
+ *  tell the truth about whether clicking will read an already-done analysis
+ *  or trigger fresh work, instead of a single button that always implies
+ *  the latter. */
+export const getStockInsightStatusFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1), symbol: z.string().min(1).max(12) }))
+  .handler(async ({ data }): Promise<InsightStatusResponse> => {
+    try {
+      await verifyUser(data.accessToken);
+      const status = await stockInsightStatus(data.symbol);
+      return { ok: true, ...status };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "Couldn't check insight status." };
     }
   });

@@ -1,7 +1,7 @@
 // Client entry points for AI Insights. Attach the user's access token; unwrap.
 
 import { supabase } from "@/lib/supabase/client";
-import { getStockInsightFn, type InsightResponse } from "./functions";
+import { getStockInsightFn, getStockInsightStatusFn, type InsightResponse } from "./functions";
 import type { MarketBrief, StockInsight } from "./types";
 
 async function token(): Promise<string> {
@@ -16,6 +16,16 @@ export async function getStockInsight(symbol: string): Promise<StockInsight> {
   const res: InsightResponse = await getStockInsightFn({ data: { accessToken: await token(), symbol: symbol.toUpperCase() } });
   if (!res.ok) throw new Error(res.error);
   return res.insight;
+}
+
+export type InsightStatus = { exists: boolean; generatedAt?: string };
+
+/** Cheap pre-click check — does today's cached insight for this symbol
+ *  already exist? Never calls Claude, never counts against the rate limit. */
+export async function getStockInsightStatus(symbol: string): Promise<InsightStatus> {
+  const res = await getStockInsightStatusFn({ data: { accessToken: await token(), symbol: symbol.toUpperCase() } });
+  if (!res.ok) throw new Error(res.error);
+  return { exists: res.exists, generatedAt: res.generatedAt };
 }
 
 export type TodaysBrief = { brief: MarketBrief; createdAt: string } | null;

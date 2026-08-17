@@ -77,3 +77,16 @@ export function formatUnixSecondsDate(unixSeconds: number, opts: Intl.DateTimeFo
 export function formatCalendarDate(dateOnly: string, opts: Intl.DateTimeFormatOptions = DEFAULT_CALENDAR_DATE_OPTS): string {
   return new Date(`${dateOnly.slice(0, 10)}T00:00:00Z`).toLocaleDateString(undefined, { ...opts, timeZone: "UTC" });
 }
+
+/**
+ * The next UTC-midnight instant strictly after `from` (default: now), as an
+ * ISO string — for telling a viewer when a once-per-UTC-day resource (e.g.
+ * the AI insight cache, keyed `insight:{symbol}:{day}` on the UTC calendar
+ * day) will next roll over. Pass the result to `formatInstant` to render it
+ * in the viewer's own local zone, same as any other instant — the fact that
+ * the ROLLOVER happens at UTC midnight doesn't mean the LABEL should show
+ * UTC; the viewer wants to know when it happens in their own clock.
+ */
+export function nextUtcMidnightIso(from: Date = new Date()): string {
+  return new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate() + 1, 0, 0, 0, 0)).toISOString();
+}

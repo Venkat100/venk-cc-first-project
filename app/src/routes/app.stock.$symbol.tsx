@@ -16,7 +16,7 @@ import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { isLikelyFund } from "@/lib/marketData/sector";
 import { formatInstantDate, formatCalendarDate } from "@/lib/format/datetime";
 import { useTickFlash } from "@/lib/marketData/useTickFlash";
-import { getStockInsight } from "@/lib/insights/api";
+import { getStockInsight, getStockInsightStatus } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
 import { getOptionPositions, getOptionTransactions } from "@/lib/options/queries";
 import { getMarginState } from "@/lib/margin/api";
@@ -410,6 +410,16 @@ function StockDetail() {
 
 function InsightCard({ symbol }: { symbol: string }) {
   const [requested, setRequested] = useState(false);
+  // Cheap, no-Claude-cost pre-click check — lets the button and tagline tell
+  // the truth about whether today's analysis already exists instead of a
+  // single "Get AI insight" label that always implies fresh work is about
+  // to happen (see stockInsightStatus's own comment for why this is free).
+  const statusQ = useQuery({
+    queryKey: ["insightStatus", symbol],
+    queryFn: () => getStockInsightStatus(symbol),
+    staleTime: 5 * 60_000,
+    retry: 0,
+  });
   const insightQ = useQuery({
     queryKey: ["insight", symbol],
     queryFn: () => getStockInsight(symbol),
@@ -417,6 +427,7 @@ function InsightCard({ symbol }: { symbol: string }) {
     staleTime: 6 * 60 * 60_000, // server caches per day; keep the client copy too
     retry: 0,
   });
+  const ready = statusQ.data?.exists === true;
 
   return (
     <Card>
@@ -426,8 +437,11 @@ function InsightCard({ symbol }: { symbol: string }) {
       <CardContent>
         {!requested ? (
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">News-driven, history-aware analysis of {symbol} — generated on demand and refreshed daily.</p>
-            <Button className="gap-2" onClick={() => setRequested(true)}><Sparkles className="h-4 w-4" /> Get AI insight</Button>
+            <p className="text-sm text-muted-foreground">News-driven, history-aware analysis of {symbol}, shared by everyone viewing this stock — refreshes once a day.</p>
+            {ready && <p className="text-xs text-muted-foreground">Today's analysis is ready — no new work happens when you view it.</p>}
+            <Button className="gap-2" onClick={() => setRequested(true)}>
+              <Sparkles className="h-4 w-4" /> {ready ? "View today's insight" : "Generate today's insight"}
+            </Button>
             <AiDisclaimer />
           </div>
         ) : insightQ.isLoading ? (
