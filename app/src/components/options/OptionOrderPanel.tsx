@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { JournalEntryDialog, type TradeLinkContext } from "@/components/journal/JournalEntryDialog";
 import { executeOptionTrade } from "@/lib/options/execute";
@@ -59,13 +60,18 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
   const contractId = state.open ? (state.mode === "buy" ? state.contract.contractId : state.position.contractId) : "";
   const maxContracts = state.open && state.mode === "sell" ? state.position.contracts : Infinity;
 
-  const [contracts, setContracts] = useState(1);
+  const [contractsInput, setContractsInput] = useState("1");
+  const parsedContracts = parseNumberInput(contractsInput);
+  const contracts =
+    parsedContracts != null && parsedContracts >= 1
+      ? Math.min(Number.isFinite(maxContracts) ? maxContracts : parsedContracts, Math.floor(parsedContracts))
+      : 0;
   const [confirmOpen, setConfirmOpen] = useState(false);
   // Optional, non-blocking "why this trade?" capture — opens automatically
   // right after a trade fills, skippable with one click, never required.
   const [tradeNotePrompt, setTradeNotePrompt] = useState<TradeLinkContext | null>(null);
   useEffect(() => {
-    if (state.open) setContracts(1); // reset whenever a new contract/position opens
+    if (state.open) setContractsInput("1"); // reset whenever a new contract/position opens
   }, [state.open, contractId]);
 
   const cost = premium * 100 * contracts;
@@ -125,29 +131,23 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setContracts((c) => Math.max(1, c - 1))}
+                  onClick={() => setContractsInput(String(Math.max(1, contracts - 1)))}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border text-muted-foreground hover:bg-accent disabled:opacity-40"
                   disabled={contracts <= 1}
                   aria-label="Fewer contracts"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
-                <input
-                  type="number"
-                  min={1}
-                  max={Number.isFinite(maxContracts) ? maxContracts : undefined}
-                  step={1}
-                  value={contracts}
-                  onChange={(e) => {
-                    const n = Math.floor(Number(e.target.value));
-                    if (!Number.isFinite(n)) return;
-                    setContracts(Math.max(1, Math.min(Number.isFinite(maxContracts) ? maxContracts : n, n)));
-                  }}
-                  className="h-11 w-full rounded-md border border-border bg-background text-center text-lg font-semibold tabular"
+                <NumberInput
+                  decimals={0}
+                  value={contractsInput}
+                  onValueChange={setContractsInput}
+                  className="h-11 text-center text-lg font-semibold"
+                  aria-label="Number of contracts"
                 />
                 <button
                   type="button"
-                  onClick={() => setContracts((c) => Math.min(Number.isFinite(maxContracts) ? maxContracts : c + 1, c + 1))}
+                  onClick={() => setContractsInput(String(Math.min(Number.isFinite(maxContracts) ? maxContracts : contracts + 1, contracts + 1)))}
                   className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-border text-muted-foreground hover:bg-accent disabled:opacity-40"
                   disabled={contracts >= maxContracts}
                   aria-label="More contracts"
@@ -155,8 +155,13 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
                   <Plus className="h-4 w-4" />
                 </button>
               </div>
+              {contracts < 1 ? (
+                <p className="text-xs text-[color:var(--color-loss)]">Enter a number of contracts.</p>
+              ) : Number.isFinite(maxContracts) && (parsedContracts ?? 0) > maxContracts ? (
+                <p className="text-xs text-muted-foreground">Capped at {maxContracts} — that's all you hold.</p>
+              ) : null}
               {mode === "sell" && (
-                <button type="button" onClick={() => setContracts(maxContracts)} className="text-xs text-[color:var(--color-primary)] hover:underline">
+                <button type="button" onClick={() => setContractsInput(String(maxContracts))} className="text-xs text-[color:var(--color-primary)] hover:underline">
                   Sell all {maxContracts}
                 </button>
               )}

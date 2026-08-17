@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
@@ -170,7 +170,8 @@ function Agent() {
     onError: (e: Error) => toast.error(e.message || "The watchdog run failed."),
   });
 
-  const [amount, setAmount] = useState(1000);
+  const [amountInput, setAmountInput] = useState("1000");
+  const amount = parseNumberInput(amountInput);
   const [fundAction, setFundAction] = useState<"fund" | "withdraw" | null>(null);
   const fundMut = useMutation({
     mutationFn: (amt: number) => fundAgent(amt),
@@ -404,15 +405,16 @@ function Agent() {
               <Label htmlFor="amt">Amount (USD)</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                <Input id="amt" type="number" min={0} step={100} value={amount} onChange={(e) => setAmount(Math.max(0, Math.floor(Number(e.target.value) || 0)))} className="pl-7 tabular" />
+                <NumberInput id="amt" decimals={0} value={amountInput} onValueChange={setAmountInput} className="pl-7" />
               </div>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {[1000, 5000, 10000].map((a) => (
-                  <button key={a} onClick={() => setAmount(a)} className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-[color:var(--color-primary)]/50 hover:text-foreground">
+                  <button key={a} onClick={() => setAmountInput(String(a))} className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-[color:var(--color-primary)]/50 hover:text-foreground">
                     {fmtUSD(a)}
                   </button>
                 ))}
               </div>
+              {amount == null && <p className="text-xs text-[color:var(--color-loss)]">Enter an amount.</p>}
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">

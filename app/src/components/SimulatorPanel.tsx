@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { runSimulation, type SimResult } from "@/lib/simulator/run";
 import { MARKET_UNIVERSE } from "@/lib/marketData";
@@ -31,13 +32,15 @@ function prettyDate(iso: string) {
 export function SimulatorPanel() {
   const [symbol, setSymbol] = useState("NVDA");
   const [date, setDate] = useState("2019-06-03");
-  const [amount, setAmount] = useState(5000);
+  const [amountInput, setAmountInput] = useState("5000");
+  const amount = parseNumberInput(amountInput);
 
   const sim = useMutation({ mutationFn: runSimulation });
   const result = sim.data;
 
   function run(s = symbol, d = date, a = amount) {
-    setSymbol(s); setDate(d); setAmount(a);
+    if (a == null || a <= 0) return;
+    setSymbol(s); setDate(d); setAmountInput(String(a));
     sim.mutate({ symbol: s, date: d, amount: a });
   }
 
@@ -80,10 +83,11 @@ export function SimulatorPanel() {
               <Label htmlFor="amt">Amount (USD)</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                <Input id="amt" type="number" min={1} step={100} value={amount} onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 0))} className="pl-7 tabular" />
+                <NumberInput id="amt" decimals={2} value={amountInput} onValueChange={setAmountInput} className="pl-7" />
               </div>
+              {amount == null && <p className="text-xs text-[color:var(--color-loss)]">Enter an amount.</p>}
             </div>
-            <Button onClick={() => run()} disabled={sim.isPending || !symbol.trim()} className="w-full gap-2">
+            <Button onClick={() => run()} disabled={sim.isPending || !symbol.trim() || amount == null || amount <= 0} className="w-full gap-2">
               {sim.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Running…</> : <>Run simulation <ArrowRight className="h-4 w-4" /></>}
             </Button>
             <div className="space-y-1.5 pt-1">

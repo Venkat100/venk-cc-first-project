@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -822,7 +822,8 @@ function OrderPanel({
   const [mode, setMode] = useState<"shares" | "dollars">("shares");
   const [qtyInput, setQtyInput] = useState("1");
   const [amountInput, setAmountInput] = useState("50");
-  const [limit, setLimit] = useState(price);
+  const [limitInput, setLimitInput] = useState(String(price));
+  const limit = parseNumberInput(limitInput) ?? 0;
   const [sellAll, setSellAll] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   // Optional, non-blocking "why this trade?" capture — opens automatically
@@ -830,11 +831,17 @@ function OrderPanel({
   const [tradeNotePrompt, setTradeNotePrompt] = useState<TradeLinkContext | null>(null);
 
   const execPrice = type === "market" ? price : limit;
-  const qtyNum = Number(qtyInput) || 0;
-  const amountNum = Number(amountInput) || 0;
+  const qtyNum = parseNumberInput(qtyInput) ?? 0;
+  const amountNum = parseNumberInput(amountInput) ?? 0;
   const estQtyForDollars = execPrice > 0 ? amountNum / execPrice : 0;
   const isSellAll = side === "sell" && sellAll;
   const hasPosition = positionQty > 0;
+
+  // Live (not just on-click) validity, so the Trade button can be disabled
+  // WITH a visible reason instead of only rejecting via a toast after the
+  // user has already clicked it.
+  const fieldValidation = isSellAll ? null : mode === "shares" ? validateSharesQty(qtyInput) : validateDollarAmount(amountInput);
+  const fieldReason = fieldValidation && !fieldValidation.ok ? fieldValidation.error : null;
 
   const est = isSellAll ? positionQty * execPrice : mode === "shares" ? qtyNum * execPrice : amountNum;
   // Borrow-vs-cash disclosure (hardening-pass follow-up) — buys only; sells
@@ -978,14 +985,14 @@ function OrderPanel({
             {mode === "shares" ? (
               <div className="space-y-1.5">
                 <Label htmlFor="qty">Quantity</Label>
-                <Input id="qty" type="number" min={MIN_SHARES} step="any" value={qtyInput} onChange={(e) => setQtyInput(e.target.value)} className="tabular" />
+                <NumberInput id="qty" decimals={6} value={qtyInput} onValueChange={setQtyInput} />
               </div>
             ) : (
               <div className="space-y-1.5">
                 <Label htmlFor="amount">Amount</Label>
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                  <Input id="amount" type="number" min={MIN_DOLLARS} step="0.01" value={amountInput} onChange={(e) => setAmountInput(e.target.value)} className="tabular pl-6" />
+                  <NumberInput id="amount" decimals={2} value={amountInput} onValueChange={setAmountInput} className="pl-6" />
                 </div>
                 <p className="text-xs text-muted-foreground">
                   ≈ {fmtQty(estQtyForDollars, 4)} shares @ {fmtUSD(execPrice)}
@@ -998,7 +1005,7 @@ function OrderPanel({
         {type === "limit" && (
           <div className="space-y-1.5">
             <Label htmlFor="limit">Limit price</Label>
-            <Input id="limit" type="number" step="0.01" value={limit} onChange={(e) => setLimit(Number(e.target.value))} className="tabular" />
+            <NumberInput id="limit" decimals={2} value={limitInput} onValueChange={setLimitInput} />
             <p className="text-[11px] text-muted-foreground">Limit orders aren't executed yet — use Market to trade now.</p>
           </div>
         )}
@@ -1009,12 +1016,13 @@ function OrderPanel({
         </div>
 
         <Button
-          disabled={!ready || pending}
+          disabled={!ready || pending || (type === "market" && !!fieldReason)}
           className={cn("h-12 w-full text-base", side === "buy" ? "bg-[color:var(--color-gain)] text-[color:var(--color-gain-foreground)] hover:opacity-90" : "bg-[color:var(--color-loss)] text-[color:var(--color-loss-foreground)] hover:opacity-90")}
           onClick={onOpenConfirm}
         >
           {pending ? "Placing…" : confirmLabel}
         </Button>
+        {type === "market" && fieldReason && <p className="text-xs text-[color:var(--color-loss)]">{fieldReason}</p>}
         <p className="text-[11px] text-muted-foreground">All orders are simulated paper trades. No real money is used.</p>
       </CardContent>
 

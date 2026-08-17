@@ -15,7 +15,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -100,9 +100,11 @@ function ScenarioRunPage() {
   const activeSymbol = tradeSymbol ?? tradeableSymbols[0];
   const activePrice = data.latestPrices[activeSymbol];
   const heldQty = holdings.find((h) => h.symbol === activeSymbol)?.quantity ?? 0;
-  const qty = Math.max(0, Number(qtyInput) || 0);
+  const parsedQty = parseNumberInput(qtyInput);
+  const qty = parsedQty ?? 0;
   const estCost = activePrice != null ? qty * activePrice : 0;
-  const canSubmit = qty > 0 && activePrice != null && (side === "buy" ? estCost <= run.cash + 1e-6 : qty <= heldQty + 1e-9);
+  const qtyReason = parsedQty == null ? "Enter a quantity." : qty <= 0 ? "Enter a quantity greater than zero." : null;
+  const canSubmit = qtyReason == null && activePrice != null && (side === "buy" ? estCost <= run.cash + 1e-6 : qty <= heldQty + 1e-9);
 
   return (
     <div className="space-y-6">
@@ -178,9 +180,9 @@ function ScenarioRunPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="scenario-qty">Quantity (shares)</Label>
-              <Input id="scenario-qty" type="number" min={0} step="0.01" value={qtyInput} onChange={(e) => setQtyInput(e.target.value)} className="tabular" />
+              <NumberInput id="scenario-qty" decimals={6} value={qtyInput} onValueChange={setQtyInput} />
               <p className="text-xs text-muted-foreground">
-                {side === "buy" ? `Est. cost ${fmtUSD(estCost)} · cash available ${fmtUSD(run.cash)}` : `You hold ${fmtQty(heldQty)} ${activeSymbol}`}
+                {qtyReason ?? (side === "buy" ? `Est. cost ${fmtUSD(estCost)} · cash available ${fmtUSD(run.cash)}` : `You hold ${fmtQty(heldQty)} ${activeSymbol}`)}
               </p>
             </div>
 

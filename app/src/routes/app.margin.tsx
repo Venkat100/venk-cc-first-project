@@ -13,7 +13,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
@@ -99,7 +99,7 @@ function MarginPage() {
   if (stateQ.isError || !stateQ.data) return <div className="py-16"><ErrorState message={(stateQ.error as Error)?.message} /></div>;
 
   const s = stateQ.data;
-  const repayAmt = Number(repayInput) || 0;
+  const repayAmt = parseNumberInput(repayInput) ?? 0;
   const repayMax = round2(Math.min(s.cashBalance, s.marginLoan));
   const repayDisabled = repayMut.isPending || repayAmt <= 0 || repayAmt > repayMax + 0.005;
   const cushionDollars = round2(s.equity - s.maintenanceRequirement);
@@ -181,7 +181,7 @@ function MarginPage() {
               <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="relative flex-1">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
-                  <Input id="repay" type="number" min={0} step="0.01" value={repayInput} onChange={(e) => setRepayInput(e.target.value)} className="tabular pl-6" />
+                  <NumberInput id="repay" decimals={2} value={repayInput} onValueChange={setRepayInput} className="pl-6" />
                 </div>
                 <Button variant="outline" className="shrink-0" disabled={repayMax <= 0} onClick={() => setRepayInput(String(repayMax))}>
                   Repay max ({fmtUSD(repayMax)})
@@ -190,7 +190,9 @@ function MarginPage() {
                   Repay
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Capped at the lesser of your cash ({fmtUSD(s.cashBalance)}) and your loan ({fmtUSD(s.marginLoan)}).</p>
+              <p className="text-xs text-muted-foreground">
+                {repayAmt <= 0 ? "Enter an amount to repay." : `Capped at the lesser of your cash (${fmtUSD(s.cashBalance)}) and your loan (${fmtUSD(s.marginLoan)}).`}
+              </p>
             </div>
           )}
 
