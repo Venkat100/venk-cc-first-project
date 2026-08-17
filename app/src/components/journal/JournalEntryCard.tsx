@@ -9,10 +9,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Delta } from "@/components/Delta";
 import { fmtUSD } from "@/lib/mockData";
-import { formatInstantDate } from "@/lib/format/datetime";
+import { formatInstantDate, formatCalendarDate } from "@/lib/format/datetime";
 import type { JournalEntry } from "@/lib/supabase/types";
 import type { JournalOutcome } from "@/lib/journal/outcome";
 
+// NOT the same kind of value, despite both ending up as a one-line date
+// here: `outcome.asOf` is a real transaction's created_at (an INSTANT —
+// formatInstantDate is correct), while `entry.entry_date` is journal_
+// entries.entry_date, a genuine Postgres `date` column (a CALENDAR DATE —
+// must go through formatCalendarDate, not formatInstantDate, or it silently
+// renders one day early for any viewer west of UTC: a bare date string
+// parses as UTC midnight, and formatInstantDate has no UTC pin, so its
+// local-zone render rolls back across midnight for a negative UTC offset).
 const formatDate = formatInstantDate;
 
 function OutcomeLine({ outcome }: { outcome: JournalOutcome }) {
@@ -100,7 +108,7 @@ export function JournalEntryCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{formatDate(entry.entry_date)}</span>
+              <span>{formatCalendarDate(entry.entry_date)}</span>
               {entry.symbol && <span className="rounded-md bg-surface px-1.5 py-0.5 font-semibold text-foreground">{entry.symbol}</span>}
               {isTradeLinked && (
                 <span className="flex items-center gap-1 text-[11px] uppercase tracking-wide">
