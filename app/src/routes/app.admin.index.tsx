@@ -6,10 +6,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingState, ErrorState } from "@/components/DataStates";
-import { getUsageStats, getSystemHealth } from "@/lib/admin/api";
+import { getUsageStats, getSystemHealth, getIdleAgents } from "@/lib/admin/api";
+import { summarizeIdleReason, NEVER_TRADED_IDLE_DAYS, WENT_QUIET_DAYS } from "@/lib/agent/activityStatus";
 import { fmtUSD } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, XCircle, Info } from "lucide-react";
+import { CheckCircle2, XCircle, Info, Bot } from "lucide-react";
 
 export const Route = createFileRoute("/app/admin/")({
   component: AdminOverviewPage,
@@ -30,9 +31,43 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 function AdminOverviewPage() {
   const statsQ = useQuery({ queryKey: ["adminUsageStats"], queryFn: () => getUsageStats(30) });
   const healthQ = useQuery({ queryKey: ["adminSystemHealth"], queryFn: getSystemHealth, refetchInterval: 60_000 });
+  const idleAgentsQ = useQuery({ queryKey: ["adminIdleAgents"], queryFn: getIdleAgents });
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2"><Bot className="h-4 w-4" /> Idle agents</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="flex items-start gap-2 border-b border-border bg-surface px-4 py-2.5 text-xs text-muted-foreground">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Funded, enabled agents with no real trade (buy/trim/sell) in the last {WENT_QUIET_DAYS} days, or none at all {NEVER_TRADED_IDLE_DAYS}+ days after their first run — AGENT-AUDIT.md Part 8. This is an activity fact, not a diagnosis: it may mean the agent is correctly holding through a calm market, or something else — the data can't yet tell those apart. Worth a look, not an alarm.
+            </p>
+          </div>
+          {idleAgentsQ.isLoading ? (
+            <LoadingState label="Checking…" />
+          ) : idleAgentsQ.isError ? (
+            <ErrorState message={(idleAgentsQ.error as Error)?.message} />
+          ) : idleAgentsQ.data!.agents.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">No funded, enabled agent is currently past either threshold.</p>
+          ) : (
+            <div className="divide-y divide-border/60">
+              {idleAgentsQ.data!.agents.map((a) => (
+                <div key={a.userId} className="flex flex-col gap-1 px-4 py-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{a.email}</span>
+                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{a.riskLevel}</span>
+                  </span>
+                  <span className="text-xs text-muted-foreground sm:text-right">{summarizeIdleReason(a.status)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">System health</CardTitle>

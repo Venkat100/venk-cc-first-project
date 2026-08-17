@@ -22,7 +22,17 @@ cd "$(dirname "$0")"
 STAGGER_SECONDS="${VERIFY_STAGGER_SECONDS:-5}"
 SCRIPTS=("$@")
 if [ ${#SCRIPTS[@]} -eq 0 ]; then
-  SCRIPTS=(verify-*.ts)
+  # verify-*.ts also matches vitest specs like verify-harness.test.ts (real
+  # bug, caught live: vite-node tried to execute one as a script and hung
+  # indefinitely — describe/it aren't defined outside vitest, and there's no
+  # runVerification() call to make it exit). Vitest specs run under
+  # `npm run test`, not this suite; exclude *.test.ts explicitly rather than
+  # relying on the glob to not collide with future test filenames.
+  SCRIPTS=()
+  for f in verify-*.ts; do
+    [[ "$f" == *.test.ts ]] && continue
+    SCRIPTS+=("$f")
+  done
 fi
 
 PASSED=0

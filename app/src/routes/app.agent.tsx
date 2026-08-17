@@ -12,6 +12,7 @@ import { PortfolioValueChart } from "@/components/PortfolioValueChart";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker, runAgentWatchdog, approveAgentProposal, rejectAgentProposal } from "@/lib/agent/api";
 import { getAgentHoldings, getAgentDecisions, getAgentSnapshots, getPendingProposal } from "@/lib/agent/queries";
+import { AgentActivityStatusLine } from "@/components/agent/AgentActivityStatusLine";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { getCandles } from "@/lib/marketData";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -232,6 +233,16 @@ function Agent() {
             {underfundedSignals?.suggested_min_funding ? ` Consider funding at least ${fmtUSD(underfundedSignals.suggested_min_funding)}.` : ""}
           </p>
         </div>
+      )}
+
+      {/* Agent activity status (AGENT-AUDIT.md Part 8) — always visible once
+         the agent has ever been funded, so absence of activity is never
+         ambiguous. Reports FACTS only (last real trade, last decision, next
+         scheduled run) — never a health verdict; see activityStatus.ts's
+         header for why. Gated on `allocated`, not current holdings/cash, so
+         it still reports honestly even after a full withdrawal. */}
+      {allocated > 0 && !decisionsQ.isLoading && !decisionsQ.isError && (
+        <AgentActivityStatusLine decisions={decisionsQ.data ?? []} />
       )}
 
       {/* Summary header — agent value, return vs allocated, invested/cash split */}

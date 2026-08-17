@@ -32,6 +32,7 @@ import {
   estimateInsightCostUsd,
   estimateAgentRunCostUsd,
 } from "./costEstimates";
+import { computeAgentActivityStatus, isIdle, type AgentActivityStatus, type MinimalDecision } from "@/lib/agent/activityStatus";
 import type { AdminAuditLog } from "@/lib/supabase/types";
 
 type Admin = ReturnType<typeof getServiceClient>;
@@ -510,6 +511,73 @@ export const getAuditLogFn = createServerFn({ method: "POST" })
         .range(offset, offset + limit - 1);
       if (error) return { ok: false, error: friendly(error.message) };
       return { ok: true, entries: (rows ?? []) as AdminAuditLog[] };
+    } catch (e) {
+      return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };
+    }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────
+// AGENT-AUDIT.md Part 8 §4B — an admin list of funded agents idle beyond
+// the never-traded (3d) / went-quiet (14d) thresholds, so this is a page
+// load instead of a hand-run SQL query. Reuses the SAME pure
+// computeAgentActivityStatus() the /app/agent status line uses — one
+// definition of "idle," not two that could quietly drift apart.
+export type IdleAgent = {
+  userId: string;
+  email: string;
+  riskLevel: string;
+  status: AgentActivityStatus;
+};
+
+export type GetIdleAgentsResponse = { ok: true; agents: IdleAgent[]; checkedAt: string } | { ok: false; error: string };
+
+export const getIdleAgentsFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
+  .handler(async ({ data }): Promise<GetIdleAgentsResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      await requireAdmin(userId);
+      const admin = getServiceClient();
+
+      // "Funded" = allocated_total > 0 (ever moved cash in — persists across
+      // a later withdrawal, unlike agent_cash); "enabled" excludes agents the
+      // user deliberately turned off, which aren't idle in the sense this
+      // list is for.
+      const { data: cfgs, error: cfgErr } = await admin.from("agent_config").select("user_id, risk_level").eq("enabled", true).gt("allocated_total", 0);
+      if (cfgErr) return { ok: false, error: friendly(cfgErr.message) };
+      if (!cfgs || cfgs.length === 0) return { ok: true, agents: [], checkedAt: new Date().toISOString() };
+
+      const userIds = cfgs.map((c) => c.user_id as string);
+      const [{ data: decisionRows, error: decErr }, authMap] = await Promise.all([
+        admin.from("agent_decisions").select("user_id, action, symbol, created_at, rationale").in("user_id", userIds),
+        listAuthUsersMap(admin),
+      ]);
+      if (decErr) return { ok: false, error: friendly(decErr.message) };
+
+      const byUser = new Map<string, MinimalDecision[]>();
+      for (const row of decisionRows ?? []) {
+        const uid = row.user_id as string;
+        const list = byUser.get(uid) ?? [];
+        list.push({ action: row.action as string, symbol: row.symbol as string | null, created_at: row.created_at as string, rationale: row.rationale as string | null });
+        byUser.set(uid, list);
+      }
+
+      const now = new Date();
+      const agents: IdleAgent[] = [];
+      for (const cfg of cfgs) {
+        const uid = cfg.user_id as string;
+        const status = computeAgentActivityStatus(byUser.get(uid) ?? [], now);
+        if (!isIdle(status)) continue;
+        agents.push({ userId: uid, email: authMap.get(uid)?.email ?? "(unknown)", riskLevel: cfg.risk_level as string, status });
+      }
+      // Longest-idle first — sinceDays exists on both idle-eligible variants.
+      agents.sort((a, b) => {
+        const da = a.status.kind === "quiet" || a.status.kind === "never_traded" ? a.status.sinceDays : 0;
+        const db = b.status.kind === "quiet" || b.status.kind === "never_traded" ? b.status.sinceDays : 0;
+        return db - da;
+      });
+
+      return { ok: true, agents, checkedAt: now.toISOString() };
     } catch (e) {
       return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };
     }

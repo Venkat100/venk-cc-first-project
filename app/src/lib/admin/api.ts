@@ -10,9 +10,11 @@ import {
   getUsageStatsFn,
   getSystemHealthFn,
   getAuditLogFn,
+  getIdleAgentsFn,
   type AdminUserSummary,
   type AdminUserDetail,
   type UsageStats,
+  type IdleAgent,
 } from "./functions";
 import type { HealthReport } from "@/lib/health/check.server";
 import type { AdminAuditLog } from "@/lib/supabase/types";
@@ -65,6 +67,14 @@ export async function getAuditLog(limit?: number, offset?: number): Promise<Admi
   return res.entries;
 }
 
-export type { AdminUserSummary, AdminUserDetail, UsageStats } from "./functions";
+/** Funded, enabled agents idle beyond the never-traded (3d) / went-quiet
+ *  (14d) thresholds — AGENT-AUDIT.md Part 8 §4B. */
+export async function getIdleAgents(): Promise<{ agents: IdleAgent[]; checkedAt: string }> {
+  const res = await getIdleAgentsFn({ data: { accessToken: await token() } });
+  if (!res.ok) throw new Error(res.error);
+  return { agents: res.agents, checkedAt: res.checkedAt };
+}
+
+export type { AdminUserSummary, AdminUserDetail, UsageStats, IdleAgent } from "./functions";
 export type { HealthReport } from "@/lib/health/check.server";
 export type { AdminAuditLog } from "@/lib/supabase/types";
