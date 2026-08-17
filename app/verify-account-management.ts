@@ -26,7 +26,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 
 function ts() {
@@ -135,7 +135,7 @@ async function main() {
   // — a deliberate, already-established defense-in-depth pattern in this
   // schema, not something to work around by inserting directly). Use the
   // REAL RPC instead, exactly like a genuine buy would.
-  const quote = await step("fetch a real AAPL quote (for a real execute_trade call)", () => getServerQuote("AAPL"), 15000);
+  const quote = await step("fetch a real AAPL quote (for a real execute_trade call)", () => withRetry("AAPL quote", () => getServerQuote("AAPL")), 15000);
   const buy = await step("execute_trade (real buy, creates a REAL holdings + transactions row)", () =>
     admin.rpc("execute_trade", { p_user_id: uid2, p_symbol: "AAPL", p_side: "buy", p_quantity: 1, p_price: quote.price, p_positions_value: 0 }),
     15000,

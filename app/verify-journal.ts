@@ -12,7 +12,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { computeJournalOutcome } from "@/lib/journal/outcome";
 import type { Transaction, OptionTransaction, JournalEntry } from "@/lib/supabase/types";
@@ -75,7 +75,7 @@ async function main() {
   if (signInA.error || signInB.error) throw new Error("sign-in failed");
 
   console.log("\n████ 1. STOCK BUY, trade-time note, outcome OPEN (position still held) ████");
-  const nvdaQuote = await step("real live NVDA quote", () => getServerQuote("NVDA"));
+  const nvdaQuote = await step("real live NVDA quote", () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
   const buyPrice = nvdaQuote.price;
   const buyRpc = await step("execute_trade: buy 2 NVDA (the REAL 0023-extended RPC)", () =>
     admin.rpc("execute_trade", { p_user_id: uidA, p_symbol: "NVDA", p_side: "buy", p_quantity: 2, p_price: buyPrice }),
@@ -97,7 +97,7 @@ async function main() {
   const noteAId = noteA.data.id as string;
   assert("note created, symbol denormalized from the trade", noteA.data.symbol === "NVDA");
 
-  const freshQuote = await step("fresh live NVDA quote for outcome comparison", () => getServerQuote("NVDA"));
+  const freshQuote = await step("fresh live NVDA quote for outcome comparison", () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
   const txnsA = (await admin.from("transactions").select("*").eq("user_id", uidA)).data as Transaction[];
   const openOutcome = computeJournalOutcome(noteA.data as JournalEntry, {
     transactions: txnsA,
@@ -117,7 +117,7 @@ async function main() {
   }
 
   console.log("\n████ 2. THE KEY PROPERTY: note survives its position being FULLY CLOSED ████");
-  const msftQuote = await step("real live MSFT quote", () => getServerQuote("MSFT"));
+  const msftQuote = await step("real live MSFT quote", () => withRetry("MSFT quote", () => getServerQuote("MSFT")));
   const buyPrice2 = msftQuote.price;
   const buyRpc2 = await step("execute_trade: buy 1 MSFT", () =>
     admin.rpc("execute_trade", { p_user_id: uidA, p_symbol: "MSFT", p_side: "buy", p_quantity: 1, p_price: buyPrice2 }),

@@ -17,7 +17,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getPositionsValue } from "@/lib/margin/valuation.server";
 import { runExpiryProcessing } from "@/lib/options/expiry.server";
@@ -64,7 +64,7 @@ async function main() {
     return { cash: Number(data.cash_balance), marginEnabled: Boolean(data.margin_enabled), marginLoan: Number(data.margin_loan), marginStatus: data.margin_status as string };
   }
   async function buyStock(userId: string, symbol: string, quantity: number) {
-    const quote = await withTimeout(`quote ${symbol}`, getServerQuote(symbol));
+    const quote = await withTimeout(`quote ${symbol}`, withRetry(`quote ${symbol}`, () => getServerQuote(symbol)));
     const profile = await profileRow(userId);
     const positionsValue = profile.marginEnabled ? await getPositionsValue(userId) : 0;
     const { data, error } = await withTimeout("execute_trade (buy)", admin.rpc("execute_trade", { p_user_id: userId, p_symbol: symbol, p_side: "buy", p_quantity: quantity, p_price: quote.price, p_positions_value: positionsValue }));
@@ -80,13 +80,13 @@ async function main() {
   await step("enable margin", 15000, () => admin.rpc("set_margin_enabled", { p_user_id: uid, p_enabled: true }));
   const p0 = await profileRow(uid);
   await step(`buy 1.5× current cash (${money(round2(p0.cash * 1.5))}) of AAPL on margin (forces borrowing)`, 25000, async () => {
-    const quote = await getServerQuote("AAPL");
+    const quote = await withRetry("AAPL quote", () => getServerQuote("AAPL"));
     const targetDollars = round2(p0.cash * 1.5);
     const qty = Math.round((targetDollars / quote.price) * 1e6) / 1e6;
     return buyStock(uid, "AAPL", qty);
   });
 
-  const nvdaQuote = await step("quote NVDA (for the expired contract)", 15000, () => getServerQuote("NVDA"));
+  const nvdaQuote = await step("quote NVDA (for the expired contract)", 15000, () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
 
   // ══════════════════════════════════════════════════════════════════════
   // EXPIRY SETTLEMENT + OUTSTANDING MARGIN LOAN

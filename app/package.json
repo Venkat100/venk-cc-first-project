@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "./verify-suite.sh"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

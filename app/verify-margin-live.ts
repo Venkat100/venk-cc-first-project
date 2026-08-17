@@ -36,7 +36,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
@@ -127,7 +127,7 @@ async function main() {
   }
 
   async function buyStock(userId: string, symbol: string, quantity: number) {
-    const quote = await withTimeout(`quote ${symbol}`, getServerQuote(symbol));
+    const quote = await withTimeout(`quote ${symbol}`, withRetry(`quote ${symbol}`, () => getServerQuote(symbol)));
     const profile = await profileRow(userId);
     const positionsValue = profile.marginEnabled ? await withTimeout("getPositionsValue", getPositionsValue(userId), 20000) : 0;
     const { data, error } = await withTimeout("execute_trade RPC (buy)", admin.rpc("execute_trade", {
@@ -136,7 +136,7 @@ async function main() {
     return { data: data as Record<string, unknown> | null, error, price: quote.price, positionsValue };
   }
   async function sellStock(userId: string, symbol: string, quantity: number) {
-    const quote = await withTimeout(`quote ${symbol}`, getServerQuote(symbol));
+    const quote = await withTimeout(`quote ${symbol}`, withRetry(`quote ${symbol}`, () => getServerQuote(symbol)));
     const profile = await profileRow(userId);
     const positionsValue = profile.marginEnabled ? await withTimeout("getPositionsValue", getPositionsValue(userId), 20000) : 0;
     const { data, error } = await withTimeout("execute_trade RPC (sell)", admin.rpc("execute_trade", {
@@ -146,7 +146,7 @@ async function main() {
   }
   async function tradeOption(userId: string, contractId: string, side: "buy_to_open" | "sell_to_close", contracts: number) {
     const parsed = parseContractId(contractId)!;
-    const [quote, vol] = await withTimeout("quote+vol for option", Promise.all([getServerQuote(parsed.symbol), getRealizedVol(parsed.symbol)]), 20000);
+    const [quote, vol] = await withTimeout("quote+vol for option", Promise.all([withRetry(`quote ${parsed.symbol}`, () => getServerQuote(parsed.symbol)), withRetry(`vol ${parsed.symbol}`, () => getRealizedVol(parsed.symbol))]), 20000);
     const priced = priceParsedContract(parsed, quote.price, vol);
     const profile = await profileRow(userId);
     const positionsValue = profile.marginEnabled ? await withTimeout("getPositionsValue", getPositionsValue(userId), 20000) : 0;
@@ -178,7 +178,7 @@ async function main() {
     }
 
     const cashSnap = await profileRow(uid);
-    const q = await step("quote NVDA (for overspend sizing)", 15000, () => getServerQuote("NVDA"));
+    const q = await step("quote NVDA (for overspend sizing)", 15000, () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
     const hugeQty = Math.ceil((cashSnap.cash * 100) / q.price);
     const bReject = await step("buy huge qty (expect reject)", 20000, () => buyStock(uid, "NVDA", hugeQty));
     assert("stock buy exceeding cash REJECTED (margin off)", !!bReject.error?.message.includes("insufficient_funds"), bReject.error?.message);
@@ -203,7 +203,7 @@ async function main() {
     const holdingFinal = await holdingQty(uid, "NVDA");
     assert("holding row DELETED (zero dust)", holdingFinal === null);
 
-    const [nvdaQuote, nvdaVol] = await step("quote+vol NVDA (for chain)", 20000, () => Promise.all([getServerQuote("NVDA"), getRealizedVol("NVDA")]));
+    const [nvdaQuote, nvdaVol] = await step("quote+vol NVDA (for chain)", 20000, () => Promise.all([withRetry("NVDA quote", () => getServerQuote("NVDA")), withRetry("NVDA vol", () => getRealizedVol("NVDA"))]));
     const chain = buildChain({ symbol: "NVDA", spot: nvdaQuote.price, vol: nvdaVol });
     const expiry = chain.expiries.find((e) => e.daysToExpiry > 0) ?? chain.expiries[0];
     let atmIdx = 0;
@@ -254,7 +254,7 @@ async function main() {
   let nvdaHeldQty = 0;
   {
     const p0 = await profileRow(uid);
-    const quote = await step("quote NVDA", 15000, () => getServerQuote("NVDA"));
+    const quote = await step("quote NVDA", 15000, () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
     // 1.5× actual starting cash — NOT a hardcoded $150k (that assumed the
     // pre-2026-08-09 $100k signup default; new accounts start at $25k since
     // PLAN.md §6 step 1). Safely under the 2×equity buying-power ceiling
@@ -296,7 +296,7 @@ async function main() {
     console.log(`  equity = ${money(p.cash)}+${money(positionsValue)}−${money(p.marginLoan)} = ${money(round2(p.cash + positionsValue - p.marginLoan))}`);
     console.log(`  buying_power = max(0, 2×equity − positions_value) = ${money(bp)}  ← remaining room`);
     const overshootDollars = bp + 20000;
-    const quote = await step("quote NVDA", 15000, () => getServerQuote("NVDA"));
+    const quote = await step("quote NVDA", 15000, () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
     const overshootQty = Math.round((overshootDollars / quote.price) * 1e6) / 1e6;
     const holdBefore = await holdingQty(uid, "NVDA");
     const attempt = await step("buy overshoot qty (expect reject)", 25000, () => buyStock(uid, "NVDA", overshootQty));
@@ -342,7 +342,7 @@ async function main() {
   {
     const before = await profileRow(uid);
     const sellQty = round2(nvdaHeldQty / 2);
-    const quotePreview = await step("quote NVDA (preview)", 15000, () => getServerQuote("NVDA"));
+    const quotePreview = await step("quote NVDA (preview)", 15000, () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
     console.log(`  selling half the position (${sellQty} of ${nvdaHeldQty} NVDA @ ~${money(quotePreview.price)}) — proceeds expected to comfortably exceed the loan (${money(before.marginLoan)}), producing a REAL split`);
     const sell = await step("sell half NVDA position", 25000, () => sellStock(uid, "NVDA", sellQty));
     assert("sell succeeds", !sell.error, sell.error?.message);
@@ -383,7 +383,7 @@ async function main() {
   {
     const before = await profileRow(uid);
     const positionsValue = await step("getPositionsValue", 20000, () => getPositionsValue(uid));
-    const quote = await step("quote NVDA", 15000, () => getServerQuote("NVDA"));
+    const quote = await step("quote NVDA", 15000, () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
     const targetDollars = round2(before.cash + 20000);
     const qty = Math.round((targetDollars / quote.price) * 1e6) / 1e6;
     const bp = buyingPowerJs(before.cash, 0, true, positionsValue);

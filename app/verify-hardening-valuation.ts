@@ -28,7 +28,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { providerQuotes, fetchStats } from "@/lib/marketData/finnhub.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
@@ -89,7 +89,7 @@ async function main() {
     return { cash: Number(data.cash_balance), marginEnabled: Boolean(data.margin_enabled), marginLoan: Number(data.margin_loan), marginStatus: data.margin_status as string };
   }
   async function buyStock(userId: string, symbol: string, quantity: number) {
-    const quote = await withTimeout(`quote ${symbol}`, getServerQuote(symbol));
+    const quote = await withTimeout(`quote ${symbol}`, withRetry(`quote ${symbol}`, () => getServerQuote(symbol)));
     const profile = await profileRow(userId);
     const positionsValue = profile.marginEnabled ? await getPositionsValue(userId) : 0;
     const { data, error } = await withTimeout("execute_trade (buy)", admin.rpc("execute_trade", { p_user_id: userId, p_symbol: symbol, p_side: "buy", p_quantity: quantity, p_price: quote.price, p_positions_value: positionsValue }));
@@ -98,7 +98,7 @@ async function main() {
   }
   async function tradeOption(userId: string, contractId: string, side: "buy_to_open" | "sell_to_close", contracts: number) {
     const parsed = parseContractId(contractId)!;
-    const [quote, vol] = await Promise.all([getServerQuote(parsed.symbol), getRealizedVol(parsed.symbol)]);
+    const [quote, vol] = await Promise.all([withRetry(`quote ${parsed.symbol}`, () => getServerQuote(parsed.symbol)), withRetry(`vol ${parsed.symbol}`, () => getRealizedVol(parsed.symbol))]);
     const priced = priceParsedContract(parsed, quote.price, vol);
     const profile = await profileRow(userId);
     const positionsValue = profile.marginEnabled ? await getPositionsValue(userId) : 0;
@@ -136,7 +136,7 @@ async function main() {
   // current balance is.
   const p0BeforeBigBuy = await profileRow(uid);
   const buy2 = await step(`buy 1.5× current cash (${money(round2(p0BeforeBigBuy.cash * 1.5))}) of AAPL on margin (forces borrowing)`, 25000, async () => {
-    const quote = await getServerQuote("AAPL");
+    const quote = await withRetry("AAPL quote", () => getServerQuote("AAPL"));
     const targetDollars = round2(p0BeforeBigBuy.cash * 1.5);
     const qty = Math.round((targetDollars / quote.price) * 1e6) / 1e6;
     return buyStock(uid, "AAPL", qty);
@@ -149,7 +149,7 @@ async function main() {
   // proves options CAN be bought on borrowed money, consistent with the
   // stock path (both thread p_positions_value into margin_buying_power and
   // both log a 'borrow' margin_event on shortfall).
-  const [nvdaQuote, nvdaVol] = await step("quote+vol NVDA (for option chain)", 20000, () => Promise.all([getServerQuote("NVDA"), getRealizedVol("NVDA")]));
+  const [nvdaQuote, nvdaVol] = await step("quote+vol NVDA (for option chain)", 20000, () => Promise.all([withRetry("NVDA quote", () => getServerQuote("NVDA")), withRetry("NVDA vol", () => getRealizedVol("NVDA"))]));
   const chain = buildChain({ symbol: "NVDA", spot: nvdaQuote.price, vol: nvdaVol });
   const expiry = chain.expiries.find((e) => e.daysToExpiry > 0) ?? chain.expiries[0];
   let atmIdx = 0;
@@ -192,7 +192,7 @@ async function main() {
     let holdingsValue = 0;
     if (holdings && holdings.length > 0) {
       const symbols = [...new Set(holdings.map((h) => h.symbol))];
-      const quotes = await providerQuotes(symbols);
+      const quotes = await withRetry("holdings valuation quotes", () => providerQuotes(symbols));
       const priceMap = new Map(quotes.map((q) => [q.symbol, q.price]));
       for (const h of holdings) holdingsValue += (priceMap.get(h.symbol) ?? 0) * Number(h.quantity);
     }

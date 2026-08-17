@@ -7,6 +7,7 @@ import { getRealizedVol, MIN_VOL, MAX_VOL } from "@/lib/options/volatility.serve
 import { buildChain } from "@/lib/options/chain.server";
 import { providerQuotes } from "@/lib/marketData/finnhub.server";
 import { getDailyHistory } from "@/lib/marketData/dailyHistory.server";
+import { withRetry } from "./verify-harness";
 
 let failures = 0;
 function assert(name: string, cond: boolean, detail = "") {
@@ -33,7 +34,7 @@ assert("second call returns the identical array length (served from cache)", h1.
 assert("second call is dramatically faster (cache hit, no network)", secondMs < Math.max(5, midMs / 3), `first=${midMs}ms second=${secondMs}ms`);
 
 console.log("\n████ 3. Real generated NVDA chain ████");
-const [nvdaQuote] = await providerQuotes(["NVDA"]);
+const [nvdaQuote] = await withRetry("NVDA quote", () => providerQuotes(["NVDA"]));
 console.log(`  NVDA live spot: $${nvdaQuote.price}`);
 const chain = buildChain({ symbol: "NVDA", spot: nvdaQuote.price, vol: volNvda });
 assert("chain has ≥5 expiries", chain.expiries.length >= 5, `${chain.expiries.length}`);

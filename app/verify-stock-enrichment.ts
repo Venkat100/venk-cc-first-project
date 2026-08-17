@@ -9,14 +9,14 @@ import { fhStockEnrichment } from "@/lib/marketData/finnhub.server";
 import { fetchStats, resetFetchStats } from "@/lib/marketData/finnhub.server";
 import { getServiceClient } from "@/lib/supabase/admin.server";
 import { __clearL1ForTest } from "@/lib/marketData/cache.server";
-import { step, assert, runVerification } from "./verify-harness";
+import { step, assert, runVerification, withRetry } from "./verify-harness";
 
 const admin = getServiceClient();
 const ENRICHMENT_KINDS = ["nextEarnings", "earningsSurprises", "recommendationTrend", "peers"] as const;
 
 async function main() {
   console.log("\n████ 1. Mega-cap (AAPL) — all 4 datasets real and correctly shaped ████");
-  const aapl = await step("fhStockEnrichment(AAPL)", () => fhStockEnrichment("AAPL"));
+  const aapl = await step("fhStockEnrichment(AAPL)", () => withRetry("fhStockEnrichment(AAPL)", () => fhStockEnrichment("AAPL")));
   console.log(`  nextEarnings: ${JSON.stringify(aapl.nextEarnings)}`);
   console.log(`  earningsSurprises: ${aapl.earningsSurprises.length} rows`);
   console.log(`  recommendationTrend: ${aapl.recommendationTrend.length} rows`);
@@ -28,7 +28,7 @@ async function main() {
   assert("peers is non-empty and excludes AAPL itself", aapl.peers.length > 0 && !aapl.peers.includes("AAPL"), aapl.peers.join(","));
 
   console.log("\n████ 2. ETF (VOO) — genuinely empty for all 4, not an error ████");
-  const voo = await step("fhStockEnrichment(VOO)", () => fhStockEnrichment("VOO"));
+  const voo = await step("fhStockEnrichment(VOO)", () => withRetry("fhStockEnrichment(VOO)", () => fhStockEnrichment("VOO")));
   console.log(`  nextEarnings=${JSON.stringify(voo.nextEarnings)} surprises=${voo.earningsSurprises.length} trend=${voo.recommendationTrend.length} peers=${voo.peers.length}`);
   assert("VOO nextEarnings is absent (undefined, not a thrown error)", voo.nextEarnings === undefined);
   assert("VOO earningsSurprises is an empty array", voo.earningsSurprises.length === 0);
@@ -36,7 +36,7 @@ async function main() {
   assert("VOO peers is an empty array", voo.peers.length === 0);
 
   console.log("\n████ 3. Mid-cap (SOFI) — real data, independent of AAPL/VOO ████");
-  const sofi = await step("fhStockEnrichment(SOFI)", () => fhStockEnrichment("SOFI"));
+  const sofi = await step("fhStockEnrichment(SOFI)", () => withRetry("fhStockEnrichment(SOFI)", () => fhStockEnrichment("SOFI")));
   assert("SOFI has a real next-earnings date, different symbol context from AAPL", !!sofi.nextEarnings?.date);
   assert("SOFI peers is non-empty and excludes SOFI itself", sofi.peers.length > 0 && !sofi.peers.includes("SOFI"), sofi.peers.join(","));
 

@@ -20,7 +20,7 @@ import { getServiceClient } from "@/lib/supabase/admin.server";
 import { getDailyHistory } from "@/lib/marketData/dailyHistory.server";
 import { runExpiryProcessing } from "@/lib/options/expiry.server";
 import { runSnapshots } from "@/lib/snapshots/writer.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 
 let failures = 0;
 function assert(name: string, cond: boolean, detail = "") {
@@ -70,7 +70,7 @@ async function ledgerRows(contractId: string) {
 
 // ── 1. Independently fetch a REAL historical close for a real past expiry ──
 console.log("\n████ 1. Real historical NVDA close for a real past date ████");
-const nvdaSeries = await getDailyHistory("NVDA");
+const nvdaSeries = await withRetry("NVDA daily history", () => getDailyHistory("NVDA"));
 // Pick a Friday roughly 3 weeks in the past — comfortably settled data, not
 // today/yesterday (avoids any "is this candle finalized yet" ambiguity).
 const past = new Date();

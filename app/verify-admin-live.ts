@@ -26,7 +26,7 @@ import { estimateInsightCostUsd, estimateAgentRunCostUsd } from "@/lib/admin/cos
 import { checkAndRecordRateLimit } from "@/lib/rateLimit/check.server";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
-import { step, assert, sleep, createTestUser, runVerification } from "./verify-harness";
+import { step, assert, sleep, createTestUser, runVerification, withRetry } from "./verify-harness";
 
 const REAL_ACCOUNT_EMAILS = new Set([
   "santosh.naranapatty@gmail.com",
@@ -264,7 +264,7 @@ async function main() {
     // Seed real state: a stock holding (via the real execute_trade RPC —
     // same engine every trade uses) + a watchlist entry + a journal entry.
     const { getServerQuote } = await import("@/lib/marketData/quote.server");
-    const quote = await step("quote AAPL (to seed a real holding)", () => getServerQuote("AAPL"));
+    const quote = await step("quote AAPL (to seed a real holding)", () => withRetry("AAPL quote", () => getServerQuote("AAPL")));
     const buy = await step("execute_trade (buy 1 AAPL) for deleteTarget", () =>
       admin.rpc("execute_trade", { p_user_id: deleteTarget.uid, p_symbol: "AAPL", p_side: "buy", p_quantity: 1, p_price: quote.price, p_positions_value: 0 }),
     );

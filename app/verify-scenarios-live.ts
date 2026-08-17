@@ -32,7 +32,7 @@ import { maxStepIndex, cutoffDateForStep, sliceUpToDate, closeOnOrBefore, closeO
 import { computeScenarioScore } from "@/lib/scenarios/scoring";
 import type { Candle } from "@/lib/marketData/types";
 import type { ScenarioRun } from "@/lib/supabase/types";
-import { step, assert, approx, sleep, deepEqual, createTestUser, runVerification } from "./verify-harness";
+import { step, assert, approx, sleep, deepEqual, createTestUser, runVerification, withRetry } from "./verify-harness";
 
 const env = Object.fromEntries(
   readFileSync(".env", "utf8")
@@ -52,7 +52,7 @@ const created: string[] = [];
 
 const SERIES_TTL = 24 * 60 * 60_000;
 function seriesCached(symbol: string, scenarioId: string, startDate: string, endDate: string): Promise<Candle[]> {
-  return durableCached("scenario_series", symbol.toUpperCase(), scenarioId, SERIES_TTL, () => providerSeries(symbol, startDate, endDate));
+  return durableCached("scenario_series", symbol.toUpperCase(), scenarioId, SERIES_TTL, () => withRetry(`${symbol} series`, () => providerSeries(symbol, startDate, endDate)));
 }
 
 async function createUser(label: string, stamp: number) {

@@ -23,7 +23,7 @@ import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
 import { executeOptionTradeInputSchema } from "@/lib/options/functions";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 
 let failures = 0;
 function assert(name: string, cond: boolean, detail = "") {
@@ -102,7 +102,7 @@ async function runTrade(raw: TradeInput & Record<string, unknown>): Promise<Trad
   const todayIso = new Date().toISOString().slice(0, 10);
   if (parsed.expiry < todayIso) return { ok: false, error: "expired_contract" };
 
-  const [quote, vol] = await Promise.all([getServerQuote(parsed.symbol), getRealizedVol(parsed.symbol)]);
+  const [quote, vol] = await Promise.all([withRetry(`quote ${parsed.symbol}`, () => getServerQuote(parsed.symbol)), withRetry(`vol ${parsed.symbol}`, () => getRealizedVol(parsed.symbol))]);
   if (!quote || !(quote.price > 0)) return { ok: false, error: "no_price" };
   const priced = priceParsedContract(parsed, quote.price, vol);
 
@@ -125,7 +125,7 @@ async function runTrade(raw: TradeInput & Record<string, unknown>): Promise<Trad
 
 // ── 1. Pick a real, near-ATM, non-expired NVDA call ─────────────────────────
 console.log("\n████ 1. Real NVDA option chain — pick a near-ATM call ████");
-const [nvdaQuote, nvdaVol] = await Promise.all([getServerQuote("NVDA"), getRealizedVol("NVDA")]);
+const [nvdaQuote, nvdaVol] = await Promise.all([withRetry("NVDA quote", () => getServerQuote("NVDA")), withRetry("NVDA vol", () => getRealizedVol("NVDA"))]);
 const chain = buildChain({ symbol: "NVDA", spot: nvdaQuote.price, vol: nvdaVol });
 const expiry = chain.expiries.find((e) => e.daysToExpiry > 0) ?? chain.expiries[0];
 let atmIdx = 0;

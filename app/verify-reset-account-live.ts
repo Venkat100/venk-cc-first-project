@@ -13,7 +13,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { getRealizedVol } from "@/lib/options/volatility.server";
 import { buildChain, parseContractId, priceParsedContract } from "@/lib/options/chain.server";
@@ -76,13 +76,13 @@ async function main() {
   // non-default settings, a holding, a PENDING proposal, a NON-pending
   // proposal), snapshot history, watchlist ──────────────────────────────
   console.log("\n████ Seed user A: a rich account ████");
-  const quote = await step("quote NVDA", 15000, () => getServerQuote("NVDA"));
+  const quote = await step("quote NVDA", 15000, () => withRetry("NVDA quote", () => getServerQuote("NVDA")));
   const buyStock = await step("buy 2 NVDA (real trade)", 20000, () =>
     admin.rpc("execute_trade", { p_user_id: uidA, p_symbol: "NVDA", p_side: "buy", p_quantity: 2, p_price: quote.price, p_positions_value: 0 }));
   if (buyStock.error) throw new Error("seed stock buy failed: " + buyStock.error.message);
   console.log(`  bought 2 NVDA @ ${money(quote.price)}`);
 
-  const [vol] = await step("realized vol NVDA", 15000, () => Promise.all([getRealizedVol("NVDA")]));
+  const [vol] = await step("realized vol NVDA", 15000, () => Promise.all([withRetry("NVDA vol", () => getRealizedVol("NVDA"))]));
   const chain = buildChain({ symbol: "NVDA", spot: quote.price, vol });
   const expiry = chain.expiries.find((e) => e.daysToExpiry > 0) ?? chain.expiries[0];
   const contract = expiry.strikes[Math.floor(expiry.strikes.length / 2)].call;

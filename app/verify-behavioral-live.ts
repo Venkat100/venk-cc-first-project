@@ -17,7 +17,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import { createTestUser } from "./verify-harness";
+import { createTestUser, withRetry } from "./verify-harness";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { computeBehavioralAnalytics } from "@/lib/behavioral/metrics";
 import type { Transaction, OptionTransaction } from "@/lib/supabase/types";
@@ -89,7 +89,7 @@ async function main() {
   const symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "NFLX", "AMD", "INTC", "ORCL", "CRM", "ADBE"];
   const quotes = new Map<string, number>();
   for (const s of symbols) {
-    const q = await step(`fetch real live quote: ${s}`, () => getServerQuote(s), 15000);
+    const q = await step(`fetch real live quote: ${s}`, () => withRetry(`quote ${s}`, () => getServerQuote(s)), 15000);
     quotes.set(s, q.price);
   }
 

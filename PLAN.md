@@ -164,7 +164,7 @@ This script had flaked ~6 times across sessions by 2026-08-13, each for a differ
 
 All 36 original assertions preserved with an explicit old→new mapping (issue #35) — zero coverage dropped. Verified: full 31-script suite run 3 consecutive times, green on all three; the previously-flaky steps' elapsed times reported each run to show the margin under budget. `tsc --noEmit`/`npm run build` clean. Watchlist item closed — this section is historical record now, not an open trigger.
 
-## 6d. WATCHLIST — live-provider flakiness across `verify-*.ts` — OPEN, trigger CORRECTED + FIRED 2026-08-17
+## 6d. WATCHLIST — live-provider flakiness across `verify-*.ts` — FIXED 2026-08-17
 
 **Incident 1 (2026-08-17, morning):** `verify-insights.ts` and `verify-journal.ts` both flaked in the same full-suite run, within ~7 seconds of each other, both on a live NVDA quote fetch: `verify-insights.ts` threw `No live data for NVDA` out of `getStockInsight`'s `providerQuotes([sym])` call (`insights.server.ts:129`); `verify-journal.ts`'s real NVDA quote fetch took ~4.5s (unusually slow) then the immediately-following `execute_trade` buy failed `invalid_price`. Both re-ran clean standalone immediately after.
 
@@ -176,7 +176,14 @@ All 36 original assertions preserved with an explicit old→new mapping (issue #
 
 **This trigger has already fired.** Incident 1 and Incident 2 above are it — two incidents, same day, two different (non-consecutive) full-suite runs, three distinct scripts between them. Recorded here as fired rather than waiting for a third occurrence to accumulate across future sessions: the diagnosis is already clear (ambient live-provider contention across the suite, not any one script's fragility), so further re-running would just be re-confirming what's already known, matching the "convince me otherwise" standard applied and not met.
 
-**Fix not implemented in this pass** (scope of this edit is the corrected rule only) — see the session report for the recommended structural fix and its cost.
+**Fix implemented, two structural pieces, per the trigger above:**
+
+1. **Staggered suite runner** (`app/verify-suite.sh`, new — the suite previously had no committed runner, just an ad-hoc bash loop) — runs every `verify-*.ts` script serially with a 5s delay between scripts (`VERIFY_STAGGER_SECONDS`, overridable), giving the shared live-provider rate-limit window breathing room instead of running flat-out back-to-back. `npm run verify` wraps it.
+2. **Rate-limit-aware retry wrapper** (`verify-harness.ts`'s new `withRetry`) — 3 attempts, exponential backoff on a detected 429/rate-limit message, linear backoff otherwise. Applied ONLY to calls audited as SETUP (real market data used to construct a trade/position/scenario, where the script's assertions are about something else) across 13 scripts (`verify-account-management.ts`, `verify-admin-live.ts`, `verify-behavioral-live.ts`, `verify-hardening-{cron-chain,expiry,liquidation,reset,valuation}.ts`, `verify-journal.ts`, `verify-margin-live.ts`, `verify-options-{trade-,}live.ts`, `verify-options-expiry-live.ts`, `verify-reset-account-live.ts`, `verify-scenarios-live.ts`, `verify-stock-enrichment.ts`).
+
+**Explicitly NOT wrapped (SUBJECT — the call's own count/timing/value-as-ground-truth IS the thing under test; retrying would corrupt the exact signal these scripts exist to catch):** `verify-insights.ts`, `verify-insights-fresh.ts`, `verify-live-prices.ts`, `verify-price-cache.ts`, `verify-eventstudy-live.ts`, `verify-scenario-data-availability.ts` (already self-paced) entirely; plus specific call sites within otherwise-SETUP scripts — `verify-hardening-valuation.ts`'s `fetchStats()`-instrumented section, `verify-stock-enrichment.ts`'s cold/warm cache-proof pair, `verify-options-live.ts`'s `getDailyHistory` cache-timing calls, `verify-scenarios-live.ts`'s independent ground-truth cross-check.
+
+**Verified**: full 35-script suite run twice via the new staggered runner, both 35/35 green, zero retries fired either time (the backoff wrapper never had to activate — no transient failures occurred in either run). Caveat, stated honestly: both original incidents were themselves clean on immediate isolated re-run, so two clean full-suite runs is consistent with the fix working but is not, by itself, statistical proof at this sample size — the stronger argument is structural: the stagger directly targets the ONLY root cause identified (suite-wide contention on a shared live-provider rate limit), and the wrapper adds resilience to exactly the SETUP calls that would otherwise surface that contention as a hard failure.
 
 ## 6b. PRE-LAUNCH CHECKLIST — deferred to the very end (Venky's call, 2026-08-10)
 

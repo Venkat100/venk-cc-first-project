@@ -82,6 +82,41 @@ export function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Rate-limit-aware retry wrapper — PLAN.md §6d's fix for suite-wide
+ * live-provider contention (two incidents, three distinct scripts flaking
+ * on a full-suite run, always clean on isolated re-run).
+ *
+ * ONLY for SETUP calls: a real market-data fetch used to construct a trade,
+ * position, or scenario, where the script's actual assertions are about
+ * something else. NEVER wrap a call that is itself the subject under test —
+ * i.e. where the script asserts an EXACT invocation count (`fetchStats()`,
+ * `insightClaudeCalls()`, `measuredHistoryCalls()`), times the call itself
+ * (a cache-hit-speed proof), or uses the call as an independently-fetched
+ * ground truth to cross-check system output. Retrying a SUBJECT call would
+ * silently absorb the exact provider failure/count signal those scripts
+ * exist to catch. See PLAN.md §6d for the full script-by-script audit.
+ */
+export async function withRetry<T>(label: string, fn: () => Promise<T>, opts: { attempts?: number; baseDelayMs?: number } = {}): Promise<T> {
+  const attempts = opts.attempts ?? 3;
+  const baseDelayMs = opts.baseDelayMs ?? 3000;
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (i === attempts - 1) break;
+      const msg = e instanceof Error ? e.message : String(e);
+      const isRateLimit = /429|rate.?limit|too many requests/i.test(msg);
+      const delay = isRateLimit ? baseDelayMs * 2 ** i : Math.round(baseDelayMs * 0.5 * (i + 1));
+      console.log(`  [${ts()}] ⚠ ${label} failed (attempt ${i + 1}/${attempts}${isRateLimit ? ", rate-limited" : ""}): ${msg} — retrying in ${delay}ms`);
+      await sleep(delay);
+    }
+  }
+  throw lastErr;
+}
+
+/**
  * The ONLY way any verify-*.ts script should create a throwaway test user.
  *
  * ROOT-CAUSED 2026-08-11: `handle_new_user()` (0022_terms_acceptance.sql)
