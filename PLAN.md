@@ -81,6 +81,10 @@
 
 **Architectural consequence — build now, not later:** entitlement checks ("does this plan allow this?") and usage metering ("how many AI calls this month?") should be designed in as we build Phase B, not retrofitted across a dozen features in Phase C.
 
+**Cost baseline & the one step-change to budget for (CTO, 2026-08-17).** Current steady-state running cost is effectively *a domain renewal plus a few dollars of Anthropic usage*: Vercel (Hobby), Supabase, Finnhub, Twelve Data, GitHub and GitHub Actions are all on free tiers and nowhere near their limits; Lovable was a one-time Phase-1 use, not a subscription. The only cost that scales with users is the Anthropic API (agent thinker + watchdog + insights) — see §6f for how we'll measure it.
+
+**The step-change: Vercel's Hobby tier is non-commercial only.** The moment we charge for anything — including any paid tier above — we need **Vercel Pro (~$20/mo)** to stay within their terms. Budget it as a fixed cost that starts *before* the first dollar of revenue, not after. Related fixed costs to revisit at the same milestone: Supabase Pro (~$25/mo) if we exceed free-tier limits (not currently close), and Finnhub premium ($12–100/mo) if we want analyst ratings / earnings-surprise history. None of these are needed while the product is free.
+
 ### Phase D — Scale
 - **D1. Durable Postgres price cache.** *Do this early — it's free and it's the single biggest capacity unlock.*
 - **D2. Paid data tier** once D1 is saturated.
@@ -203,6 +207,16 @@ Prompted directly by this session's component-test work: 2 of the 4 target surfa
 - **Unconditionally after touching any SHARED layout primitive** (`TopBar`, the identity-left/numbers-right header convention documented in `MOBILE-AUDIT.md`, any shared `Card`/grid pattern) regardless of where the cadence counter is — a shared-component change is the one case most likely to silently break a page nobody directly touched.
 
 Not proposing a fourth automated layer (Playwright) to close this gap now — that recommendation and its cost are already on record (Commit B's HANDOFF entry, 2026-08-17: ~1-2 days setup, minutes per run) and remains the right eventual answer specifically for this bug class; this entry is about making the layer that already exists and already works a standing practice instead of a periodic surprise.
+
+## 6f. PARKED — evaluate Anthropic's Usage & Cost API before building `res.usage` metering (CTO, 2026-08-17)
+
+**Status: parked, to raise with Claude Code when cost metering is picked up. Do not build metering without doing this comparison first.**
+
+`AGENT-AUDIT.md` Part 8 recommends instrumenting real token spend by reading `res.usage` at every Anthropic call site (agent thinker + insights). Before that work starts, evaluate the alternative: Anthropic publishes a **Usage & Cost API** (https://platform.claude.com/docs/en/build-with-claude/usage-cost-api) that reports spend broken down by model and by API key, plus a **Spend Limits API** (https://platform.claude.com/docs/en/manage-claude/spend-limits-api). The Console's Usage page (https://platform.claude.com/usage) already exposes the same data by model / date / API key with no code at all.
+
+**The question to answer:** does the Usage & Cost API give us what we actually need — total and trend spend, ideally split by workload — for materially less work than instrumenting every call site? Likely trade-off: the API is near-zero engineering but reports at the API-key/model grain, so it can only attribute cost per-workload if agent and insight traffic use **separate API keys** (cheap to arrange, and worth doing regardless). `res.usage` is the only route to true per-user or per-run attribution, which matters for unit-economics when pricing (Phase C) — but pricing is deferred, so that grain may not be needed yet. A plausible outcome is "separate API keys + the Usage API now, `res.usage` later when we price."
+
+**Related, non-code, Venky's action (2026-08-17):** set a spend limit at Settings → Billing in the Console as a runaway/abuse brake, sized ~4-5x the trailing-30-day actual, *not* as a budget — the limit is a hard stop that halts all API calls for every user until the next calendar month, which would silently stop the agent and insights. Documented 75%/90% threshold alerts are an Enterprise org-level feature, so do not assume an email warning precedes the cap.
 
 ## 6b. PRE-LAUNCH CHECKLIST — deferred to the very end (Venky's call, 2026-08-10)
 
