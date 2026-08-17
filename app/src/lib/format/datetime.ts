@@ -59,11 +59,21 @@ export function formatUnixSecondsDate(unixSeconds: number, opts: Intl.DateTimeFo
 }
 
 /**
- * A bare `YYYY-MM-DD` calendar date (no time component) → rendered in UTC
+ * A calendar date (no REAL time-of-day component) → rendered in UTC
  * regardless of viewer, so the displayed day always matches the date
  * string exactly. See this file's header comment for why UTC is correct
  * here and NOT a bug to "fix" into the viewer's local zone.
+ *
+ * Accepts either a bare `YYYY-MM-DD` (a Postgres `date` column, e.g.
+ * portfolio_snapshots.captured_at, scenario sim_date) or a full
+ * UTC-midnight ISO instant string (a daily provider candle's `t`, built via
+ * `new Date(...).toISOString()` — genuinely a calendar day with no real
+ * intraday time, just serialized with a time component tacked on). Only
+ * the first 10 characters (the date portion) are ever used, so appending
+ * "T00:00:00Z" can't double up into an invalid string either way — passing
+ * a full ISO string here is not a second time value being interpreted,
+ * it's the same calendar day represented differently by its source.
  */
 export function formatCalendarDate(dateOnly: string, opts: Intl.DateTimeFormatOptions = DEFAULT_CALENDAR_DATE_OPTS): string {
-  return new Date(`${dateOnly}T00:00:00Z`).toLocaleDateString(undefined, { ...opts, timeZone: "UTC" });
+  return new Date(`${dateOnly.slice(0, 10)}T00:00:00Z`).toLocaleDateString(undefined, { ...opts, timeZone: "UTC" });
 }

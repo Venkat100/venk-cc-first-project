@@ -129,8 +129,13 @@ function StockDetail() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 sm:flex sm:flex-wrap sm:justify-between">
+      {/* Header — stacked (identity block, then numbers) below `sm`, a row
+          with numbers right-aligned at `sm` and up. The old markup did the
+          opposite (a 2-column grid that never stacked at mobile widths, a
+          wrap-capable flex row only from `sm` on) which is what caused the
+          reported collision — see MOBILE-AUDIT.md's "identity left, numbers
+          right" convention. */}
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:flex-wrap sm:justify-between">
         <div className="flex min-w-0 items-center gap-4">
           {quote?.logo ? (
             <img src={quote.logo} alt={symbol} className="h-14 w-14 shrink-0 rounded-2xl bg-white object-contain p-1.5" />
@@ -138,7 +143,7 @@ function StockDetail() {
             <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-surface-2 text-sm font-bold">{symbol.slice(0, 2)}</div>
           )}
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate text-2xl font-semibold tracking-tight">{symbol}</h1>
               {quote?.sector && quote.sector !== "—" && (
                 <span className="rounded-md border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{quote.sector}</span>
@@ -147,14 +152,14 @@ function StockDetail() {
             <p className="truncate text-sm text-muted-foreground">{quote?.name ?? "Loading…"}</p>
           </div>
         </div>
-        <div className="text-right">
+        <div className="text-left sm:text-right">
           {quote ? (
             <>
               <p className={cn("rounded px-1 text-3xl font-semibold tabular", priceFlash)}>{fmtUSD(quote.price)}</p>
               <p className={cn("text-sm tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
                 {up ? "+" : "−"}{fmtUSD(Math.abs(quote.dayChange))} ({fmtPct(quote.dayChangePct)}) today
               </p>
-              <MarketStatusBadge className="mt-1 justify-end" />
+              <MarketStatusBadge className="mt-1 justify-start sm:justify-end" />
             </>
           ) : (
             <div className="h-10 w-32 animate-pulse rounded bg-surface-2" />

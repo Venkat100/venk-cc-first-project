@@ -311,7 +311,12 @@ function DonutCard({
           ) : (
             <ResponsiveContainer>
               <PieChart>
-                <Pie data={data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={95} paddingAngle={2} stroke="var(--color-background)">
+                {/* isAnimationActive=false: with it on, Recharts occasionally
+                    mounts with a stale (zero) container measurement and
+                    never redraws real sectors — an intermittent blank donut
+                    with a correct legend beside it. Static rendering
+                    sidesteps the race entirely instead of chasing timing. */}
+                <Pie data={data} dataKey="value" nameKey="name" innerRadius={60} outerRadius={95} paddingAngle={2} stroke="var(--color-background)" isAnimationActive={false}>
                   {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Tooltip
