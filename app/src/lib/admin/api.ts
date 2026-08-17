@@ -11,10 +11,13 @@ import {
   getSystemHealthFn,
   getAuditLogFn,
   getIdleAgentsFn,
+  listTestAccountsFn,
+  deleteTestAccountsFn,
   type AdminUserSummary,
   type AdminUserDetail,
   type UsageStats,
   type IdleAgent,
+  type TestAccountSummary,
 } from "./functions";
 import type { HealthReport } from "@/lib/health/check.server";
 import type { AdminAuditLog } from "@/lib/supabase/types";
@@ -75,6 +78,24 @@ export async function getIdleAgents(): Promise<{ agents: IdleAgent[]; checkedAt:
   return { agents: res.agents, checkedAt: res.checkedAt };
 }
 
-export type { AdminUserSummary, AdminUserDetail, UsageStats, IdleAgent } from "./functions";
+/** Every account matching the reserved test-account email pattern
+ *  (isTestAccountEmail) — AGENT-AUDIT.md's leftover-throwaway-accounts
+ *  finding, made a normal admin-console list instead of a script. */
+export async function listTestAccounts(): Promise<TestAccountSummary[]> {
+  const res = await listTestAccountsFn({ data: { accessToken: await token() } });
+  if (!res.ok) throw new Error(res.error);
+  return res.accounts;
+}
+
+/** Deletes the given test accounts. The server independently re-verifies
+ *  every id still matches the test-email pattern before deleting anything —
+ *  this can never remove an account that check wouldn't also flag. */
+export async function deleteTestAccounts(userIds: string[]): Promise<{ deleted: string[]; failed: { email: string; error: string }[] }> {
+  const res = await deleteTestAccountsFn({ data: { accessToken: await token(), userIds } });
+  if (!res.ok) throw new Error(res.error);
+  return { deleted: res.deleted, failed: res.failed };
+}
+
+export type { AdminUserSummary, AdminUserDetail, UsageStats, IdleAgent, TestAccountSummary } from "./functions";
 export type { HealthReport } from "@/lib/health/check.server";
 export type { AdminAuditLog } from "@/lib/supabase/types";

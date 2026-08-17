@@ -3,14 +3,19 @@
 // split reasoning as that file's own header comment).
 
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/DataStates";
-import { getUsageStats, getSystemHealth, getIdleAgents } from "@/lib/admin/api";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { getUsageStats, getSystemHealth, getIdleAgents, listTestAccounts, deleteTestAccounts } from "@/lib/admin/api";
 import { summarizeIdleReason, NEVER_TRADED_IDLE_DAYS, WENT_QUIET_DAYS } from "@/lib/agent/activityStatus";
+import { formatInstant } from "@/lib/format/datetime";
 import { fmtUSD } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, XCircle, Info, Bot } from "lucide-react";
+import { toast } from "sonner";
+import { CheckCircle2, XCircle, Info, Bot, FlaskConical, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/app/admin/")({
   component: AdminOverviewPage,
@@ -29,12 +34,81 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 }
 
 function AdminOverviewPage() {
+  const qc = useQueryClient();
   const statsQ = useQuery({ queryKey: ["adminUsageStats"], queryFn: () => getUsageStats(30) });
   const healthQ = useQuery({ queryKey: ["adminSystemHealth"], queryFn: getSystemHealth, refetchInterval: 60_000 });
   const idleAgentsQ = useQuery({ queryKey: ["adminIdleAgents"], queryFn: getIdleAgents });
+  const testAccountsQ = useQuery({ queryKey: ["adminTestAccounts"], queryFn: listTestAccounts });
+
+  const [confirmDeleteTestOpen, setConfirmDeleteTestOpen] = useState(false);
+  const deleteTestMut = useMutation({
+    mutationFn: () => deleteTestAccounts((testAccountsQ.data ?? []).map((a) => a.userId)),
+    onSuccess: async (res) => {
+      setConfirmDeleteTestOpen(false);
+      await Promise.all([qc.invalidateQueries({ queryKey: ["adminTestAccounts"] }), qc.invalidateQueries({ queryKey: ["adminUsageStats"] }), qc.invalidateQueries({ queryKey: ["adminIdleAgents"] })]);
+      if (res.failed.length === 0) {
+        toast.success(`Deleted ${res.deleted.length} test account${res.deleted.length === 1 ? "" : "s"}`);
+      } else {
+        toast.message(`Deleted ${res.deleted.length}, ${res.failed.length} failed`, { description: res.failed.map((f) => f.email).join(", ") });
+      }
+    },
+    onError: (e: Error) => {
+      toast.error(e.message || "Couldn't delete test accounts.");
+      setConfirmDeleteTestOpen(false);
+    },
+  });
+  const testAccounts = testAccountsQ.data ?? [];
+  const testAccountsFunded = testAccounts.filter((a) => a.agentFunded > 0).length;
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2"><FlaskConical className="h-4 w-4" /> Test accounts in production</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="flex items-start gap-2 border-b border-border bg-surface px-4 py-2.5 text-xs text-muted-foreground">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              Every account matching the reserved test-domain pattern (<code>@example.org</code>/<code>.com</code>/<code>.net</code>, RFC 2606 — no real signup can ever use these). <code>createTestUser()</code> now refuses to create an account outside this pattern, so new drift shouldn't recur — this list is for cleaning up what's already here.
+            </p>
+          </div>
+          {testAccountsQ.isLoading ? (
+            <LoadingState label="Checking…" />
+          ) : testAccountsQ.isError ? (
+            <ErrorState message={(testAccountsQ.error as Error)?.message} />
+          ) : testAccounts.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">No test accounts currently in production.</p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <p className="text-sm text-foreground">
+                  <span className="font-semibold">{testAccounts.length}</span> test account{testAccounts.length === 1 ? "" : "s"}
+                  {testAccountsFunded > 0 && <span className="text-muted-foreground"> ({testAccountsFunded} with a funded agent)</span>}
+                  <span className="text-muted-foreground">, oldest {formatInstant(testAccounts[0].createdAt)}.</span>
+                </p>
+                <Button variant="destructive" size="sm" className="gap-2" onClick={() => setConfirmDeleteTestOpen(true)}>
+                  <Trash2 className="h-4 w-4" /> Delete all {testAccounts.length}
+                </Button>
+              </div>
+              <div className="max-h-72 divide-y divide-border/60 overflow-y-auto">
+                {testAccounts.map((a) => (
+                  <div key={a.userId} className="flex flex-col gap-1 px-4 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                    <span className="truncate">{a.email}</span>
+                    <span className="text-xs text-muted-foreground sm:text-right">
+                      {a.agentFunded > 0 ? `agent funded ${fmtUSD(a.agentFunded)} · ` : ""}
+                      {a.hasHoldings ? "holdings · " : ""}
+                      {a.hasTransactions ? "transactions · " : ""}
+                      {formatInstant(a.createdAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2"><Bot className="h-4 w-4" /> Idle agents</CardTitle>
@@ -162,6 +236,23 @@ function AdminOverviewPage() {
           </Card>
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteTestOpen}
+        onOpenChange={setConfirmDeleteTestOpen}
+        title={`Delete ${testAccounts.length} test account${testAccounts.length === 1 ? "" : "s"}?`}
+        consequence={`This permanently deletes every listed @example.org/.com/.net account and everything tied to it — holdings, trades, agent data, everything. The server re-verifies each one still matches the test-email pattern before deleting; this cannot remove a real account. This cannot be undone.`}
+        detail={
+          <div className="max-h-40 space-y-0.5 overflow-y-auto text-xs">
+            {testAccounts.map((a) => <div key={a.userId} className="truncate text-muted-foreground">{a.email}</div>)}
+          </div>
+        }
+        confirmLabel={`Delete ${testAccounts.length} account${testAccounts.length === 1 ? "" : "s"}`}
+        variant="destructive"
+        requireTypedConfirmation="DELETE"
+        loading={deleteTestMut.isPending}
+        onConfirm={() => deleteTestMut.mutate()}
+      />
     </div>
   );
 }

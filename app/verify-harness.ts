@@ -20,6 +20,8 @@
 //   }
 //   runVerification(main, { cleanup: async () => { ...delete test users... } });
 
+import { isTestAccountEmail } from "@/lib/admin/testAccounts";
+
 export function ts(): string {
   return new Date().toISOString().slice(11, 23);
 }
@@ -132,6 +134,17 @@ export async function withRetry<T>(label: string, fn: () => Promise<T>, opts: { 
  * sites already had the field — the gap was entirely in ad hoc scripts that
  * didn't copy that pattern. Routing through this helper makes forgetting it
  * structurally impossible rather than something to remember per script.
+ *
+ * ALSO ENFORCES the test-account email convention (2026-08-17 app audit):
+ * 17 leftover throwaway accounts were found sitting in production, 10 with
+ * a funded agent, inflating the "13 funded agents" figure this project's
+ * own audit reported before that number was double-checked. The email
+ * domain check (`isTestAccountEmail`, RFC 2606 reserved domains) already
+ * existed for READING account lists honestly — this closes the same gap
+ * at WRITE time, so a test account is identifiable by construction rather
+ * than by convention a caller has to remember. Refuses to create a user
+ * whose email doesn't match, rather than silently allowing a real-looking
+ * throwaway to blend in with real signups forever.
  */
 export async function createTestUser(
   admin: { auth: { admin: { createUser: (args: unknown) => Promise<{ data: { user: { id: string } | null }; error: { message: string } | null }> } } },
@@ -139,6 +152,9 @@ export async function createTestUser(
   password: string,
   extraMetadata: Record<string, unknown> = {},
 ): Promise<{ uid: string; email: string }> {
+  if (!isTestAccountEmail(email)) {
+    throw new Error(`createTestUser(${email}) refused: email must end in @example.org/.com/.net (RFC 2606) so test accounts are identifiable by construction, not convention.`);
+  }
   // Belt-and-suspenders on top of getServiceClient's own fetch-level timeout
   // (admin.server.ts) — this is a SHARED PRIMITIVE every verify script
   // calls, so its own hard ceiling means it can never hang past 25s no

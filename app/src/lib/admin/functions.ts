@@ -336,6 +336,109 @@ export const deleteUserFn = createServerFn({ method: "POST" })
   });
 
 // ─────────────────────────────────────────────────────────────────────────
+// Test-account cleanup (2026-08-17 app audit) — "cleanup must not depend on
+// a script remembering to run." 17 leftover throwaway accounts (10 with a
+// funded agent) were found sitting in production, having quietly inflated
+// several previously-reported figures (AGENT-AUDIT.md Part 8's "13 funded
+// agents" — only 3 were real). createTestUser() now REFUSES to create an
+// account outside the reserved test domains (identifiable by construction,
+// verify-harness.ts), which prevents new drift; this pair is the other
+// half — an admin-visible list + one-click bulk delete, so removing
+// existing drift is a normal admin-console action instead of a script
+// someone has to remember exists.
+export type TestAccountSummary = {
+  userId: string;
+  email: string;
+  createdAt: string;
+  agentFunded: number; // agent_config.allocated_total, 0 if no agent
+  hasHoldings: boolean;
+  hasTransactions: boolean;
+};
+
+export type ListTestAccountsResponse = { ok: true; accounts: TestAccountSummary[] } | { ok: false; error: string };
+
+export const listTestAccountsFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
+  .handler(async ({ data }): Promise<ListTestAccountsResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      await requireAdmin(userId);
+      const admin = getServiceClient();
+
+      const { data: authList } = await admin.auth.admin.listUsers({ perPage: 1000 });
+      const testUsers = authList.users.filter((u) => isTestAccountEmail(u.email));
+      const ids = testUsers.map((u) => u.id);
+
+      const [{ data: cfgs }, { data: holdings }, { data: txns }] = await Promise.all([
+        admin.from("agent_config").select("user_id, allocated_total").in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]),
+        admin.from("holdings").select("user_id").in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]),
+        admin.from("transactions").select("user_id").in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]),
+      ]);
+      const fundedByUser = new Map((cfgs ?? []).map((c) => [c.user_id as string, Number(c.allocated_total)]));
+      const holdingUsers = new Set((holdings ?? []).map((h) => h.user_id as string));
+      const txnUsers = new Set((txns ?? []).map((t) => t.user_id as string));
+
+      const accounts: TestAccountSummary[] = testUsers.map((u) => ({
+        userId: u.id,
+        email: u.email ?? "(none)",
+        createdAt: u.created_at,
+        agentFunded: fundedByUser.get(u.id) ?? 0,
+        hasHoldings: holdingUsers.has(u.id),
+        hasTransactions: txnUsers.has(u.id),
+      }));
+      accounts.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      return { ok: true, accounts };
+    } catch (e) {
+      return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };
+    }
+  });
+
+export type DeleteTestAccountsResponse = { ok: true; deleted: string[]; failed: { email: string; error: string }[] } | { ok: false; error: string };
+
+export const deleteTestAccountsFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1), userIds: z.array(z.string().min(1)).min(1) }))
+  .handler(async ({ data }): Promise<DeleteTestAccountsResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      await requireAdmin(userId);
+      const admin = getServiceClient();
+
+      // Defense in depth: re-verify EVERY target still matches the test-
+      // domain check server-side, independent of whatever the client sent —
+      // this bulk action can never delete an account isTestAccountEmail()
+      // wouldn't also flag, no matter what a compromised or buggy client
+      // requests.
+      const deleted: string[] = [];
+      const failed: { email: string; error: string }[] = [];
+      for (const targetId of data.userIds) {
+        const before = await admin.auth.admin.getUserById(targetId);
+        const email = before.data.user?.email ?? null;
+        if (!isTestAccountEmail(email)) {
+          failed.push({ email: email ?? targetId, error: "refused: does not match the test-account email pattern" });
+          continue;
+        }
+        const del = await admin.auth.admin.deleteUser(targetId);
+        if (del.error) {
+          failed.push({ email: email ?? targetId, error: del.error.message });
+          continue;
+        }
+        deleted.push(email ?? targetId);
+      }
+
+      await admin.rpc("admin_log_action", {
+        p_admin_id: userId,
+        p_action: "delete_test_accounts_bulk",
+        p_target_user_id: null,
+        p_detail: { deletedCount: deleted.length, deleted, failed },
+      });
+
+      return { ok: true, deleted, failed };
+    } catch (e) {
+      return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };
+    }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────
 export type UsageStats = {
   windowDays: number;
   insightCalls: { total: number; byKind: { stock: number; brief: number }; estimatedCostUsd: number };
