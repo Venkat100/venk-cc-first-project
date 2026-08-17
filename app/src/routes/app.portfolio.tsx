@@ -281,7 +281,7 @@ function optionActivityLabel(t: OptionTransaction): string {
   }
 }
 
-function DonutCard({
+export function DonutCard({
   title,
   data,
   state,
