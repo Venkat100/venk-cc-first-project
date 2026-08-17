@@ -8,15 +8,14 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { getAuditLog } from "@/lib/admin/api";
+import { formatInstantWithYear } from "@/lib/format/datetime";
 import { ScrollText, Lock } from "lucide-react";
 
 export const Route = createFileRoute("/app/admin/audit")({
   component: AdminAuditLogPage,
 });
 
-function prettyDateTime(iso: string) {
-  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
-}
+const prettyDateTime = formatInstantWithYear;
 
 const ACTION_LABEL: Record<string, string> = {
   view_user: "Viewed user",

@@ -14,6 +14,7 @@ import { LoadingState, ErrorState } from "@/components/DataStates";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { getUserDetail, setUserSuspended, deleteUser } from "@/lib/admin/api";
 import { fmtUSD } from "@/lib/mockData";
+import { formatInstantDate } from "@/lib/format/datetime";
 import { toast } from "sonner";
 import { ShieldOff, ShieldCheck, Trash2, Lock, BookLock } from "lucide-react";
 
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/app/admin/users/$userId")({
 
 function prettyDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatInstantDate(iso);
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {

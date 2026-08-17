@@ -1,6 +1,7 @@
 import { cn } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Minus, History, AlertTriangle, Eye, BarChart3 } from "lucide-react";
 import { fmtPct } from "@/lib/mockData";
+import { formatInstant } from "@/lib/format/datetime";
 import type { StockInsight, InsightLean, MeasuredHistory } from "@/lib/insights/types";
 
 const LEAN: Record<InsightLean, { label: string; cls: string; icon: typeof TrendingUp }> = {
@@ -107,7 +108,7 @@ export function StockInsightBody({ insight }: { insight: StockInsight }) {
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        Generated {new Date(insight.generatedAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · refreshes daily
+        Generated {formatInstant(insight.generatedAt)} · refreshes daily
       </p>
       <AiDisclaimer />
     </div>

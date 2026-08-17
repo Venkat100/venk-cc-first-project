@@ -36,7 +36,7 @@ export function useQuotes(symbols: string[]) {
   });
 }
 
-const ZERO: Quote = { symbol: "", name: "", sector: "—", price: 0, dayChange: 0, dayChangePct: 0 };
+const ZERO: Quote = { symbol: "", name: "", sector: "—", ok: false, price: 0, dayChange: 0, dayChangePct: 0 };
 
 /** Safe accessor: a quote from the map, or a zeroed placeholder. */
 export function quoteOf(map: Map<string, Quote> | undefined, symbol: string): Quote {

@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getOptionChain, type OptionContract, type OptionType } from "@/lib/options/queries";
 import { LoadingState, ErrorState } from "@/components/DataStates";
 import { OptionsDisclaimer, OptionsExplainer } from "./OptionsExplainer";
+import { formatCalendarDate } from "@/lib/format/datetime";
 import { fmtUSD } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 
@@ -58,7 +59,7 @@ export function OptionChainView({ symbol, onSelectContract }: { symbol: string; 
                     i === expiryIdx ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground hover:bg-accent hover:text-foreground",
                   )}
                 >
-                  {new Date(`${e.expiry}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })}
+                  {formatCalendarDate(e.expiry, { month: "short", day: "numeric" })}
                   <span className="ml-1 opacity-70">· {e.daysToExpiry}d</span>
                 </button>
               ))}

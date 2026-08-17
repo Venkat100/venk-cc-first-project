@@ -6,12 +6,13 @@
 // tamper with strike/expiry/type).
 
 import { fmtUSD, fmtQty } from "@/lib/mockData";
+import { formatInstantDate } from "@/lib/format/datetime";
 import type { Transaction, OptionTransaction } from "@/lib/supabase/types";
 
 const CONTRACT_ID_RE = /^([A-Z]+)-(\d{4}-\d{2}-\d{2})-([CP])-(\d+(?:\.\d+)?)$/;
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatInstantDate(iso, { month: "short", day: "numeric" });
 }
 
 export function stockTradeSummary(tx: Transaction): string {

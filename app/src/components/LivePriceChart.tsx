@@ -4,6 +4,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 import { cn } from "@/lib/utils";
 import { fmtUSD } from "@/lib/mockData";
 import { getCandles } from "@/lib/marketData";
+import { formatInstant, formatCalendarDate } from "@/lib/format/datetime";
 import { useMarketLive } from "@/lib/marketData/useMarketLive";
 import type { Range, Quote } from "@/lib/marketData/types";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
@@ -118,12 +119,11 @@ export function LivePriceChart({ symbol, height = 320, defaultRange = "3M", quot
                 contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, color: "var(--color-popover-foreground)", fontSize: 12 }}
                 labelFormatter={(v) =>
                   // Daily bars are UTC-midnight timestamps with no real intraday
-                  // time — format them in UTC so the date shown matches the bar
-                  // (a local-time render can shift it a day in TZs behind UTC).
-                  // 1D bars carry a real intraday time, so those stay local.
-                  range === "1D"
-                    ? new Date(v as string).toLocaleString()
-                    : new Date(v as string).toLocaleDateString(undefined, { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" })
+                  // time — formatCalendarDate renders them in UTC so the date
+                  // shown matches the bar (a local-time render can shift it a
+                  // day in TZs behind UTC). 1D bars carry a real intraday
+                  // time, so those go through formatInstant (local) instead.
+                  range === "1D" ? formatInstant(v as string, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }) : formatCalendarDate(v as string)
                 }
                 formatter={(v: number) => [fmtUSD(v), "Price"]}
                 isAnimationActive={false}

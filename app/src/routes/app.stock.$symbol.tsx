@@ -14,6 +14,7 @@ import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { getCompanyNews, getStockEnrichment, type NewsItem, type Quote, type StockEnrichment, type NextEarnings, type EarningsSurprise, type RecommendationTrendPoint } from "@/lib/marketData";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { isLikelyFund } from "@/lib/marketData/sector";
+import { formatInstantDate, formatCalendarDate } from "@/lib/format/datetime";
 import { useTickFlash } from "@/lib/marketData/useTickFlash";
 import { getStockInsight } from "@/lib/insights/api";
 import { getHoldings, getTransactions } from "@/lib/portfolio/queries";
@@ -277,7 +278,7 @@ function StockDetail() {
                       <tbody>
                         {recent.map((t) => (
                           <tr key={t.id} className="border-b border-border/60 last:border-0">
-                            <td className="py-2 text-muted-foreground">{new Date(t.created_at).toLocaleDateString()}</td>
+                            <td className="py-2 text-muted-foreground">{formatInstantDate(t.created_at)}</td>
                             <td className="py-2 uppercase">{t.side}</td>
                             <td className="py-2 text-right tabular">{fmtQty(t.quantity)}</td>
                             <td className="py-2 text-right tabular">{fmtUSD(t.price)}</td>
@@ -476,7 +477,7 @@ function EarningsAndAnalystsCard({ data, isLoading }: { data?: StockEnrichment; 
 }
 
 function NextEarningsRow({ earnings }: { earnings: NextEarnings }) {
-  const dateLabel = new Date(`${earnings.date}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  const dateLabel = formatCalendarDate(earnings.date);
   const hourLabel = earnings.hour === "bmo" ? "Before market open" : earnings.hour === "amc" ? "After market close" : earnings.hour === "dmh" ? "During market hours" : undefined;
   return (
     <div>
@@ -538,7 +539,7 @@ function AnalystRecommendationBar({ trend }: { trend: RecommendationTrendPoint[]
   const latest = trend[0];
   const total = latest.strongBuy + latest.buy + latest.hold + latest.sell + latest.strongSell;
   if (total === 0) return null;
-  const periodLabel = new Date(`${latest.period}T00:00:00Z`).toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+  const periodLabel = formatCalendarDate(latest.period, { month: "long", year: "numeric" });
   const segments = [
     { label: "Strong buy", count: latest.strongBuy, className: "bg-[color:var(--color-gain)]" },
     { label: "Buy", count: latest.buy, className: "bg-[color:var(--color-gain)]/55" },

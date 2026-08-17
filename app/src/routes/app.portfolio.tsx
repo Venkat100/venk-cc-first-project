@@ -11,6 +11,7 @@ import { getNotedTransactionIds } from "@/lib/journal/queries";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { displaySector } from "@/lib/marketData/sector";
 import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
+import { formatInstantDate } from "@/lib/format/datetime";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { cn } from "@/lib/utils";
 import { OptionPositionsList } from "@/components/options/OptionPositionsList";
@@ -172,7 +173,7 @@ function Portfolio() {
                 {recentOptionActivity.map((t) => (
                   <li key={t.id} className="flex items-center justify-between gap-3 text-sm">
                     <span className="text-muted-foreground">{optionActivityLabel(t)}</span>
-                    <span className="shrink-0 tabular text-xs text-muted-foreground">{new Date(t.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                    <span className="shrink-0 tabular text-xs text-muted-foreground">{formatInstantDate(t.created_at, { month: "short", day: "numeric" })}</span>
                   </li>
                 ))}
               </ul>
@@ -215,7 +216,7 @@ function Portfolio() {
                 <tbody>
                   {txPage.map((t) => (
                     <tr key={t.id} className="border-b border-border/60 last:border-0">
-                      <td className="px-4 py-3 tabular text-muted-foreground">{new Date(t.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</td>
+                      <td className="px-4 py-3 tabular text-muted-foreground">{formatInstantDate(t.created_at, { month: "short", day: "numeric" })}</td>
                       <td className="py-3">
                         <span className={cn(
                           "rounded-md px-2 py-0.5 text-xs font-medium uppercase tracking-wider",

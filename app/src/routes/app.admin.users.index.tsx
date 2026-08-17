@@ -9,15 +9,14 @@ import { Badge } from "@/components/ui/badge";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { listUsers } from "@/lib/admin/api";
 import { fmtUSD } from "@/lib/mockData";
+import { formatInstantDate } from "@/lib/format/datetime";
 import { Users as UsersIcon } from "lucide-react";
 
 export const Route = createFileRoute("/app/admin/users/")({
   component: AdminUsersListPage,
 });
 
-function prettyDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
+const prettyDate = formatInstantDate;
 
 function AdminUsersListPage() {
   const [query, setQuery] = useState("");

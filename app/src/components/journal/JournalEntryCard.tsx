@@ -9,12 +9,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Delta } from "@/components/Delta";
 import { fmtUSD } from "@/lib/mockData";
+import { formatInstantDate } from "@/lib/format/datetime";
 import type { JournalEntry } from "@/lib/supabase/types";
 import type { JournalOutcome } from "@/lib/journal/outcome";
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
+const formatDate = formatInstantDate;
 
 function OutcomeLine({ outcome }: { outcome: JournalOutcome }) {
   if (outcome.kind === "none") return null;

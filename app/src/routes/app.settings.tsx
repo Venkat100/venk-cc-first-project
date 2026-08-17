@@ -329,7 +329,7 @@ function Settings() {
         consequence={`Reset your paper account back to a clean ${fmtUSD(STARTING_CASH)} start? This closes every stock and option position and clears your AI agent's holdings and settings. This cannot be undone.`}
         detail={
           <div className="space-y-1.5">
-            <div className="flex justify-between"><span className="text-muted-foreground">Cash balance</span><span className="tabular font-medium">→ {fmtUSD(STARTING_CASH)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Cash balance</span><span className="tabular font-medium">{fmtUSD(STARTING_CASH)}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Stock &amp; option positions</span><span className="font-medium">Closed</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">AI agent</span><span className="font-medium">Deactivated, cleared</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Outstanding margin loan, if any</span><span className="font-medium">Forgiven</span></div>

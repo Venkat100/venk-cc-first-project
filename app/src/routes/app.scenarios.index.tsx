@@ -18,6 +18,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/DataStates";
+import { formatCalendarDate } from "@/lib/format/datetime";
 import { listScenarios } from "@/lib/scenarios/catalog";
 import { getScenarioRuns } from "@/lib/scenarios/queries";
 import { startScenarioRun } from "@/lib/scenarios/api";
@@ -30,9 +31,7 @@ export const Route = createFileRoute("/app/scenarios/")({
   component: ScenariosPage,
 });
 
-function prettyDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-}
+const prettyDate = formatCalendarDate;
 
 function ScenariosPage() {
   const navigate = useNavigate();

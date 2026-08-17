@@ -194,6 +194,7 @@ async function fhQuote(symbol: string): Promise<Quote> {
     symbol: sym,
     name: resolvedName,
     sector: profile.sector || "—",
+    ok: true,
     price,
     dayChange: change,
     dayChangePct: pct,
@@ -232,7 +233,7 @@ export async function providerQuotes(symbols: string[]): Promise<Quote[]> {
   return results.map((r, i) =>
     r.status === "fulfilled"
       ? r.value
-      : { symbol: list[i], name: list[i], sector: "—", price: 0, dayChange: 0, dayChangePct: 0 },
+      : { symbol: list[i], name: list[i], sector: "—", ok: false, price: 0, dayChange: 0, dayChangePct: 0 },
   );
 }
 

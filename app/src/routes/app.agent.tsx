@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
+import { formatInstant } from "@/lib/format/datetime";
 import { Switch } from "@/components/ui/switch";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { PortfolioValueChart } from "@/components/PortfolioValueChart";
@@ -626,7 +627,7 @@ function DecisionRow({ d }: { d: AgentDecision }) {
           <Icon className="h-3 w-3" /> {meta.label}
         </span>
         {d.symbol && <span className="text-sm font-semibold">{d.symbol}</span>}
-        <span className="ml-auto text-[11px] text-muted-foreground tabular">{new Date(d.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+        <span className="ml-auto text-[11px] text-muted-foreground tabular">{formatInstant(d.created_at)}</span>
       </div>
       {d.rationale && <p className="mt-1.5 text-sm text-foreground/90">{d.rationale}</p>}
     </div>

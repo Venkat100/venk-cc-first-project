@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
+import { formatCalendarDate } from "@/lib/format/datetime";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
@@ -36,9 +37,7 @@ export const Route = createFileRoute("/app/scenarios/$runId")({
   component: ScenarioRunPage,
 });
 
-function prettyDate(iso: string) {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-}
+const prettyDate = formatCalendarDate;
 
 function ScenarioRunPage() {
   const { runId } = Route.useParams();

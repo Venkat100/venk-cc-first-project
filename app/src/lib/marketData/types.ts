@@ -9,6 +9,19 @@ export type Quote = {
   name: string;
   /** Sector — provider quotes rarely include this, so it's best-effort ("—"). */
   sector: string;
+  /**
+   * EXPLICIT load state — true only for a real, successfully-fetched
+   * provider response; false for a placeholder built after every retry
+   * failed (providerQuotes) or for a symbol the batch never returned at all
+   * (getQuotesFn). Deliberately NOT inferred from `price > 0`: a halted,
+   * delisted, or pre-IPO symbol can legitimately fetch successfully and
+   * report a real price of 0 — inferring "loaded" from a nonzero price
+   * would misclassify that real state as a failure, and there is no way to
+   * tell a genuine $0 apart from an unfetched placeholder by value alone.
+   * Every construction site sets this explicitly; nothing downstream should
+   * ever need to guess it from another field.
+   */
+  ok: boolean;
   price: number;
   dayChange: number;
   dayChangePct: number;

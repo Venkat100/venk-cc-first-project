@@ -39,9 +39,10 @@ export const getQuotesFn = createServerFn({ method: "POST" })
       for (const q of fetched) result.set(q.symbol, q);
     }
 
-    // Preserve request order; guarantee a (zeroed) entry for every symbol.
+    // Preserve request order; guarantee a (zeroed, ok:false) entry for every
+    // symbol so callers never see a missing key — see Quote.ok's doc comment.
     return wanted.map(
-      (sym) => result.get(sym) ?? { symbol: sym, name: sym, sector: "—", price: 0, dayChange: 0, dayChangePct: 0 },
+      (sym) => result.get(sym) ?? { symbol: sym, name: sym, sector: "—", ok: false, price: 0, dayChange: 0, dayChangePct: 0 },
     );
   });
 

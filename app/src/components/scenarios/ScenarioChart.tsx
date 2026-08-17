@@ -7,6 +7,7 @@
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 import type { Candle } from "@/lib/marketData/types";
 import { fmtPct } from "@/lib/mockData";
+import { formatCalendarDate } from "@/lib/format/datetime";
 
 const PALETTE = ["var(--color-chart-1)", "var(--color-chart-2)", "var(--color-chart-3)", "var(--color-chart-4)", "var(--color-chart-5)"];
 
@@ -57,11 +58,11 @@ export function ScenarioChart({ series, symbols, benchmarkSymbol }: ScenarioChar
       <ResponsiveContainer>
         <LineChart data={points} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-          <XAxis dataKey="t" tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: "short", year: "2-digit" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={32} />
+          <XAxis dataKey="t" tickFormatter={(v) => formatCalendarDate(v, { month: "short", year: "2-digit" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={32} />
           <YAxis tickFormatter={(v) => `${v}%`} stroke="var(--color-muted-foreground)" fontSize={11} width={50} />
           <Tooltip
             contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
-            labelFormatter={(v) => new Date(v as string).toLocaleDateString()}
+            labelFormatter={(v) => formatCalendarDate(v as string)}
             formatter={(v: number, n) => [fmtPct(v), n]}
           />
           <Legend wrapperStyle={{ fontSize: 11 }} />

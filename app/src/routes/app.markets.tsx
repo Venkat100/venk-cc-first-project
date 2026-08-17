@@ -26,16 +26,16 @@ export const Route = createFileRoute("/app/markets")({
 
 // getQuotesFn (functions.ts) guarantees a Map entry for every REQUESTED
 // symbol, even one whose provider fetch failed — it substitutes a zeroed
-// placeholder (price 0, sector "—") rather than omitting the key. That
-// means `quotes.has(symbol)` is true immediately after load regardless of
-// whether the fetch actually succeeded, so it can't distinguish "loaded"
-// from "failed, zeroed." A real quote's price is never exactly 0, so
-// `price > 0` is the actual "this is real data" signal — used both to gate
-// sector-chip generation (never label a failed fetch "ETFs & funds", since
-// isLikelyFund's blank-profile heuristic can't tell "confirmed fund" from
-// "fetch failed") and to decide what a row's Sector cell shows.
+// placeholder rather than omitting the key. Reads Quote.ok directly (set
+// explicitly at every construction site — see its doc comment) rather than
+// inferring "loaded" from `price > 0`: a halted, delisted, or pre-IPO
+// symbol can legitimately fetch successfully and report a real price of 0,
+// and inferring load state from price would misclassify that as a failure.
+// Gates sector-chip generation (never label a failed fetch — displaySector
+// itself now also checks `ok`, so this is really about not offering a chip
+// for a symbol we can't currently price at all) and the Price cell.
 function isLoadedQuote(q: Quote): boolean {
-  return q.price > 0;
+  return q.ok;
 }
 
 // Placeholder widths for the sector-chip skeleton row — sized to roughly

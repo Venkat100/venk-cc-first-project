@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { fmtUSD } from "@/lib/mockData";
 import { LoadingState, ErrorState } from "@/components/DataStates";
 import type { Snapshot } from "@/lib/snapshots/queries";
+import { formatCalendarDate } from "@/lib/format/datetime";
 import { indexBenchmark, type SpyPoint } from "@/components/portfolioBenchmark";
 import { RangeChangeReadout } from "@/components/ChartReadout";
 import { computeRangeReadout, RANGE_LABEL } from "@/lib/chartReadout";
@@ -135,12 +136,12 @@ export function PortfolioValueChart({
                   <stop offset="100%" stopColor={stroke} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <XAxis dataKey="t" tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={40} />
+              <XAxis dataKey="t" tickFormatter={(v) => formatCalendarDate(v, { month: "short", day: "numeric" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={40} />
               <YAxis domain={["dataMin - 100", "dataMax + 100"]} tickFormatter={(v) => fmtAxisTick(Number(v))} stroke="var(--color-muted-foreground)" fontSize={11} width={52} />
               <Tooltip
                 cursor={{ stroke: "var(--color-muted-foreground)", strokeDasharray: "3 3" }}
                 contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
-                labelFormatter={(v) => new Date(v as string).toLocaleDateString(undefined, { timeZone: "UTC" })}
+                labelFormatter={(v) => formatCalendarDate(v as string)}
                 formatter={(v: number, name) => [fmtUSD(v), name === "spy" ? "S&P 500 (indexed)" : "Portfolio value"]}
                 isAnimationActive={false}
               />

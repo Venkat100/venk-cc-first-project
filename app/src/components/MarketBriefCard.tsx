@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/DataStates";
 import { AiDisclaimer } from "@/components/InsightUI";
 import { getTodaysBrief } from "@/lib/insights/api";
+import { formatCalendarDate } from "@/lib/format/datetime";
 import type { MarketBrief } from "@/lib/insights/types";
 import { usePrefersReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
@@ -131,10 +132,11 @@ function BriefBody({ brief, createdAt, activeIndex, animate }: { brief: MarketBr
       )}
 
       {brief.overall_note && <p className="text-sm text-muted-foreground">{brief.overall_note}</p>}
-      {/* createdAt is a date-only (UTC-midnight) string — format in UTC or it
-          can render a day early in timezones behind UTC (same bug as H4b's
-          simulator date fix). */}
-      <p className="text-[11px] text-muted-foreground">For {new Date(createdAt).toLocaleDateString(undefined, { timeZone: "UTC", month: "short", day: "numeric" })}</p>
+      {/* createdAt is a date-only (UTC-midnight) string — formatCalendarDate
+          renders it in UTC regardless of viewer, so it can't shift to the
+          wrong day in a timezone behind UTC (same class of bug as H4b's
+          simulator date fix; see lib/format/datetime.ts's header). */}
+      <p className="text-[11px] text-muted-foreground">For {formatCalendarDate(createdAt, { month: "short", day: "numeric" })}</p>
       <AiDisclaimer />
     </div>
   );

@@ -10,6 +10,7 @@ import { runSimulation, type SimResult } from "@/lib/simulator/run";
 import { MARKET_UNIVERSE } from "@/lib/marketData";
 import { useAuth } from "@/lib/auth/auth-context";
 import { fmtUSD, fmtPct } from "@/lib/mockData";
+import { formatCalendarDate } from "@/lib/format/datetime";
 import { Area, Line, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis, CartesianGrid } from "recharts";
 import { cn } from "@/lib/utils";
 import { ArrowRight, FlaskConical, Sparkles, TrendingUp, TrendingDown, Loader2, AlertCircle, ShoppingCart } from "lucide-react";
@@ -22,12 +23,10 @@ const EXAMPLES = [
 
 const SUGGESTIONS = Array.from(new Set([...MARKET_UNIVERSE, "SPY", "QQQ", "GOOG", "NFLX", "JPM", "DIS", "KO"]));
 
-function prettyDate(iso: string) {
-  // `iso` is a date-only string (YYYY-MM-DD) = UTC midnight. Format in UTC so
-  // the displayed day matches the date the user picked — otherwise timezones
-  // behind UTC render it a day early.
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-}
+// `iso` is a date-only string (YYYY-MM-DD) = UTC midnight. formatCalendarDate
+// renders it in UTC so the displayed day matches the date the user picked —
+// otherwise timezones behind UTC render it a day early.
+const prettyDate = formatCalendarDate;
 
 export function SimulatorPanel() {
   const [symbol, setSymbol] = useState("NVDA");
@@ -230,11 +229,11 @@ function SimResultView({ result }: { result: SimResult }) {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis dataKey="t" tickFormatter={(v) => new Date(v).toLocaleDateString(undefined, { month: "short", year: "2-digit" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={32} />
+                <XAxis dataKey="t" tickFormatter={(v) => formatCalendarDate(v, { month: "short", year: "2-digit" })} stroke="var(--color-muted-foreground)" fontSize={11} minTickGap={32} />
                 <YAxis tickFormatter={(v) => `$${Number(v).toLocaleString()}`} stroke="var(--color-muted-foreground)" fontSize={11} width={80} />
                 <Tooltip
                   contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 12 }}
-                  labelFormatter={(v) => new Date(v as string).toLocaleDateString()}
+                  labelFormatter={(v) => formatCalendarDate(v as string)}
                   formatter={(v: number, n) => [fmtUSD(v), n === "invest" ? result.symbol : "S&P 500"]}
                 />
                 <Area type="monotone" dataKey="invest" stroke="var(--color-gain)" strokeWidth={2.5} fill="url(#sim-invest)" name="invest" />

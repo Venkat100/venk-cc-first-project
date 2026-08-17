@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
+import { formatCalendarDate } from "@/lib/format/datetime";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { JournalEntryDialog, type TradeLinkContext } from "@/components/journal/JournalEntryDialog";
 import { executeOptionTrade } from "@/lib/options/execute";
@@ -253,9 +254,7 @@ export function OptionOrderPanel({ state, onClose }: { state: OrderPanelState; o
   );
 }
 
-function expiryLabel(expiry: string): string {
-  return new Date(`${expiry}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-}
+const expiryLabel = formatCalendarDate;
 
 function cnOver(over: boolean): string {
   return over ? "tabular text-[color:var(--color-loss)]" : "tabular";

@@ -9,6 +9,7 @@ import { fmtUSD, fmtPct } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import type { EnrichedOptionPosition } from "@/lib/options/queries";
 import { EmptyState } from "@/components/DataStates";
+import { formatCalendarDate } from "@/lib/format/datetime";
 import { LineChart } from "lucide-react";
 
 export function OptionPositionsList({
@@ -77,6 +78,4 @@ export function OptionPositionsList({
   );
 }
 
-function expiryLabel(expiry: string): string {
-  return new Date(`${expiry}T00:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-}
+const expiryLabel = formatCalendarDate;

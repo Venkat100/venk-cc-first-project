@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { cn } from "@/lib/utils";
 import { generateHistory, type Range, fmtUSD } from "@/lib/mockData";
+import { formatInstant } from "@/lib/format/datetime";
 
 const RANGES: Range[] = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
 
@@ -44,7 +45,7 @@ export function PriceChart({ symbol, endPrice, height = 320, className, defaultR
                 color: "var(--color-popover-foreground)",
                 fontSize: 12,
               }}
-              labelFormatter={(v) => new Date(v as string).toLocaleString()}
+              labelFormatter={(v) => formatInstant(v as string, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
               formatter={(v: number) => [fmtUSD(v), "Price"]}
             />
             <ReferenceLine y={first} stroke="var(--color-border)" strokeDasharray="3 3" />

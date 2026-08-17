@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NumberInput, parseNumberInput } from "@/components/ui/number-input";
 import { Label } from "@/components/ui/label";
+import { formatInstant } from "@/lib/format/datetime";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { MarginDisclaimer, MarginExplainer } from "@/components/margin/MarginExplainer";
@@ -390,7 +391,7 @@ function EventRow({ event }: { event: MarginEvent }) {
           <Icon className="h-3 w-3" /> {meta.label}
         </span>
         {showAmount && <span className="text-sm font-semibold tabular">{fmtUSD(amount)}</span>}
-        <span className="ml-auto text-[11px] text-muted-foreground tabular">{new Date(event.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+        <span className="ml-auto text-[11px] text-muted-foreground tabular">{formatInstant(event.created_at)}</span>
       </div>
       {eventDescription(event) && <p className="mt-1.5 text-sm text-foreground/90">{eventDescription(event)}</p>}
     </div>

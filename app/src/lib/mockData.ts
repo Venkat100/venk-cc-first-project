@@ -1,5 +1,7 @@
 // Mock data for My PaperTrader. Swap to real APIs later.
 
+import { formatUnixSecondsDate } from "@/lib/format/datetime";
+
 export type Stock = {
   symbol: string;
   name: string;
@@ -227,7 +229,7 @@ export function fmtRelativeTime(unixSeconds?: number): string {
   if (days < 7) return `${days}d ago`;
   const weeks = Math.floor(days / 7);
   if (weeks < 5) return `${weeks}w ago`;
-  return new Date(unixSeconds * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatUnixSecondsDate(unixSeconds, { month: "short", day: "numeric" });
 }
 
 // What-if helper: simulate $amount invested at past date in symbol
