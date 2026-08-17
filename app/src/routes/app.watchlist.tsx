@@ -115,7 +115,7 @@ function Watchlist() {
                         <button
                           onClick={() => removeMut.mutate(sym)}
                           disabled={removeMut.isPending}
-                          className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:h-auto sm:w-auto sm:rounded-none"
+                          className="grid h-11 w-11 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50 sm:h-auto sm:w-auto sm:rounded-none"
                           aria-label={`Remove ${sym}`}
                         >
                           <X className="h-4 w-4" />

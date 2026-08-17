@@ -67,10 +67,17 @@ export function MarketBriefCard({ hasTracked }: { hasTracked: boolean }) {
               <span className="mr-1 text-xs tabular-nums text-muted-foreground">
                 {activeIndex + 1} / {n}
               </span>
-              <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Previous item" onClick={() => goTo(activeIndex - 1)}>
+              {/* Kept visually compact (h-7 w-7 = 28px) — growing these to a
+                  full 44px box in this tight header row, next to the title
+                  and the "n / N" counter, would crowd it. Instead the tap
+                  target is expanded with an invisible `before:` pseudo-
+                  element (28px visible + 8.5px on each side ≈ 44px
+                  effective hit area) — a standard, WCAG-compliant technique
+                  for exactly this "small control, no room to grow" case. */}
+              <Button variant="ghost" size="icon" className="relative h-7 w-7 before:absolute before:-inset-[8.5px] before:content-['']" aria-label="Previous item" onClick={() => goTo(activeIndex - 1)}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Next item" onClick={() => goTo(activeIndex + 1)}>
+              <Button variant="ghost" size="icon" className="relative h-7 w-7 before:absolute before:-inset-[8.5px] before:content-['']" aria-label="Next item" onClick={() => goTo(activeIndex + 1)}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>

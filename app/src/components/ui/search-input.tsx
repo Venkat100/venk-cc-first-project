@@ -36,7 +36,7 @@ export const SearchInputBox = React.forwardRef<HTMLInputElement, React.Component
         <button
           type="button"
           onClick={onClear}
-          className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+          className="relative shrink-0 py-2 text-xs text-muted-foreground before:absolute before:-inset-x-2 before:-inset-y-3 before:content-[''] hover:text-foreground"
         >
           Clear
         </button>

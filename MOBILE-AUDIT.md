@@ -13,7 +13,7 @@
 | 1 | Stock Detail header: 2-column grid never stacks at mobile widths (triggering bug) | (a) broken | **Fixed** |
 | 2 | Portfolio allocation donut chart: intermittent blank render on mount (Recharts race) | (a) broken | **Fixed** |
 | 3 | `formatCalendarDate` double-timestamp bug → "Invalid Date" on Simulator + Stock Detail price chart | (a) broken | **Fixed** |
-| 4 | Icon-button tap targets under 44×44px, app-wide | (b) visible/usable | Reported, not fixed |
+| 4 | Icon-button tap targets under 44×44px, app-wide | (b) visible/usable | **Fixed** (2026-08-17) |
 | 5 | What-If Simulator chart: linear Y-axis hides early growth for extreme-return stocks | (c) polish | Reported, not fixed |
 | 6 | Watchlist table "ACTIONS" header sits tight against the card edge at 375px | (c) polish | Reported, not fixed |
 
@@ -77,17 +77,28 @@ Checked every other `formatCalendarDate` call site added in the prior session fo
 
 ---
 
-## 4. Icon-button tap targets under 44×44px (tier b — reported, not fixed)
+## 4. Icon-button tap targets under 44×44px (tier b — FIXED 2026-08-17)
 
-**Routes:** app-wide (TopBar hamburger, theme toggle; Markets/Watchlist star-toggle buttons; likely the watchlist row's "X" remove button and the Markets row's compare-bracket icon, not individually measured but visually identical size). Measured via `getBoundingClientRect()` on Markets at 375px:
+**Routes:** app-wide (TopBar hamburger, theme toggle; Markets/Watchlist star-toggle buttons; the watchlist row's "X" remove button; the avatar/profile trigger; the mobile-nav overlay's close button; `MarketBriefCard`'s carousel arrows; the search box's "Clear" button). Originally measured via `getBoundingClientRect()` on Markets at 375px:
 
-| Element | Measured size |
-|---|---|
-| Hamburger menu | 31×36px |
-| Theme toggle | 31×36px |
-| Add/Remove-watchlist star (per row) | 32×32px |
+| Element | Before | After |
+|---|---|---|
+| Hamburger menu | 31×36px | **44×44px** |
+| Theme toggle | 31×36px | **44×44px** |
+| Avatar/profile dropdown trigger | ~40×40px | **44×44px** |
+| Mobile-nav overlay close button | 32×32px | **44×44px** |
+| Add/Remove-watchlist star (`WatchlistStar`, per row) | 32×32px | **44×44px** |
+| Watchlist row remove button (mobile) | 36×36px | **44×44px** |
+| `MarketBriefCard` prev/next arrows | 28×28px visible | 28×28px visible, **~44×44px effective tap area** (pseudo-element expansion — see below) |
+| Search box "Clear" button | ~30×20px, no explicit target | 30×32px visible, **~46×56px effective tap area** (same technique) |
 
-All are genuinely tappable — this is not a broken/unusable finding — but all fall under the commonly-cited 44×44px minimum comfortable touch target. **Recommendation:** pad the hit area (not necessarily the visual icon) to 44×44 via invisible padding/negative margin, a standard pattern that doesn't require changing any icon's visual size. Scoped as its own follow-up pass rather than folded into this one, since it touches many small, independent components across the app rather than one page.
+All were genuinely tappable before this fix — this was never a broken/unusable finding — but all fell under the commonly-cited 44×44px minimum comfortable touch target, and per the follow-up instruction ("these are primary navigation on a phone; that's a usability failure, not polish"), fixed now rather than deferred further.
+
+**Approach — two techniques, chosen per context, not one blanket rule:**
+1. **Direct box growth** (hamburger, theme toggle, avatar trigger, mobile-nav close, `WatchlistStar`, watchlist remove button): the button/hit-area box itself grew to 44×44 (or 44px on the constrained axis for the desktop-preserving watchlist remove button), while every icon GLYPH inside stayed exactly the same size (`h-4 w-4`/`h-5 w-5`/the star's own `size` prop) — safe here because each of these sits in a row with genuine breathing room (a 56px-tall header, a 69px-tall table row, a full-height nav panel), confirmed by inspection and then by screenshot, not assumed.
+2. **Invisible pseudo-element expansion** (`MarketBriefCard`'s arrows, the search "Clear" button): where growing the visible box risked genuinely crowding a tight row (arrows next to a card title and an "n / N" counter; "Clear" inline with a compact search field), the visible chrome was left untouched and a `before:` pseudo-element with a negative `inset` expands the actual clickable/tappable region outward instead — a standard, WCAG 2.5.5/2.5.8-aligned technique (the pseudo-element's painted area still dispatches clicks to the real button; nothing about the surrounding layout changes since absolutely-positioned pseudo-elements don't participate in document flow). Confirmed via computed style, not just class inspection: the "Clear" button's `::before` resolved to `position: absolute; content: ""; inset: -12px -8px`, expanding a 30×32 visible box to a ~46×56 effective target.
+
+**A real bug this fix surfaced, not a hypothetical**: growing the TopBar's three buttons to `h-11 w-11` initially had no effect on their rendered WIDTH — the header's flex row has the search box at `flex-1`, and the buttons (with no `shrink-0`) were being silently compressed back down by flexbox's default `flex-shrink:1` whenever the row's content didn't fit. Adding `shrink-0` fixed the width, which then exposed a genuine 14px overflow of the header's own box — traced to the search box's wrapper having no `min-w-0`, so its `flex-1` couldn't shrink past the `<input>`'s own browser-intrinsic content minimum (a classic flexbox-plus-form-element gotcha). Fixed with `min-w-0` on the wrapper. Confirmed `header.scrollWidth === header.clientWidth` (no overflow) at 375, 430, and 1280px after both fixes, and confirmed desktop is visually unaffected (screenshotted).
 
 ## 5. What-If Simulator: linear-scale chart hides early growth for extreme-return stocks (tier c)
 

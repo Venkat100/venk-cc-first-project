@@ -100,11 +100,27 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur md:px-6">
-      <button onClick={onOpenMobileNav} className="md:hidden -ml-1 grid h-9 w-9 place-items-center rounded-md hover:bg-accent">
+      {/* h-11 w-11 = 44px, the minimum comfortable tap target — mobile-only
+          (md:hidden), so this doesn't touch desktop density. The icon glyph
+          itself stays h-5 w-5; only the surrounding hit area grows.
+          shrink-0: without it, the header's flex row (its sibling search
+          box is flex-1) silently compressed this back down below 44px on
+          the main axis at narrow widths — a real bug this fix surfaced,
+          not just a defensive addition. */}
+      <button onClick={onOpenMobileNav} className="md:hidden -ml-1 grid h-11 w-11 shrink-0 place-items-center rounded-md hover:bg-accent" aria-label="Open menu">
         <Menu className="h-5 w-5" />
       </button>
 
-      <div ref={ref} className="relative flex-1 max-w-xl">
+      {/* min-w-0: a flex item's default min-width is `auto`, which for a
+          wrapper containing an <input> resolves to the input's own
+          intrinsic content-based minimum — NOT 0 — so flex-shrink couldn't
+          actually shrink this below that floor. Harmless at normal widths
+          (plenty of room), but at 375px combined with the buttons above
+          becoming shrink-0 (so THEY stop silently absorbing the deficit by
+          shrinking under their own 44px tap target), the row's total
+          content genuinely exceeded 375px and overflowed the header's own
+          box — a real bug this pass surfaced, not a hypothetical. */}
+      <div ref={ref} className="relative min-w-0 flex-1 max-w-xl">
         <SearchInputBox
           ref={inputRef}
           containerClassName="rounded-lg"
@@ -156,14 +172,21 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
         )}
       </div>
 
-      <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme">
+      {/* h-11 w-11: bumped from Button's shared "icon" size (h-9 w-9 = 36px)
+          at this specific call site rather than changing that shared default
+          app-wide — this button is primary top-bar navigation on every page
+          at every width, unlike most other "icon" buttons. Glyph unchanged. */}
+      <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme" className="h-11 w-11 shrink-0">
         {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
       </Button>
-      <Button variant="ghost" size="icon" aria-label="Notifications" className="hidden sm:inline-flex">
+      <Button variant="ghost" size="icon" aria-label="Notifications" className="hidden shrink-0 sm:inline-flex">
         <Bell className="h-4 w-4" />
       </Button>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-2 rounded-full p-1 hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {/* grid + h-11 w-11 gives the same 44px tap target as the buttons
+            above; the visible avatar circle stays h-8 w-8 (unchanged), just
+            centered in more invisible padding. */}
+        <DropdownMenuTrigger className="grid h-11 w-11 shrink-0 place-items-center rounded-full hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <Avatar className="h-8 w-8">
             <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">
               {initialsFrom(profile?.display_name, email)}
@@ -206,7 +229,7 @@ export function MobileNavOverlay({ open, onClose, sections }: {
       <div className="absolute left-0 top-0 h-full w-72 overflow-y-auto border-r border-border bg-sidebar p-4">
         <div className="flex items-center justify-between">
           <span className="font-semibold">Menu</span>
-          <button onClick={onClose} className="grid h-8 w-8 place-items-center rounded-md hover:bg-accent"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="grid h-11 w-11 place-items-center rounded-md hover:bg-accent" aria-label="Close menu"><X className="h-4 w-4" /></button>
         </div>
         <nav className="mt-4 space-y-4">
           {sections.map((section) => (

@@ -54,7 +54,12 @@ export function WatchlistStar({ symbol, className, size = 16 }: { symbol: string
         e.stopPropagation();
         mut.mutate(!tracked);
       }}
-      className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-md transition-colors hover:bg-accent disabled:opacity-50", className)}
+      // h-11 w-11 = 44px tap target (bumped from the previous h-8 w-8/32px)
+      // — the icon glyph size is unaffected (still the `size` prop, default
+      // 16px), only the surrounding hit area grows. Shared by every list
+      // this star appears in (Markets, Watchlist, top-bar search results),
+      // so fixing it here fixes it everywhere at once.
+      className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-md transition-colors hover:bg-accent disabled:opacity-50", className)}
     >
       <Star
         style={{ width: size, height: size }}
