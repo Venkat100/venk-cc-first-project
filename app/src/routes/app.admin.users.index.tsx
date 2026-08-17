@@ -4,12 +4,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { SearchInputBox } from "@/components/ui/search-input";
 import { Badge } from "@/components/ui/badge";
 import { LoadingState, ErrorState, EmptyState } from "@/components/DataStates";
 import { listUsers } from "@/lib/admin/api";
 import { fmtUSD } from "@/lib/mockData";
-import { Search, Users as UsersIcon } from "lucide-react";
+import { Users as UsersIcon } from "lucide-react";
 
 export const Route = createFileRoute("/app/admin/users/")({
   component: AdminUsersListPage,
@@ -27,10 +27,7 @@ function AdminUsersListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by email…" className="pl-9" />
-      </div>
+      <SearchInputBox containerClassName="max-w-sm" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by email…" />
 
       <Card>
         <CardContent className="p-0">

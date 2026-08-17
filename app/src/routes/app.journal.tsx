@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Plus, Search } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInputBox } from "@/components/ui/search-input";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { JournalEntryDialog } from "@/components/journal/JournalEntryDialog";
@@ -111,15 +111,12 @@ function Journal() {
       </div>
 
       {entries.length > 0 && (
-        <div className="relative max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by symbol, title, or text…"
-            className="pl-9"
-          />
-        </div>
+        <SearchInputBox
+          containerClassName="max-w-sm"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by symbol, title, or text…"
+        />
       )}
 
       <Card>

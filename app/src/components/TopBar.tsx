@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Search, SearchX, Sun, Moon, Bell, Menu, X, Settings as SettingsIcon, HelpCircle, LogOut } from "lucide-react";
+import { SearchX, Sun, Moon, Bell, Menu, X, Settings as SettingsIcon, HelpCircle, LogOut } from "lucide-react";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
 import { WatchlistStar } from "@/components/WatchlistStar";
 import { applyTheme, getTheme, type Theme } from "@/lib/theme";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { SearchInputBox } from "@/components/ui/search-input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -104,20 +105,19 @@ export function TopBar({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
       </button>
 
       <div ref={ref} className="relative flex-1 max-w-xl">
-        <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            ref={inputRef}
-            value={q}
-            onFocus={() => setOpen(true)}
-            onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-            onKeyDown={onSearchKeyDown}
-            placeholder="Search any ticker…"
-            aria-label="Search stocks and ETFs"
-            className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-          />
-          <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">/</kbd>
-        </div>
+        <SearchInputBox
+          ref={inputRef}
+          containerClassName="rounded-lg"
+          value={q}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onKeyDown={onSearchKeyDown}
+          placeholder="Search any ticker…"
+          aria-label="Search stocks and ETFs"
+          rightSlot={
+            <kbd className="hidden sm:inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">/</kbd>
+          }
+        />
         {open && q.trim().length > 0 && (
           <div className="absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-lg border border-border bg-popover shadow-lg">
             {search.pending && results.length === 0 ? (

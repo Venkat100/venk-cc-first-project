@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { SearchInputBox } from "@/components/ui/search-input";
 import { Sparkline } from "@/components/PriceChart";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { FlashPrice } from "@/components/FlashPrice";
@@ -15,7 +15,7 @@ import { useContentAvailability } from "@/lib/marketData/useContentAvailability"
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
 import { fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { Star, Plus, X, Search, SearchX, Check } from "lucide-react";
+import { Star, Plus, X, SearchX, Check } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/watchlist")({
@@ -134,11 +134,12 @@ function Watchlist() {
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-base">Add a ticker</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search any ticker — QQQ, VOO, NVDA, Apple…" className="h-7 border-0 bg-transparent p-0 focus-visible:ring-0" />
-            {q && <button onClick={() => setQ("")} className="text-xs text-muted-foreground hover:text-foreground">Clear</button>}
-          </div>
+          <SearchInputBox
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onClear={() => setQ("")}
+            placeholder="Search any ticker — QQQ, VOO, NVDA, Apple…"
+          />
 
           {!search.active ? (
             <p className="text-xs text-muted-foreground">Start typing a symbol or company name to find any stock or ETF.</p>

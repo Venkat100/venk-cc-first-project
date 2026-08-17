@@ -11,7 +11,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { SearchInputBox } from "@/components/ui/search-input";
 import { EmptyState, LoadingState, ErrorState } from "@/components/DataStates";
 import { MarketStatusBadge } from "@/components/MarketStatusBadge";
 import { OptionPositionsList } from "@/components/options/OptionPositionsList";
@@ -22,7 +22,7 @@ import { UnlockGate } from "@/components/coaching/UnlockGate";
 import { getOptionPositions } from "@/lib/options/queries";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
 import { fmtUSD } from "@/lib/mockData";
-import { SplitSquareHorizontal, Search, SearchX, X } from "lucide-react";
+import { SplitSquareHorizontal, SearchX, X } from "lucide-react";
 
 export const Route = createFileRoute("/app/options")({
   head: () => ({ meta: [{ title: "Options · My PaperTrader" }] }),
@@ -106,16 +106,12 @@ function OptionsPage() {
                 </>
               ) : (
                 <>
-                  <div className="flex items-center gap-2 rounded-md border border-border bg-surface px-3 py-2">
-                    <Search className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={q}
-                      onChange={(e) => setQ(e.target.value)}
-                      placeholder="Search any ticker — AAPL, QQQ, VOO, Tesla…"
-                      className="h-7 border-0 bg-transparent p-0 focus-visible:ring-0"
-                    />
-                    {q && <button onClick={() => setQ("")} className="text-xs text-muted-foreground hover:text-foreground">Clear</button>}
-                  </div>
+                  <SearchInputBox
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    onClear={() => setQ("")}
+                    placeholder="Search any ticker — AAPL, QQQ, VOO, Tesla…"
+                  />
 
                   {!search.active ? (
                     <p className="text-xs text-muted-foreground">Start typing a symbol or company name to browse its option chain.</p>

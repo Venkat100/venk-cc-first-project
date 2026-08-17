@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { SearchInputBox } from "@/components/ui/search-input";
 import { Button } from "@/components/ui/button";
 import { Sparkline } from "@/components/PriceChart";
 import { WatchlistStar } from "@/components/WatchlistStar";
@@ -13,9 +13,10 @@ import { MARKET_UNIVERSE } from "@/lib/marketData";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { useContentAvailability } from "@/lib/marketData/useContentAvailability";
 import { useSymbolSearch } from "@/lib/marketData/useSymbolSearch";
-import { getStock, fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
+import { displaySector } from "@/lib/marketData/sector";
+import { fmtUSD, fmtPct, sparkline } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
-import { Search, SearchX, SplitSquareHorizontal } from "lucide-react";
+import { SearchX, SplitSquareHorizontal } from "lucide-react";
 
 export const Route = createFileRoute("/app/markets")({
   head: () => ({ meta: [{ title: "Markets · My PaperTrader" }] }),
@@ -40,14 +41,27 @@ function Markets() {
   const newsSet = new Set(availabilityQ.data?.newsSymbols ?? []);
   const insightSet = new Set(availabilityQ.data?.insightSymbols ?? []);
 
-  const sectors = useMemo(
-    () => ["All", ...Array.from(new Set(universe.map((s) => getStock(s)?.sector ?? "—")))],
-    [universe],
-  );
+  // Chips are derived from the SAME displaySector() the rows below render
+  // and filter by — never from a separately-curated label list. A sector
+  // with zero symbols structurally cannot produce a chip, since a chip only
+  // exists because some loaded row already carries that exact label. (Was
+  // previously built from lib/mockData's curated GICS-style sector strings,
+  // while row filtering compared against the live Finnhub `finnhubIndustry`
+  // value — two different taxonomies that never matched, e.g. chip
+  // "Consumer Cyclical" vs. row "Retail"/"Media" — always zero rows.)
+  const sectors = useMemo(() => {
+    if (!quotes) return ["All"];
+    const labels = new Set<string>();
+    for (const sym of universe) {
+      const quote = quotes.get(sym);
+      if (quote) labels.add(displaySector(quote));
+    }
+    return ["All", ...Array.from(labels).sort()];
+  }, [universe, quotes]);
 
   const popularRows = useMemo(() => {
     let xs = universe.map((sym) => quoteOf(quotes, sym));
-    if (sector !== "All") xs = xs.filter((r) => r.sector === sector);
+    if (sector !== "All") xs = xs.filter((r) => displaySector(r) === sector);
     if (tab === "trending") xs = [...xs].sort((a, b) => Math.abs(b.dayChangePct) - Math.abs(a.dayChangePct));
     return xs;
   }, [universe, quotes, sector, tab]);
@@ -73,11 +87,13 @@ function Markets() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <div className="flex flex-1 items-center gap-2 rounded-md border border-border bg-surface px-3 py-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search any ticker — AAPL, QQQ, VOO, Tesla…" className="h-7 border-0 bg-transparent p-0 focus-visible:ring-0" />
-              {q && <button onClick={() => setQ("")} className="text-xs text-muted-foreground hover:text-foreground">Clear</button>}
-            </div>
+            <SearchInputBox
+              containerClassName="flex-1"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onClear={() => setQ("")}
+              placeholder="Search any ticker — AAPL, QQQ, VOO, Tesla…"
+            />
             {!active && (
               <div className="flex flex-wrap gap-1">
                 {sectors.map((s) => (
@@ -102,6 +118,8 @@ function Markets() {
             <ErrorState message="Search is busy right now (rate limit). Try again in a moment." />
           ) : active && search.matches.length === 0 ? (
             <EmptyState icon={SearchX} title={`No tickers match “${q}”`} description="Try a symbol like AAPL, QQQ, VOO, or a company name." />
+          ) : !active && popularRows.length === 0 ? (
+            <EmptyState icon={SearchX} title="No stocks match this filter" description={`Nothing in the ${sector} sector right now — try a different filter.`} />
           ) : (
             <table className="w-full text-sm">
               <thead>
@@ -135,7 +153,7 @@ function Markets() {
                               </div>
                             </Link>
                           </td>
-                          <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{m.type || r.sector}</td>
+                          <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{m.type || (priced ? displaySector(r) : "—")}</td>
                           <td className="py-3 text-right tabular">
                             {priced ? <FlashPrice value={r.price} className="px-1">{fmtUSD(r.price)}</FlashPrice> : "…"}
                           </td>
@@ -161,6 +179,7 @@ function Markets() {
                     })
                   : popularRows.map((r) => {
                       const up = r.dayChangePct >= 0;
+                      const priced = quotes?.has(r.symbol) ?? false;
                       return (
                         <tr key={r.symbol} className="border-b border-border/60 last:border-0 hover:bg-accent/40">
                           <td className="px-2 py-3 sm:px-4">
@@ -175,7 +194,7 @@ function Markets() {
                               </div>
                             </Link>
                           </td>
-                          <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{r.sector}</td>
+                          <td className="hidden py-3 text-xs text-muted-foreground sm:table-cell">{priced ? displaySector(r) : "—"}</td>
                           <td className="py-3 text-right tabular"><FlashPrice value={r.price} className="px-1">{fmtUSD(r.price)}</FlashPrice></td>
                           <td className={cn("py-3 text-right tabular", up ? "text-[color:var(--color-gain)]" : "text-[color:var(--color-loss)]")}>
                             {up ? "+" : "−"}{fmtUSD(Math.abs(r.dayChange))} <span className="hidden text-xs opacity-80 sm:inline">({fmtPct(r.dayChangePct)})</span>
