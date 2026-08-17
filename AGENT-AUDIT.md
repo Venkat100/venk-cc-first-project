@@ -117,3 +117,90 @@ The closest result (`1e0c5ffe`, −0.92pp) is a near-miss, not a win. The other 
 ### (d) Not worth it, right now
 8. **Manufacturing a real conservative-risk test case.** Can't observe real conservative behavior without a real conservative user, and creating a fake one just to "prove" a code path that's structurally identical to balanced/aggressive (same scoring function, different constants) and already unit/integration-tested isn't worth it. Revisit if/when a real user actually picks conservative.
 9. **Reacting to the SPY-lag numbers by changing the strategy engine.** 3 agents over ~8 weeks is nowhere near enough signal to justify a strategy change. Let it run longer under real conditions before treating Part 6's numbers as anything more than an honest early snapshot.
+
+---
+
+## Part 8 — Agent observability assessment (2026-08-17)
+
+**Trigger:** three items sitting separately in the backlog above — guardrail breaches invisible without a manual audit (7c-5), no watchdog heartbeat (7c-6), `res.usage` never read (7c-7) — plus Part 3's 26-day inert agent, are one problem, not three. The pattern: **we cannot see what the agent is doing.** Assessment only, per instruction — nothing below is implemented.
+
+Two of Part 7's items have shipped since this audit was written (Fix 1a: fractional shares; Fix 1b: honest underfunded signal, decision-log entry + UI banner; Fix 3: `agent_run` now fires from the cron path too, not just the manual button). Where that changes an answer below, it's called out explicitly — this assessment is written against the CURRENT code, not the 08-16 snapshot.
+
+### 1. Could we detect a silent inert agent today, after the fact?
+
+**Partially — and the distinction between "the cron fired" and "the agent decided something" is exactly where it breaks down.**
+
+Three signals exist today, at three different levels of precision:
+
+- **`cron_heartbeats` (job-level).** One row per job (`agent-thinker`), `last_run_at`/`last_status`. Proves the BATCH ran. Says nothing about any individual agent — a batch that runs perfectly while every single agent inside it decides nothing every day looks IDENTICAL to a batch where every agent traded normally. This is coarsest possible signal and structurally cannot answer the user's question.
+- **`agent_run` analytics event (per-user, per-run).** Fires once per eligible agent per cron invocation, `properties: { ran, aiUsed, source }`. `ran: true` means the thinker executed to completion **without early-returning** (not set up / not enabled / no cash / no live market data) — it is **true whenever the thinker completes a full cycle, including a cycle that ends in zero trades.** A cron that runs faithfully and decides nothing every single day — the exact case that fooled us — reports `ran: true` on every one of those days. This event cannot distinguish "acted" from "correctly did nothing." (`aiUsed` is closer, but false only for the quant-only fallback path, not for "AI ran, decided to hold.")
+- **`agent_decisions` (per-user, per-run, real content).** Every thinker/watchdog cycle writes one or more rows here with a real `action` column: `rebalance`/`watchdog`/`hold` are narrative/no-op entries; `buy`/`trim`/`sell` are the only three values that correspond to an actual trade. **This is the one signal precise enough to answer the question** — `SELECT user_id, MAX(created_at) FROM agent_decisions WHERE action IN ('buy','trim','sell') GROUP BY user_id`, compared against each agent's `agent_cash`/holdings and enabled status, would surface "which funded agents have taken no real action in N days" correctly, including the 26-day case. **This data has existed since the agent schema shipped (0005_agent.sql) — the gap has never been the data, it's that nothing has ever run this query.** Nothing computes it, nothing alerts on it, nothing displays it.
+
+So: **today, retroactively, with a one-off query — yes.** As a standing, automatic answer the product or an operator gets without having to think to ask — no. The precise distinction the user asked for: `agent_run`/`cron_heartbeats` prove liveness; only `agent_decisions.action` proves activity, and only a query nobody has written today actually reads it that way.
+
+One more real gap, worth being precise about: the thinker's `candidates.length === 0` early return (`thinker.server.ts:87`, "No live market data available right now") writes **zero rows anywhere** — not `agent_decisions`, and (pre-Fix-3-era, or if that early return is ever hit today) an `agent_run` event with `ran: false`. A day where this fires would show as a genuine **gap** in an otherwise-daily `agent_decisions` sequence, not a `hold`/`rebalance` row — a different detection shape (missing-day, not stale-day) that the query above doesn't cover as written and nothing today checks for.
+
+### 2. The 26-day window — what signal existed at the time?
+
+**Effectively nothing usable.** Reconstructed precisely, not assumed:
+
+- `agent_run` did not exist on the cron path at all during this window — Fix 3 (wiring `track("agent_run", ...)` into `runThinkerForAllAgents`) shipped AFTER this audit. For a cron-driven agent (all real production usage, per Part 5), there was no per-run event of any kind.
+- `agent_decisions` got one row per day: `action: 'rebalance'`, `rationale: "Portfolio within drift bands — no trades needed."` — **the identical text a genuinely healthy, fully-invested, at-target agent would also produce.** `signals` carried no `underfunded` field (Fix 1b post-dates this window) — there was nothing IN the row itself to distinguish it from success, even for someone reading it directly.
+- `cron_heartbeats` for `agent-thinker` was itself silently broken for at least part of this window (Part 1's fire-and-forget bug — 5 days stale while the job ran correctly) — so even the coarsest "did the batch run" signal was unreliable some of the time.
+- No admin UI existed (still doesn't) that lists agents or their holdings counts.
+
+**Where it would have surfaced, if anywhere: nowhere, without literally reading 26 identical decision rows and independently doing the whole-share-affordability arithmetic by hand** — which is exactly what this audit did, by going looking. There was no shortcut available at the time, not even a query.
+
+### 3. Correctly holding vs. stuck/malfunctioning — can our data tell these apart?
+
+**For the one failure mode we already know about: yes, now. For any other failure mode: no, and that's the important finding.**
+
+What changed since the 26-day window: `plan.underfunded` (rebalance.ts) is computed and stored in `agent_decisions.signals.underfunded`, and surfaced as a UI banner on `/app/agent`. An agent blocked because every target position is smaller than `MIN_TRADE_DOLLARS` ($5, post-fractional-shares) is now explicitly flagged, not silently indistinguishable from health. That specific incident, reproduced today, would be caught immediately and honestly — both in the data and in the UI.
+
+But that flag exists because we found and diagnosed ONE specific mechanism. **The underlying detection strategy is "notice a silent-failure shape, then hand-code a flag for it" — not a general test for correctness.** Concretely, today, a `rebalance` decision with `underfunded: false` and zero executed trades is currently ALWAYS interpreted (implicitly, since nothing reads it any other way) as "correctly at target." That's true for the failure mode we've seen. It is an assumption, not a proof, for:
+- a guardrail miscalculation that happens to always conclude "hold" for the wrong reason,
+- a quant-scoring bug that produces a degenerate shortlist,
+- a data problem (stale prices, a symbol silently dropped from the universe) that isn't severe enough to trigger the `candidates.length === 0` early return but is severe enough to distort every score,
+- anything else not yet discovered.
+
+**If our stored data cannot tell these apart — and for anything outside the one already-patched case, it cannot — any alert built purely on "N days since a real trade" would be guessing at WHY, even though it could reliably tell you THAT.** That's fine for a plain-English status line (see §4 below — "hasn't traded in N days" is a true, checkable fact regardless of cause) but would be dishonest framed as a diagnosis ("the agent is stuck") rather than an observation ("the agent hasn't traded — here's the last thing it decided, go look").
+
+### 4. Cheapest honest detection, and where it surfaces
+
+**A. `/app/agent` status line (user-facing).** Compute, from data that already exists (no new storage): days since the most recent `action IN ('buy','trim','sell')` row for this user (or "never" if the agent has holdings=0 and no such row exists since funding). Render as a plain sentence, always visible, not just on the underfunded path:
+- Has traded, recently: *"Last real trade: 2 days ago (bought AMD)."*
+- Has traded, but a while: *"No trades in 9 days — last rebalance check: portfolio within target, no changes needed."* (pulls the most recent `rebalance`/`hold` rationale verbatim, so the user sees the AGENT's own stated reason, not a synthesized one)
+- Never traded since funding, N1+ days in: reuse the existing `underfunded` banner if that's the cause; otherwise the same "no trades yet — last check: {rationale}" pattern.
+
+This is deliberately NOT a health verdict ("your agent is fine" / "your agent is broken") — per §3, we can't always know which. It's an honest activity fact plus the agent's own most recent reasoning, so silence is never ambiguous: the user always knows the LAST thing the agent said, even when that thing is "nothing to do."
+
+**B. Admin list of funded agents idle beyond N days.** One query (§1's `MAX(created_at) WHERE action IN (...)`, joined against `agent_config` for enabled+funded), rendered as a table — no new route infrastructure beyond what a couple of existing admin list pages already establish as the pattern.
+
+**Recommended N — two thresholds, not one, because the two starting states are genuinely different risks:**
+- **Never-traded agents (0 holdings since funding): N₁ = 3 days.** A funded, enabled agent with a non-degenerate shortlist should place its first trade within its first daily cycle or two in virtually every real case observed so far (both real aggressive agents' first-run logs show immediate buys). Three consecutive zero-trade days with zero holdings is already unusual enough to be worth a look, and is short enough that it would have caught the 26-day case on day 3, not day 26.
+- **Previously-invested agents gone quiet: N₂ = 14 days.** A calm market can legitimately leave a well-diversified, at-target multi-position portfolio untouched for a while — Part 4 already shows drift-band suppression doing exactly this correctly on calm days. Flagging too aggressively here would just manufacture false positives out of healthy behavior. Two weeks with zero `buy`/`trim`/`sell` activity across a multi-symbol portfolio, where daily price movement alone usually nudges SOME weight past the drift band eventually, is a reasonable "worth a look" bar without being noisy. (This is a starting recommendation, not a tuned constant — revisit once there's more than 3 agents' worth of real calm-market baseline to check it against.)
+
+**New data needed: none, for either A or B.** Both are pure read-side — a new query pattern against `agent_decisions`, not a new column or table. The only thing worth ADDING to the schema, if this gets built, is not for detection but for precision: recording which early-return reason (`thinker.server.ts`'s `{ran:false, reason}` branches) fired on a given day would close the "gap day" blind spot from §1, since right now those leave no row at all to explain the gap.
+
+### 5. Cost metering — what would it take to read `res.usage`?
+
+**Small, mechanical, and worth doing — agree with pulling it out of tier-c, with one refinement on where the bar should sit.**
+
+Two call sites, both already sitting on `const res = await client.messages.create(...)` and both currently discarding everything except `res.content`:
+- `lib/agent/anthropic.server.ts:70` (`claudeReason`) — the agent's one Claude call per thinker run.
+- `lib/insights/insights.server.ts:179` and `:322` — the two insight-generation call sites (per-stock insight, daily brief).
+
+The Anthropic SDK's `Message` response already includes `usage: { input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens }` on every call — no SDK upgrade, no new dependency, no schema change to make it READABLE. The work is: (1) return `res.usage` alongside the existing parsed result from each of the three call sites, (2) thread it up to the caller (`runThinker`, `getStockInsight`/`runDailyBriefs`) instead of dropping it, (3) somewhere to put it — cheapest option is a new column or two on the existing per-call log point (`agent_decisions.signals` already carries a JSONB bag for the thinker; insights already write a row per generation) rather than a new table, since both already have a natural per-call row to attach usage to. Real per-model $/token pricing (a small constant map, Anthropic publishes it) turns raw token counts into an actual dollar figure — replacing `ESTIMATED_COST_PER_AGENT_RUN_USD`/`ESTIMATED_COST_PER_INSIGHT_CALL_USD`'s flat per-call guesses with the real number. Genuinely an afternoon of work, not a project — the SDK does the hard part already.
+
+**Worth noting while in this code:** the admin cost dashboard's `agent_run` count (`admin/functions.ts:388`) already receives an `aiUsed` property on every event (since Fix 3) but doesn't filter or weight by it — every `agent_run` row, including `ran:false`/`aiUsed:false` early-returns, is currently counted at the same flat `ESTIMATED_COST_PER_AGENT_RUN_USD` as a row that made a real Claude call. That's a one-line fix available even before real token metering lands, and would tighten the estimate immediately.
+
+**Pushback on "pull it out of tier-c," partially:** the reasoning is right — it's the only cost that scales with users, and "we'd learn it accelerated when a bill arrived" is a real, not hypothetical, risk at 3 real agents already. But I'd stop short of calling it pre-launch-blocking (see §6) — it's a cost-visibility problem, not a user-safety or trust problem, and at current scale (3 agents, ~$6.65 estimated total spend over 8 weeks per Part 5) there's no live fire to put out. Recommend: **do it soon after whatever ships next, specifically before the user count that makes "an estimate was quietly wrong" turn into a real budget surprise** — not urgent enough to block anything else in flight, but real enough that it shouldn't keep sliding either.
+
+### 6. Pre-launch checklist placement
+
+**Agree with the instinct — user-visible agent status is pre-launch; the rest is real but can follow, with one exception worth flagging.**
+
+- **Pre-launch: §4A, the `/app/agent` status line.** This product asks users to trust it with money-equivalent decisions made autonomously, unattended. "Tell the user honestly what happened last, even when nothing happened" is table stakes for that trust, not polish — and per this assessment it's genuinely cheap (no new data, a read query plus a sentence of UI) once the underfunded banner already established the pattern.
+- **Can follow, soon: §4B (admin idle list) and the `agent_run`/`aiUsed` cost-filter one-liner from §5.** Both are internal-operator tools, not user-facing promises, and both are now items a manual query (documented in §1/§4) can already answer by hand if someone remembers to ask — automating "someone remembers to ask" is real value but not launch-blocking value.
+- **Can follow, less urgently: guardrail-breach surfacing (Part 7's item 5) and the watchdog heartbeat (Part 7's item 6).** Guardrail breaches observed so far were transient snapshots of the same churn/underfunded issues already covered above, not a new failure class; the watchdog is intraday-only-safety (it can only SELL, never buy, so a missed watchdog cycle is bounded — protection delayed, not money put at risk the way a silently-broken buy path would be) and already leaves SOME trace (a `watchdog` summary row in `agent_decisions` every successful run, per watchdog.server.ts:224 — `/api/health` just doesn't read it), so the gap here is narrower than it first sounds.
+- **Real token metering (§5): recommended soon-after-launch, not pre-launch, per §5's reasoning above** — genuinely important, scales with the thing that matters (users), but not a trust-with-money-equivalent-decisions issue the way the status line is, and current spend is small enough that there's no urgency the numbers themselves demand yet.
