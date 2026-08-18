@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "verify": "./verify-suite.sh"
+    "verify": "./verify-suite.sh",
+    "check-config": "vite-node check-config-fingerprint.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.105.0",

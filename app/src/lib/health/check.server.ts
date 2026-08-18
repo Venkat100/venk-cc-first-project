@@ -7,6 +7,7 @@
 import { getServiceClient } from "@/lib/supabase/admin.server";
 import { getServerQuote } from "@/lib/marketData/quote.server";
 import { serverEnv } from "@/lib/marketData/env.server";
+import { computeFingerprints, type FingerprintMap } from "./fingerprint";
 
 const CRON_STALE_AFTER_MS = 26 * 60 * 60_000; // both daily crons run once/day; 26h = daily cadence + drift buffer, not a tight SLA
 const CHECK_TIMEOUT_MS = 8_000;
@@ -45,6 +46,15 @@ export type ConfigVisibility = {
   sentryServer: boolean;
   sentryClient: boolean;
   agentModel: string;
+  /**
+   * Fingerprints (see fingerprint.ts — presence alone doesn't catch a
+   * value being present but WRONG, which is exactly what happened to
+   * ANTHROPIC_API_KEY on 2026-08-17). Compare against
+   * `npm run check-config` run locally — a mismatch means production's
+   * value differs from app/.env's, a null on either side means one of
+   * them isn't set at all.
+   */
+  secrets: FingerprintMap;
 };
 
 export type HealthReport = {
@@ -68,6 +78,7 @@ function checkConfig(): ConfigVisibility {
     // so this is one true source, not a guess about what the client saw.
     sentryClient: !!serverEnv("VITE_SENTRY_DSN"),
     agentModel: serverEnv("AGENT_MODEL") || "claude-sonnet-4-6 (default — AGENT_MODEL not set)",
+    secrets: computeFingerprints(serverEnv),
   };
 }
 
