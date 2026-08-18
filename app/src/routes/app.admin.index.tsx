@@ -9,13 +9,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/DataStates";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { getUsageStats, getSystemHealth, getIdleAgents, listTestAccounts, deleteTestAccounts } from "@/lib/admin/api";
+import { getUsageStats, getSystemHealth, getIdleAgents, listTestAccounts, deleteTestAccounts, testSentryDelivery } from "@/lib/admin/api";
 import { summarizeIdleReason, NEVER_TRADED_IDLE_DAYS, WENT_QUIET_DAYS } from "@/lib/agent/activityStatus";
 import { formatInstant } from "@/lib/format/datetime";
 import { fmtUSD } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Info, Bot, FlaskConical, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, Info, Bot, FlaskConical, Trash2, Send } from "lucide-react";
 
 export const Route = createFileRoute("/app/admin/")({
   component: AdminOverviewPage,
@@ -59,6 +59,18 @@ function AdminOverviewPage() {
   });
   const testAccounts = testAccountsQ.data ?? [];
   const testAccountsFunded = testAccounts.filter((a) => a.agentFunded > 0).length;
+
+  const testSentryMut = useMutation({
+    mutationFn: testSentryDelivery,
+    onSuccess: (res) => {
+      if (!res.sentryConfigured) {
+        toast.message("SENTRY_DSN not configured", { description: "Nothing to test — set it in Vercel first." });
+        return;
+      }
+      toast.success("Test event sent to Sentry", { description: `marker=${res.marker} · event ${res.eventId} — confirm it landed in the Sentry dashboard.` });
+    },
+    onError: (e: Error) => toast.error(e.message || "Couldn't send the test event."),
+  });
 
   return (
     <div className="space-y-6">
@@ -161,6 +173,29 @@ function AdminOverviewPage() {
             </div>
           )}
         </CardContent>
+        {!healthQ.isLoading && !healthQ.isError && (
+          <>
+            <CardHeader className="pb-2 pt-0">
+              <CardTitle className="text-sm text-muted-foreground font-medium">Configuration — features that no-op silently when unset</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* 2026-08-17: SENTRY_DSN sat unset in Vercel Production for a
+                 week with nothing announcing it — this section, and the
+                 config field on every /api/health call, is the structural
+                 fix. Neutral styling on purpose (not red/green pass-fail):
+                 every one of these is genuinely optional by design, so an
+                 unconfigured state is a FACT to see, not a failure. */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <ConfigRow label="Sentry (server)" configured={healthQ.data!.config.sentryServer} />
+                <ConfigRow label="Sentry (client)" configured={healthQ.data!.config.sentryClient} />
+                <ConfigRow label="Agent model" configured value={healthQ.data!.config.agentModel} />
+              </div>
+              <Button variant="outline" size="sm" className="gap-2" disabled={testSentryMut.isPending} onClick={() => testSentryMut.mutate()}>
+                <Send className="h-3.5 w-3.5" /> {testSentryMut.isPending ? "Sending…" : "Send test error to Sentry"}
+              </Button>
+            </CardContent>
+          </>
+        )}
       </Card>
 
       {statsQ.isLoading ? (
@@ -264,6 +299,22 @@ function HealthRow({ label, ok, detail }: { label: string; ok: boolean; detail?:
       <div className={cn("min-w-0", !ok && "text-[color:var(--color-loss)]")}>
         <p className="font-medium">{label}</p>
         {detail && <p className="truncate text-xs text-muted-foreground">{detail}</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Neutral, not pass/fail — an unconfigured optional integration is a fact
+ *  to see, never a red X (see the "Configuration" section's own header
+ *  comment for why). `value` overrides the generic "Set"/"Not set" text
+ *  when there's a more specific state to show (e.g. a default in use). */
+function ConfigRow({ label, configured, value }: { label: string; configured: boolean; value?: string }) {
+  return (
+    <div className="flex items-start gap-2 text-sm">
+      <span className={cn("mt-0.5 h-4 w-4 shrink-0 rounded-full", configured ? "bg-[color:var(--color-primary)]/70" : "bg-muted-foreground/40")} />
+      <div className="min-w-0">
+        <p className="font-medium">{label}</p>
+        <p className="truncate text-xs text-muted-foreground">{value ?? (configured ? "Set" : "Not set — feature no-ops")}</p>
       </div>
     </div>
   );

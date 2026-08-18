@@ -13,6 +13,7 @@ import {
   getIdleAgentsFn,
   listTestAccountsFn,
   deleteTestAccountsFn,
+  testSentryDeliveryFn,
   type AdminUserSummary,
   type AdminUserDetail,
   type UsageStats,
@@ -94,6 +95,16 @@ export async function deleteTestAccounts(userIds: string[]): Promise<{ deleted: 
   const res = await deleteTestAccountsFn({ data: { accessToken: await token(), userIds } });
   if (!res.ok) throw new Error(res.error);
   return { deleted: res.deleted, failed: res.failed };
+}
+
+/** Fires one real, marked Sentry test event through the SAME
+ *  captureServerError() every production error goes through — admin
+ *  console re-verification of the 2026-08-17 finding, not a one-time
+ *  proof (2026-08-17 incident writeup, HANDOFF.md). */
+export async function testSentryDelivery(): Promise<{ sentryConfigured: boolean; eventId?: string; marker?: string }> {
+  const res = await testSentryDeliveryFn({ data: { accessToken: await token() } });
+  if (!res.ok) throw new Error(res.error);
+  return { sentryConfigured: res.sentryConfigured, eventId: res.eventId, marker: res.marker };
 }
 
 export type { AdminUserSummary, AdminUserDetail, UsageStats, IdleAgent, TestAccountSummary } from "./functions";

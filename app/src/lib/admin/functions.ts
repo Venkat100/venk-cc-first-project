@@ -596,6 +596,41 @@ export const getSystemHealthFn = createServerFn({ method: "POST" })
   });
 
 // ─────────────────────────────────────────────────────────────────────────
+// 2026-08-17 incident: Sentry's DSN sat unset in Vercel Production from
+// 2026-08-10 (when it was built and verified LOCALLY) until noticed by
+// inspection, not by any signal the app produced — error monitoring was
+// inert in production the whole time. checkConfig() in check.server.ts
+// closes the STANDING visibility gap (every GET health report now shows
+// whether Sentry is configured); this closes the ACTIVE verification gap
+// with an admin-console button that deliberately fires a real, marked
+// test event through the SAME captureServerError() every genuine
+// production error goes through, admin-authenticated (same pattern as
+// every other admin action) rather than requiring CRON_SECRET in the
+// browser — the /api/health HTTP endpoint's own `?action=test-sentry`
+// exists separately for external/scripted verification.
+export type TestSentryResponse = { ok: true; sentryConfigured: boolean; eventId?: string; marker?: string } | { ok: false; error: string };
+
+export const testSentryDeliveryFn = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ accessToken: z.string().min(1) }))
+  .handler(async ({ data }): Promise<TestSentryResponse> => {
+    try {
+      const userId = await verifyUser(data.accessToken);
+      await requireAdmin(userId);
+      const { serverEnv } = await import("@/lib/marketData/env.server");
+      const configured = !!serverEnv("SENTRY_DSN");
+      if (!configured) return { ok: true, sentryConfigured: false };
+      const { captureServerError } = await import("@/lib/sentry/server");
+      const Sentry = await import("@sentry/node");
+      const marker = `admin-console-test-sentry-${Date.now()}`;
+      const eventId = captureServerError(new Error(`[admin console] deliberate test error — marker=${marker}`), { route: "/app/admin", action: "test-sentry", userId, marker });
+      await Sentry.flush(5000);
+      return { ok: true, sentryConfigured: true, eventId, marker };
+    } catch (e) {
+      return { ok: false, error: friendly(e instanceof Error ? e.message : "error") };
+    }
+  });
+
+// ─────────────────────────────────────────────────────────────────────────
 export type GetAuditLogResponse = { ok: true; entries: AdminAuditLog[] } | { ok: false; error: string };
 
 export const getAuditLogFn = createServerFn({ method: "POST" })

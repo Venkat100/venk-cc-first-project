@@ -6,6 +6,7 @@
 
 import { getServiceClient } from "@/lib/supabase/admin.server";
 import { getServerQuote } from "@/lib/marketData/quote.server";
+import { serverEnv } from "@/lib/marketData/env.server";
 
 const CRON_STALE_AFTER_MS = 26 * 60 * 60_000; // both daily crons run once/day; 26h = daily cadence + drift buffer, not a tight SLA
 const CHECK_TIMEOUT_MS = 8_000;
@@ -20,6 +21,32 @@ function withTimeout<T>(label: string, p: Promise<T>, ms = CHECK_TIMEOUT_MS): Pr
 export type CheckResult = { ok: boolean; latencyMs?: number; error?: string };
 export type CronCheckResult = { ok: boolean; lastRunAt?: string; lastStatus?: string; ageHours?: number; error?: string };
 
+/**
+ * Visibility for every feature in this codebase that is DESIGNED to no-op
+ * silently when its env var isn't set (2026-08-17 incident: VITE_SENTRY_DSN
+ * / SENTRY_DSN sat unset in Vercel Production from 2026-08-10 — when
+ * Sentry was built and verified LOCALLY — until this was noticed by
+ * inspection, not by any signal the app itself produced; error monitoring
+ * was inert in production the entire time despite being disclosed as live
+ * in legal/privacy.md). This section is DELIBERATELY separate from
+ * `checks` above and never affects the top-level `ok` — every one of these
+ * is genuinely optional by design (the app is correct with either state),
+ * so folding it into the pass/fail gate would misrepresent "not configured
+ * yet" as "broken." The fix for the actual incident is that this state is
+ * now visible on every /api/health call instead of requiring anyone to
+ * remember to check it.
+ *
+ * If a new integration is ever added with the same "silently no-ops when
+ * unconfigured" shape, add it here too — grep this codebase for
+ * `serverEnv(` returning `undefined` and simply not doing the thing,
+ * rather than throwing/erroring, to find the pattern.
+ */
+export type ConfigVisibility = {
+  sentryServer: boolean;
+  sentryClient: boolean;
+  agentModel: string;
+};
+
 export type HealthReport = {
   ok: boolean;
   checkedAt: string;
@@ -28,7 +55,21 @@ export type HealthReport = {
     marketData: CheckResult;
     crons: Record<string, CronCheckResult>;
   };
+  config: ConfigVisibility;
 };
+
+function checkConfig(): ConfigVisibility {
+  return {
+    sentryServer: !!serverEnv("SENTRY_DSN"),
+    // VITE_SENTRY_DSN is a build-time-inlined client var, not readable from
+    // this server-only module the way serverEnv() reads real process.env —
+    // the client's OWN init (lib/sentry/client.ts) already no-ops the same
+    // way if unset; reported here from the same env.server.ts file reader
+    // so this is one true source, not a guess about what the client saw.
+    sentryClient: !!serverEnv("VITE_SENTRY_DSN"),
+    agentModel: serverEnv("AGENT_MODEL") || "claude-sonnet-4-6 (default — AGENT_MODEL not set)",
+  };
+}
 
 async function checkDatabase(): Promise<CheckResult> {
   const t0 = Date.now();
@@ -93,5 +134,5 @@ async function checkCrons(): Promise<Record<string, CronCheckResult>> {
 export async function runHealthChecks(): Promise<HealthReport> {
   const [database, marketData, crons] = await Promise.all([checkDatabase(), checkMarketData(), checkCrons()]);
   const ok = database.ok && marketData.ok && Object.values(crons).every((c) => c.ok);
-  return { ok, checkedAt: new Date().toISOString(), checks: { database, marketData, crons } };
+  return { ok, checkedAt: new Date().toISOString(), checks: { database, marketData, crons }, config: checkConfig() };
 }
