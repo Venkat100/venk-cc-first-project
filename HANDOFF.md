@@ -4,7 +4,34 @@
 >
 > **Maintenance rule:** Claude (acting as CTO in Cowork) updates this file at the end of any meaningful exchange — new decisions, completed work, changed direction, new blockers. Append to the Changelog at the bottom every time. Keep it elaborate. When in doubt, over-document.
 
-**Last updated:** 2026-08-18 (Config-drift detection extended from presence to VALUE — BUILT, VERIFIED, **NOT pushed, reporting first per instruction.** Follow-up to the same-day incident writeup below: the recommended fingerprinting option is now real code, not just an assessment.
+**Last updated:** 2026-08-19 (Config-drift tool fixed before its first real use exposed the flaw — BUILT, VERIFIED live against `mypapertrader.com`, **NOT pushed, reporting first per instruction.** `9bacfce` (yesterday's fingerprinting commit) pushed and deployed first, on explicit instruction, so this fix's local half could run against a real production `/api/health`.
+
+**The flaw**: `ANTHROPIC_API_KEY` was made deliberately per-environment yesterday — `papertrader-dev` locally, `papertrader-prod` in Vercel, the whole point of splitting dev/prod spend. Without a way to declare that, `check-config` would report it as a mismatch on every single run, forever, correctly and uselessly — the exact "detector drowned in its own noise" shape as the badly-written per-script flakiness trigger earlier in this project (PLAN.md §6d): a permanently-correct alarm trains the reader to stop reading it, so the one time it fires for a real reason, it's already been tuned out.
+
+**The fix — an allowlist of exceptions, not a manifest**: `fingerprint.ts`'s new `EXPECTED_PER_ENVIRONMENT_VARS` (currently one entry: `ANTHROPIC_API_KEY`). Deliberately NOT the manifest-of-expected-values shape the 2026-08-17 assessment already rejected — that goes stale on every routine key rotation, and the person rotating a key has no reason to also be touching a manifest. This list only changes on a deliberate architecture decision to scope a credential per-environment (rare — happened once, yesterday), made by the same person who'd naturally also flip this flag while making that change, not a separate thing to remember afterward. Defaults to strict: anything NOT listed is expected to match, so a wrong classification fails safe (an unlisted-but-actually-fine divergence is a loud, self-correcting false alarm; something wrongly added to the list is the only way to accidentally suppress real drift — kept rare by keeping the list short and the bar for adding to it high).
+
+**The disguised case, fixed and tested**: "expected to differ in VALUE" must never become "expected to be absent." Presence and value-equality are separate axes in `diffFingerprints` — a variable on the allowlist that's missing on either side is still `remote_missing`/`local_missing` (an unconditional problem), never silently folded into `expected_divergent`. Proved this isn't accidental: the reviewed logic checks presence FIRST, unconditionally, before ever consulting the allowlist.
+
+**A real bug in the tool itself, found by actually running it against production**: `/api/health` returns HTTP 503 (by design — see `endpoint.server.ts`'s own header) whenever ANY other check fails, even though `config.secrets` is still present and valid. The script's `!res.ok` check treated 503 as fatal and refused to read the (perfectly good) fingerprint data underneath it — exactly the kind of thing "build it, then actually run it" catches that reasoning about it in the abstract doesn't. Fixed to accept 200 or 503 and reject only genuinely unexpected statuses.
+
+**Real production run, actual output** (after the 503 fix — production was legitimately unhealthy at the time: `agent-thinker` cron 48h stale, unrelated to this work, not investigated here, flagging for awareness):
+```
+████ Config drift — local app/.env vs. production ████
+  ✅ ANTHROPIC_API_KEY          present in both — values differ by design (per-environment)  (local=d3dec16b remote=926b4619)
+  ✅ CRON_SECRET                match  (local=36e52c3a remote=36e52c3a)
+  ✅ SUPABASE_SERVICE_ROLE_KEY  match  (local=84f9db60 remote=84f9db60)
+  ✅ FINNHUB_API_KEY            match  (local=9f970a88 remote=9f970a88)
+  ✅ TWELVEDATA_API_KEY         match  (local=605a35ef remote=605a35ef)
+
+SUMMARY: 5/5 checked — 4 matches, 1 intentionally per-environment (confirmed present in both), no unexpected drift.
+```
+Also cleaned up the output shape while implementing this: the first working version printed every row twice (once from a manual `console.log`, once from `assert()`'s own line) — consolidated to one line per variable, exactly the "scan in three seconds" bar asked for.
+
+**Tested**, including the case specifically requested: a variable on the expected-per-environment allowlist that's actually absent in production must fail loudly, not be silently waved through as "differs by design." Proved non-tautological the same way as yesterday's fingerprint tests: reordered the real logic to check the allowlist before presence (reintroducing the disguised-case bug), reran — 6 tests failed including the purpose-built disguised-case test, restored, all green again. 11 new/changed tests, 52 total in the suite now.
+
+`tsc --noEmit` clean, `npm run build` clean, `npx vitest run` 52/52 green, full 35-script `verify-*.ts` suite green.)
+
+**Last updated (previous):** 2026-08-18 (Config-drift detection extended from presence to VALUE — BUILT, VERIFIED, **NOT pushed, reporting first per instruction.** Follow-up to the same-day incident writeup below: the recommended fingerprinting option is now real code, not just an assessment.
 
 **The gap fingerprinting closes**: presence alone (`sentryServer: true`) only catches a variable being ABSENT. It says nothing when a variable is PRESENT but WRONG — exactly the `ANTHROPIC_API_KEY` incident below. A fingerprint that can be independently recomputed closes that.
 

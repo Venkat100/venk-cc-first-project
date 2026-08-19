@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { fingerprint, computeFingerprints, diffFingerprints, FINGERPRINTED_ENV_VARS } from "./fingerprint";
+import { fingerprint, computeFingerprints, diffFingerprints, isDriftProblem, isExpectedPerEnvironment, FINGERPRINTED_ENV_VARS } from "./fingerprint";
+
+// ANTHROPIC_API_KEY is the one real entry in the expected-per-environment
+// allowlist (2026-08-19 — deliberately split dev/prod spend). Every other
+// tracked var is expected to match, and stays that way for these tests
+// unless a test is specifically exercising the divergent-var path.
+const NON_DIVERGENT_VAR = FINGERPRINTED_ENV_VARS.find((n) => !isExpectedPerEnvironment(n))!;
 
 describe("fingerprint", () => {
   it("is deterministic for the same value", () => {
@@ -59,33 +65,66 @@ describe("diffFingerprints", () => {
     expect(rows.every((r) => r.status === "match")).toBe(true);
   });
 
-  it("reports mismatch when the values differ -- the exact 2026-08-17 ANTHROPIC_API_KEY shape: both present, different value", () => {
-    const local = computeFingerprints((name) => (name === "ANTHROPIC_API_KEY" ? "new-rotated-key-value-long-enough" : "shared-value-long-enough"));
-    const remote = computeFingerprints((name) => (name === "ANTHROPIC_API_KEY" ? "old-stale-key-value-long-enough" : "shared-value-long-enough"));
+  it("reports unexpected_mismatch for a var that SHOULD match but doesn't -- a real problem", () => {
+    const local = computeFingerprints((name) => (name === NON_DIVERGENT_VAR ? "new-rotated-value-long-enough" : "shared-value-long-enough"));
+    const remote = computeFingerprints((name) => (name === NON_DIVERGENT_VAR ? "old-stale-value-long-enough" : "shared-value-long-enough"));
     const rows = diffFingerprints(local, remote);
-    const anthropicRow = rows.find((r) => r.name === "ANTHROPIC_API_KEY")!;
-    expect(anthropicRow.status).toBe("mismatch");
+    const row = rows.find((r) => r.name === NON_DIVERGENT_VAR)!;
+    expect(row.status).toBe("unexpected_mismatch");
+    expect(isDriftProblem(row.status)).toBe(true);
+    expect(rows.filter((r) => r.name !== NON_DIVERGENT_VAR).every((r) => r.status === "match")).toBe(true);
+  });
+
+  it("reports expected_divergent (not a problem) for the 2026-08-19 ANTHROPIC_API_KEY shape: both present, different value, declared per-environment", () => {
+    const local = computeFingerprints((name) => (name === "ANTHROPIC_API_KEY" ? "papertrader-dev-value-long-enough" : "shared-value-long-enough"));
+    const remote = computeFingerprints((name) => (name === "ANTHROPIC_API_KEY" ? "papertrader-prod-value-long-enough" : "shared-value-long-enough"));
+    const rows = diffFingerprints(local, remote);
+    const row = rows.find((r) => r.name === "ANTHROPIC_API_KEY")!;
+    expect(row.status).toBe("expected_divergent");
+    expect(isDriftProblem(row.status)).toBe(false); // this is the whole point -- a known-fine difference must NOT read as a problem
     expect(rows.filter((r) => r.name !== "ANTHROPIC_API_KEY").every((r) => r.status === "match")).toBe(true);
   });
 
-  it("reports remote-missing when local has it but production doesn't -- the exact 2026-08-17 Sentry shape (set locally, never reached the deploy)", () => {
+  it("reports remote_missing when local has it but production doesn't -- the exact 2026-08-17 Sentry shape (set locally, never reached the deploy)", () => {
     const local = computeFingerprints(() => "value-set-locally-long-enough-for-this-test");
     const remote = computeFingerprints(() => undefined);
     const rows = diffFingerprints(local, remote);
-    expect(rows.every((r) => r.status === "remote-missing")).toBe(true);
+    expect(rows.every((r) => r.status === "remote_missing" && isDriftProblem(r.status))).toBe(true);
   });
 
-  it("reports local-missing when production has it but the local .env doesn't", () => {
+  it("THE DISGUISED CASE: a variable declared expected-per-environment that is actually absent in production must still fail loudly, not be silently treated as 'differs by design'", () => {
+    const local = computeFingerprints((name) => (name === "ANTHROPIC_API_KEY" ? "papertrader-dev-value-long-enough" : "shared-value-long-enough"));
+    const remote = computeFingerprints((name) => (name === "ANTHROPIC_API_KEY" ? undefined : "shared-value-long-enough"));
+    const rows = diffFingerprints(local, remote);
+    const row = rows.find((r) => r.name === "ANTHROPIC_API_KEY")!;
+    // Must NOT be "expected_divergent" just because this var is normally
+    // allowed to differ -- absence is a different axis from value
+    // inequality, and expected-per-environment status must never suppress it.
+    expect(row.status).toBe("remote_missing");
+    expect(isDriftProblem(row.status)).toBe(true);
+  });
+
+  it("reports local_missing when production has it but the local .env doesn't", () => {
     const local = computeFingerprints(() => undefined);
     const remote = computeFingerprints(() => "value-set-only-in-production-long-enough");
     const rows = diffFingerprints(local, remote);
-    expect(rows.every((r) => r.status === "local-missing")).toBe(true);
+    expect(rows.every((r) => r.status === "local_missing" && isDriftProblem(r.status))).toBe(true);
   });
 
-  it("reports both-missing (not a false mismatch) when neither side has it configured", () => {
+  it("reports both_missing (flagged as a problem, not silently passed -- these are required secrets, not optional features) when neither side has it configured", () => {
     const local = computeFingerprints(() => undefined);
     const remote = computeFingerprints(() => undefined);
     const rows = diffFingerprints(local, remote);
-    expect(rows.every((r) => r.status === "both-missing")).toBe(true);
+    expect(rows.every((r) => r.status === "both_missing" && isDriftProblem(r.status))).toBe(true);
+  });
+});
+
+describe("isExpectedPerEnvironment", () => {
+  it("is true only for the declared allowlist entry, false for everything else -- default is strict", () => {
+    expect(isExpectedPerEnvironment("ANTHROPIC_API_KEY")).toBe(true);
+    for (const name of FINGERPRINTED_ENV_VARS) {
+      if (name === "ANTHROPIC_API_KEY") continue;
+      expect(isExpectedPerEnvironment(name)).toBe(false);
+    }
   });
 });

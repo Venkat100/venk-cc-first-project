@@ -62,6 +62,52 @@ export const FINGERPRINTED_ENV_VARS = ["ANTHROPIC_API_KEY", "CRON_SECRET", "SUPA
 
 export type FingerprintedVar = (typeof FINGERPRINTED_ENV_VARS)[number];
 
+/**
+ * DECLARING EXPECTED DIVERGENCE (2026-08-19) — closes the flaw a real run
+ * would have surfaced immediately: ANTHROPIC_API_KEY is now deliberately
+ * per-environment (papertrader-dev locally, papertrader-prod in Vercel —
+ * the whole point of splitting dev/prod spend). Without this list, that
+ * intentional split reports as a permanent "mismatch" on every single run,
+ * forever — the exact "detector drowned in its own noise" shape as the
+ * badly-written per-script flakiness trigger earlier in this project
+ * (PLAN.md §6d): a signal that fires constantly for a known-fine reason
+ * trains the reader to stop looking at it, so the one time it fires for a
+ * REAL reason, it scrolls past unnoticed.
+ *
+ * Deliberately an ALLOWLIST of exceptions, not a manifest of every
+ * variable's expected relationship (an earlier assessment — HANDOFF.md,
+ * 2026-08-17 — already rejected a manifest-of-expected-VALUES for exactly
+ * this "someone has to remember to update it" reason). The two are not
+ * the same shape, and the difference is why this one is safe:
+ *
+ *   - A value-manifest goes stale on every key ROTATION (frequent —
+ *     happens any time a secret is regenerated for routine hygiene) and
+ *     the person rotating a key has no particular reason to also be
+ *     touching a manifest file.
+ *   - THIS list only changes when someone makes a deliberate ARCHITECTURE
+ *     decision to scope a credential per-environment instead of sharing
+ *     one across them (rare — it's happened exactly once, today,
+ *     deciding to split Anthropic spend). The person making that call is
+ *     necessarily editing code/config to set it up in the first place;
+ *     adding a line here is naturally part of the SAME change, not a
+ *     separate thing to remember afterward the way updating a stale-value
+ *     manifest is.
+ *
+ * The default direction also matters more than the mechanism: any
+ * variable NOT listed here defaults to "expected to match." Getting the
+ * classification wrong is asymmetric — an unlisted var that's actually
+ * fine being per-environment produces a false alarm (annoying, safe,
+ * self-correcting the first time someone investigates it and adds it
+ * here); a var wrongly listed here as expected-divergent would silently
+ * swallow real drift. Keeping this list short, explicit, and defaulting
+ * to strict is what keeps that second failure mode rare.
+ */
+const EXPECTED_PER_ENVIRONMENT_VARS: ReadonlySet<FingerprintedVar> = new Set(["ANTHROPIC_API_KEY"]);
+
+export function isExpectedPerEnvironment(name: FingerprintedVar): boolean {
+  return EXPECTED_PER_ENVIRONMENT_VARS.has(name);
+}
+
 /** Unsalted SHA-256, first 8 hex chars — see this module's header for why
  *  that's the right, and sufficient, choice here. Returns null for an
  *  unset value so "not configured" and "configured, hash starts with a
@@ -84,20 +130,42 @@ export function computeFingerprints(readEnv: (name: string) => string | undefine
   return out;
 }
 
-export type FingerprintDiffStatus = "match" | "mismatch" | "local-missing" | "remote-missing" | "both-missing";
+export type FingerprintDiffStatus = "match" | "expected_divergent" | "unexpected_mismatch" | "local_missing" | "remote_missing" | "both_missing";
 export type FingerprintDiffRow = { name: FingerprintedVar; status: FingerprintDiffStatus; local: string | null; remote: string | null };
 
-/** Pure comparison — no network here, so it's cheaply unit-testable
- *  separately from check-config-fingerprint.ts's actual HTTP fetch. */
+/**
+ * Pure comparison — no network here, so it's cheaply unit-testable
+ * separately from check-config-fingerprint.ts's actual HTTP fetch.
+ *
+ * PRESENCE and VALUE-EQUALITY are deliberately separate axes.
+ * `isExpectedPerEnvironment()` is consulted ONLY when both sides have a
+ * value and it needs deciding whether a DIFFERENCE is fine — it must
+ * never affect whether ABSENCE is fine. A variable declared
+ * expected-per-environment that's missing on one side is NOT "differing
+ * as designed," it's the Sentry incident (HANDOFF.md, 2026-08-17) wearing
+ * a disguise: something that's supposed to be configured, isn't, and a
+ * classification meant to suppress a known-fine VALUE difference must
+ * never be allowed to also suppress a genuine ABSENCE. `remote_missing`
+ * (and every other missing/both-missing shape) is always reported as a
+ * problem, unconditionally.
+ */
 export function diffFingerprints(local: FingerprintMap, remote: FingerprintMap): FingerprintDiffRow[] {
   return FINGERPRINTED_ENV_VARS.map((name) => {
     const l = local[name] ?? null;
     const r = remote[name] ?? null;
     let status: FingerprintDiffStatus;
-    if (l === null && r === null) status = "both-missing";
-    else if (l === null) status = "local-missing";
-    else if (r === null) status = "remote-missing";
-    else status = l === r ? "match" : "mismatch";
+    if (l === null && r === null) status = "both_missing";
+    else if (l === null) status = "local_missing";
+    else if (r === null) status = "remote_missing";
+    else if (l === r) status = "match";
+    else status = isExpectedPerEnvironment(name) ? "expected_divergent" : "unexpected_mismatch";
     return { name, status, local: l, remote: r };
   });
+}
+
+/** The only two statuses that represent "nothing to do here." Every other
+ *  status — including `expected_divergent`'s missing-on-one-side cousins
+ *  — is a problem worth a human's attention. */
+export function isDriftProblem(status: FingerprintDiffStatus): boolean {
+  return status !== "match" && status !== "expected_divergent";
 }
