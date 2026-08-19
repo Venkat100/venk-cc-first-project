@@ -62,6 +62,14 @@ export default {
         const { handleAgentWatchdogRequest } = await import("./lib/agent/cron.server");
         return await handleAgentWatchdogRequest(request);
       }
+      // Daily market brief (2026-08-19): moved OUT of agent-thinker's own
+      // request (see lib/insights/cron.server.ts's header for the incident)
+      // onto its own GitHub Actions schedule, same reason watchdog is here
+      // instead of a third Vercel cron slot Hobby doesn't have.
+      if (pathname === "/api/cron/agent-brief") {
+        const { handleDailyBriefRequest } = await import("./lib/insights/cron.server");
+        return await handleDailyBriefRequest(request);
+      }
       // Token-protected health check (Phase A3): DB reachable, market-data
       // pipeline reachable, and the two daily crons' last-run freshness.
       // Same CRON_SECRET auth as the endpoints above. Dynamic import for

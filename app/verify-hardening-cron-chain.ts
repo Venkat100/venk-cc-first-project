@@ -3,13 +3,15 @@
 // full split rationale and PLAN.md §6c for the assertion mapping).
 //
 // THIS SCRIPT runs the real daily cron chain end-to-end, in real production
-// order: agent-thinker cron (thinker, then briefs), then snapshot cron
-// (expiry, interest, margin, snapshot). It contains BOTH functions that
-// have ever caused a step timeout in this suite's history
-// (runMarginMonitor and runSnapshots) — isolating it means a timeout here
-// no longer drags down 5 unrelated scenarios' worth of re-running.
-// Self-contained: seeds its own margin-enabled, agent-funded account with a
-// stock position.
+// order: agent-thinker cron (thinker only), then the daily-brief job
+// (separate GitHub Actions schedule as of 2026-08-19 — see
+// lib/insights/cron.server.ts's header for why briefs no longer run inside
+// agent-thinker), then snapshot cron (expiry, interest, margin, snapshot).
+// It contains BOTH functions that have ever caused a step timeout in this
+// suite's history (runMarginMonitor and runSnapshots) — isolating it means
+// a timeout here no longer drags down 5 unrelated scenarios' worth of
+// re-running. Self-contained: seeds its own margin-enabled, agent-funded
+// account with a stock position.
 //
 // SAFETY NOTE on cron-chain isolation proof: the batch cron functions
 // (runMarginMonitor/runThinkerForAllAgents/runDailyBriefs) only accept a
@@ -116,10 +118,12 @@ async function main() {
   // ══════════════════════════════════════════════════════════════════════
   console.log("\n████ Run the real daily cron chain end-to-end (agent-thinker cron, then snapshot cron) ████");
 
-  // Mirrors /api/cron/agent-thinker's real handler composition (order: thinker, then briefs).
-  console.log("  -- agent-thinker cron (21:30 UTC in prod) --");
+  // Mirrors /api/cron/agent-thinker's real handler composition (thinker only, as of 2026-08-19).
+  console.log("  -- agent-thinker cron (21:30 UTC in prod, Vercel Cron) --");
   const thinkerBatch = await step("runThinkerForAllAgents({onlyUserId})", 120000, () => runThinkerForAllAgents({ onlyUserId: uid }));
   console.log(`     thinker batch: eligible=${thinkerBatch.eligible} processed=${thinkerBatch.processed} trades=${thinkerBatch.tradesTotal}`);
+  // Mirrors /api/cron/agent-brief's real handler (separate GitHub Actions schedule, 22:00 UTC in prod).
+  console.log("  -- daily-brief job (22:00 UTC in prod, GitHub Actions) --");
   const briefsSummary = await step("runDailyBriefs({onlyUserIds:[uid]})", 45000, () => runDailyBriefs({ onlyUserIds: [uid] }).catch((e) => ({ error: e instanceof Error ? e.message : "brief failed" })));
   console.log(`     briefs: ${JSON.stringify(briefsSummary).slice(0, 200)}`);
 

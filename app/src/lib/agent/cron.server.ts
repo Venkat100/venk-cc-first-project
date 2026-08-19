@@ -28,11 +28,37 @@
 //     keeps every Finnhub call under the cap and resilient (a stuck/failing
 //     symbol is skipped, never hangs or aborts the batch).
 // Next lever if needed: a durable Postgres price_cache (deferred since Phase 5).
+//
+// 2026-08-19 INCIDENT (HANDOFF.md — full writeup there): this endpoint used
+// to ALSO run the daily market brief (runDailyBriefs) after the thinker
+// batch, then write the "agent-thinker" heartbeat last. Vercel Hobby's
+// function duration cap — 300 seconds, confirmed via the real runtime log
+// AND Vercel's own docs to be the plan's hard maximum, not a config left
+// too low — was being hit during the brief loop, after the thinker batch
+// itself had already finished. Two consequences, both fixed here:
+//   1. The heartbeat, sitting after BOTH jobs, went stale even on days the
+//      thinker batch itself completed cleanly — a false "the agent isn't
+//      running" signal pointing at the wrong job.
+//   2. The brief loop is per-user, not atomic — a kill mid-loop meant SOME
+//      real users got their brief and others didn't, silently, no error
+//      anywhere. Worse: the loop order was NOT shuffled, so the users at
+//      the end of a stable query order were ALWAYS the ones cut, every
+//      time the budget ran short — not "some users occasionally miss out,"
+//      but "these specific users lose out systematically."
+// Fixed: the daily brief now runs entirely separately, on its own GitHub
+// Actions schedule (lib/insights/cron.server.ts — the SAME pattern the
+// watchdog already uses, for the same reason: take it out of the shared
+// Vercel budget entirely, at zero additional cost). This endpoint now ONLY
+// runs the thinker batch, writes ITS OWN heartbeat immediately after ITS
+// OWN work completes (never gated behind an unrelated job again — see
+// batchUtils.ts's header for the general principle), and shuffles + bounds
+// concurrency so a future budget squeeze (a much larger user base) doesn't
+// silently reproduce the same "always the same people" unfairness.
 
 import { serverEnv } from "@/lib/marketData/env.server";
 import { providerQuotes, fhMetrics } from "@/lib/marketData/finnhub.server";
 import { getServiceClient } from "@/lib/supabase/admin.server";
-import { runDailyBriefs } from "@/lib/insights/insights.server";
+import { shuffle, mapWithConcurrency } from "./batchUtils";
 import { prefetchUniverse, type UniverseData } from "./quant.server";
 import { runThinker } from "./thinker.server";
 import { runWatchdog, type WatchdogSources } from "./watchdog.server";
@@ -75,12 +101,41 @@ export type ThinkerBatchSummary = {
   errors: string[];
 };
 
+// Bounded concurrency for the per-agent thinker loop (2026-08-19 incident —
+// see this file's header). Justified against all three real ceilings that
+// apply, not assumed:
+//   - Claude: even the lowest published tier (platform.claude.com/docs/en/
+//     api/rate-limits, checked 2026-08-19) is 1,000 requests/minute for the
+//     Sonnet family. 5 concurrent agent calls is <0.5% of that floor —
+//     effectively unconstrained at this scale.
+//   - Finnhub, via our OWN global limiter (lib/marketData/ratelimit.server.ts
+//     -- new RateLimiter(50, 6) in finnhub.server.ts): 50 starts/60s window,
+//     6 concurrent in flight, process-wide. The universe scan is ONE shared
+//     prefetch, not per-agent, so concurrency here only affects the rare
+//     per-agent "held symbol missing from the scan" fallback fetch. Worst
+//     case — every one of 5 concurrent agents needing that fallback at once
+//     — is 5 concurrent Finnhub requests, still under the limiter's own
+//     6-concurrent cap, leaving 1 slot of headroom for whatever else in the
+//     process (watchdog, insights) might be running at the same moment.
+//   - Our own per-user abuse guard (lib/rateLimit/check.server.ts's
+//     RATE_LIMITS.agentRun, 3/5min, 20/day): does NOT apply here at all —
+//     it's called only from the manual "Run agent now" button
+//     (lib/agent/functions.ts); grep this file, it's never called from the
+//     cron path, by design (the system's own scheduled action isn't a
+//     per-user abuse case). Not a constraint, but worth stating precisely
+//     rather than leaving which limiter applies ambiguous.
+// 5 is therefore chosen for real, measured wall-clock benefit (roughly a
+// 5x reduction versus fully sequential, see HANDOFF.md's before/after
+// timing) while sitting comfortably under the one ceiling that's actually
+// close enough to matter (Finnhub's concurrency cap), not for headroom
+// that was never at risk (Claude).
+const THINKER_CONCURRENCY = 5;
+
 // `onlyUserId` scopes the batch to one agent (on-demand / verification); omitted
 // in production so the cron runs every eligible agent (BOTH modes — the thinker
 // auto-trades autonomous agents and proposes for approve-mode agents).
 export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUserIds?: string[]; prefetch?: UniverseData } = {}): Promise<ThinkerBatchSummary> {
   const admin = getServiceClient();
-  const errors: string[] = [];
   let q = admin.from("agent_config").select("user_id").eq("enabled", true).gt("agent_cash", 0);
   if (opts.onlyUserId) q = q.eq("user_id", opts.onlyUserId);
   if (opts.onlyUserIds) q = q.in("user_id", opts.onlyUserIds);
@@ -91,10 +146,14 @@ export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUs
   // reuse it — instead of every agent re-fetching the same ~12 symbols.
   const prefetch = (cfgs ?? []).length ? opts.prefetch ?? (await prefetchUniverse()) : undefined;
 
-  const results: ThinkerBatchSummary["results"] = [];
-  let tradesTotal = 0;
-  let proposalsTotal = 0;
-  for (const c of cfgs ?? []) {
+  // Fair-by-construction (2026-08-19 incident): a stable, unshuffled query
+  // order meant that under budget pressure, the SAME agents (whoever's
+  // last) always paid the cost. Shuffling the queue before processing means
+  // that if a future run is ever cut short, the cost lands on a different
+  // set of users each time, not systematically on the same two people.
+  const order = shuffle(cfgs ?? []);
+
+  const results = await mapWithConcurrency(order, THINKER_CONCURRENCY, async (c): Promise<ThinkerBatchSummary["results"][number]> => {
     try {
       const r = await runThinker(c.user_id, { prefetch });
       // issue #40: this was the ONLY gap — the manual "Run agent now" button
@@ -104,15 +163,16 @@ export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUs
       // cost dashboard was silently blind to the majority of real spend.
       void track("agent_run", { userId: c.user_id, properties: { ran: r.ran, aiUsed: r.aiUsed, source: "cron" } });
       const trades = r.executed?.length ?? 0;
-      tradesTotal += trades;
-      if (r.proposed) proposalsTotal += 1;
-      results.push({ userId: c.user_id, ran: r.ran, trades, proposed: r.proposed, reason: r.ran ? undefined : r.reason });
+      return { userId: c.user_id, ran: r.ran, trades, proposed: r.proposed, reason: r.ran ? undefined : r.reason };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "thinker failed";
-      errors.push(`${c.user_id}: ${msg}`);
-      results.push({ userId: c.user_id, ran: false, error: msg });
+      return { userId: c.user_id, ran: false, error: msg };
     }
-  }
+  });
+
+  const errors = results.filter((r) => r.error).map((r) => `${r.userId}: ${r.error}`);
+  const tradesTotal = results.reduce((sum, r) => sum + (r.trades ?? 0), 0);
+  const proposalsTotal = results.filter((r) => r.proposed).length;
   return { ranAt: new Date().toISOString(), eligible: (cfgs ?? []).length, processed: results.filter((r) => r.ran).length, tradesTotal, proposalsTotal, results, errors };
 }
 
@@ -198,15 +258,6 @@ export async function handleAgentThinkerRequest(request: Request): Promise<Respo
   if (denied) return denied;
   try {
     const summary = await runThinkerForAllAgents();
-    // Fold the daily AI "market brief" into this same daily cron run (Vercel
-    // Hobby caps us at 2 crons and both slots are used). It's independent of the
-    // agent loop — a failure here must not fail the thinker result.
-    let briefs;
-    try {
-      briefs = await runDailyBriefs();
-    } catch (e) {
-      briefs = { error: e instanceof Error ? e.message : "brief job failed" };
-    }
     // AWAITED (audit finding, 2026-08-16): a fire-and-forget `void` write here
     // was silently lost on most invocations — the serverless function can be
     // frozen/torn down right after `return` fires, before an un-awaited
@@ -214,8 +265,14 @@ export async function handleAgentThinkerRequest(request: Request): Promise<Respo
     // stale for 5 days while the underlying cron ran correctly every single
     // day (confirmed via real `agent_decisions` rows) — a false "stale" signal
     // on /api/health, not a real outage. See AGENT-AUDIT.md Part 1.
+    //
+    // WRITTEN IMMEDIATELY after the ONE thing this heartbeat names, per this
+    // file's 2026-08-19 header — the daily brief used to run here too,
+    // between the thinker batch and this write; it's now a fully separate
+    // job (lib/insights/cron.server.ts) with its own heartbeat, so nothing
+    // unrelated can delay or block this one again.
     await recordHeartbeat("agent-thinker", "ok", { eligible: summary.eligible, processed: summary.processed });
-    return json({ ok: true, summary, briefs }, 200);
+    return json({ ok: true, summary }, 200);
   } catch (e) {
     await recordHeartbeat("agent-thinker", "error", { error: e instanceof Error ? e.message : String(e) });
     return json({ ok: false, error: e instanceof Error ? e.message : "Agent thinker batch failed." }, 500);
@@ -227,6 +284,13 @@ export async function handleAgentWatchdogRequest(request: Request): Promise<Resp
   if (denied) return denied;
   try {
     const summary = await runWatchdogForAllAgents();
+    // Heartbeat added 2026-08-19 (AGENT-AUDIT.md Part 8 backlog item, folded
+    // in while fixing agent-thinker's own heartbeat bug) — the watchdog
+    // previously had none at all, the same blindness by construction this
+    // whole incident was about. Written even on a market-closed no-op
+    // (below) — that IS the watchdog endpoint successfully doing its job for
+    // that invocation, not a failure to report on.
+    await recordHeartbeat("agent-watchdog", "ok", { eligible: summary.eligible, processed: summary.processed, marketOpen: summary.marketOpen });
     // M1: also run the margin monitor on this INTRADAY cadence (GitHub
     // Actions, every 30m during market hours), not just the once-daily
     // snapshot cron — prices move intraday, so a mid-day drop can push a
@@ -249,6 +313,7 @@ export async function handleAgentWatchdogRequest(request: Request): Promise<Resp
     }
     return json({ ok: true, summary, margin }, 200);
   } catch (e) {
+    await recordHeartbeat("agent-watchdog", "error", { error: e instanceof Error ? e.message : String(e) });
     return json({ ok: false, error: e instanceof Error ? e.message : "Agent watchdog batch failed." }, 500);
   }
 }

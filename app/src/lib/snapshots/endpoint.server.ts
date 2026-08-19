@@ -7,9 +7,12 @@
 //
 // This is the one daily "money maintenance" cron — Vercel Hobby caps us at 2
 // crons and both slots are already used (this one + agent-thinker), so every
-// daily batch job folds in HERE rather than getting its own, exactly like
-// the AI daily-brief job folds into the agent-thinker cron. ORDER MATTERS,
-// each step feeding the next:
+// MONEY-RELATED daily batch job folds in HERE rather than getting its own.
+// (The AI daily-brief job USED to fold into agent-thinker too, sharing ITS
+// Vercel budget with 13 agents' worth of Claude calls — that combination is
+// what caused the 2026-08-19 incident; the brief now runs entirely on its
+// own GitHub Actions schedule instead. See lib/insights/cron.server.ts's
+// header for the full story.) ORDER MATTERS, each step feeding the next:
 //   1. O4 option expiration (cash settlement) — positions_value must reflect
 //      today's settlements before anything below prices it.
 //   2. M1 margin interest accrual — the day's interest is added to the loan
@@ -28,6 +31,12 @@
 //   8. cron_heartbeats upsert (A3) — LAST, deliberately: it must reflect
 //      whether THIS run succeeded or failed, so it has to run after
 //      snapshotResult is known either way (see the ok/error branches below).
+//   9. Cross-job staleness check (2026-08-19) — AFTER this job's own
+//      heartbeat write, deliberately: this is the one job on record with a
+//      100% reliable daily heartbeat, so it's the right place to piggyback
+//      "is anything ELSE stale" rather than adding a fourth scheduler whose
+//      own reliability would need watching. Reports through Sentry, never
+//      throws — see staleness.server.ts.
 // Each step is isolated in its own try/catch — a failure in any one must
 // never block the ones after it (most importantly, snapshots always run).
 
@@ -40,6 +49,7 @@ import { runRateLimitPrune } from "@/lib/rateLimit/prune.server";
 import { runAnalyticsPrune } from "@/lib/analytics/prune.server";
 import { runSnapshots } from "./writer.server";
 import { recordHeartbeat } from "@/lib/health/heartbeat.server";
+import { checkStaleHeartbeats } from "@/lib/health/staleness.server";
 
 function json(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -115,8 +125,10 @@ export async function handleSnapshotRequest(request: Request): Promise<Response>
   // risk regardless of which invocation currently gets lucky.
   if (snapshotResult.ok) {
     await recordHeartbeat("snapshot", "ok", { summary: snapshotResult.summary });
-    return json({ ok: true, summary: snapshotResult.summary, expiry, interest, margin, priceCachePrune, rateLimitPrune, analyticsPrune }, 200);
+    const staleJobs = await checkStaleHeartbeats();
+    return json({ ok: true, summary: snapshotResult.summary, expiry, interest, margin, priceCachePrune, rateLimitPrune, analyticsPrune, staleJobs }, 200);
   }
   await recordHeartbeat("snapshot", "error", { error: snapshotResult.error });
-  return json({ ok: false, error: snapshotResult.error, expiry, interest, margin, priceCachePrune, rateLimitPrune, analyticsPrune }, 500);
+  const staleJobs = await checkStaleHeartbeats();
+  return json({ ok: false, error: snapshotResult.error, expiry, interest, margin, priceCachePrune, rateLimitPrune, analyticsPrune, staleJobs }, 500);
 }

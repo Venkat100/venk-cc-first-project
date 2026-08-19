@@ -28,9 +28,27 @@ export async function getStockInsightStatus(symbol: string): Promise<InsightStat
   return { exists: res.exists, generatedAt: res.generatedAt };
 }
 
-export type TodaysBrief = { brief: MarketBrief; createdAt: string } | null;
+/**
+ * `isToday` closes a real incident (2026-08-19 — HANDOFF.md): the query
+ * below always returns the MOST RECENT brief row, which is correct when a
+ * fresh one exists but silently returns a STALE one when today's cron run
+ * didn't reach this user before its time budget ran out — real gap dates
+ * for real users, confirmed live. Without `isToday`, MarketBriefCard had no
+ * way to tell "here's today's brief" from "here's the most recent one we
+ * have, which isn't today's" apart from an 11px footer date easy to miss
+ * under a card titled "Today's market brief" regardless — the same failure
+ * shape as an insight rendering the wrong instant, just for a whole day's
+ * analysis instead of a timestamp. `created_at` is a genuine Postgres
+ * `date` column (a CALENDAR DATE, not an instant) written using the
+ * server's own UTC day boundary (insights.server.ts's `today()`) — compared
+ * here the same way, UTC, not the viewer's local date, so this can't
+ * disagree with the server about which day "today" is the way a
+ * local-zone comparison could near a day boundary.
+ */
+export type TodaysBrief = { brief: MarketBrief; createdAt: string; isToday: boolean } | null;
 
-/** The signed-in user's most recent daily market brief (RLS → own rows). */
+/** The signed-in user's most recent daily market brief (RLS → own rows) —
+ *  NOT necessarily today's; see `isToday`. */
 export async function getTodaysBrief(): Promise<TodaysBrief> {
   const { data, error } = await supabase
     .from("insights")
@@ -41,7 +59,8 @@ export async function getTodaysBrief(): Promise<TodaysBrief> {
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  return { brief: data.payload as MarketBrief, createdAt: data.created_at };
+  const isToday = data.created_at === new Date().toISOString().slice(0, 10);
+  return { brief: data.payload as MarketBrief, createdAt: data.created_at, isToday };
 }
 
 export type { StockInsight, MarketBrief } from "./types";

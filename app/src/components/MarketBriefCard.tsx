@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Newspaper, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { Newspaper, ChevronLeft, ChevronRight, ExternalLink, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/DataStates";
@@ -60,7 +60,10 @@ export function MarketBriefCard({ hasTracked }: { hasTracked: boolean }) {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-base">
-            <Newspaper className="h-4 w-4 text-[color:var(--color-primary)]" /> Today's market brief
+            {/* Never claims "today's" for a brief that isn't — see
+               lib/insights/api.ts's TodaysBrief.isToday header for the
+               2026-08-19 incident this fixes. */}
+            <Newspaper className="h-4 w-4 text-[color:var(--color-primary)]" /> {briefQ.data && !briefQ.data.isToday ? "Market brief" : "Today's market brief"}
           </CardTitle>
           {showArrows && (
             <div className="flex items-center gap-1">
@@ -90,7 +93,7 @@ export function MarketBriefCard({ hasTracked }: { hasTracked: boolean }) {
         ) : briefQ.isError ? (
           <ErrorState message="Couldn't load your brief right now." />
         ) : briefQ.data ? (
-          <BriefBody brief={briefQ.data.brief} createdAt={briefQ.data.createdAt} activeIndex={activeIndex} animate={showControls} />
+          <BriefBody brief={briefQ.data.brief} createdAt={briefQ.data.createdAt} isToday={briefQ.data.isToday} activeIndex={activeIndex} animate={showControls} />
         ) : (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
@@ -106,10 +109,22 @@ export function MarketBriefCard({ hasTracked }: { hasTracked: boolean }) {
   );
 }
 
-function BriefBody({ brief, createdAt, activeIndex, animate }: { brief: MarketBrief; createdAt: string; activeIndex: number; animate: boolean }) {
+function BriefBody({ brief, createdAt, isToday, activeIndex, animate }: { brief: MarketBrief; createdAt: string; isToday: boolean; activeIndex: number; animate: boolean }) {
   const item = brief.items?.[activeIndex];
   return (
     <div className="space-y-3">
+      {/* Never let a stale brief pass as current — this must be impossible
+         to miss, not a small footer date under a title that still says
+         "Today's." A missing brief and a stale one shown as current are
+         different failures; this line is what keeps them distinguishable. */}
+      {!isToday && (
+        <div className="flex items-start gap-2 rounded-lg border border-[color:var(--color-warning,#b45309)]/40 bg-[color:var(--color-warning,#b45309)]/10 px-3 py-2 text-xs text-foreground">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--color-warning,#d97706)]" />
+          <span>
+            Today's brief isn't ready yet — showing the most recent one, from <span className="font-medium">{formatCalendarDate(createdAt, { month: "short", day: "numeric" })}</span>.
+          </span>
+        </div>
+      )}
       <p className="text-sm font-medium leading-relaxed">{brief.headline_takeaway}</p>
 
       {item && (

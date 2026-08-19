@@ -1,0 +1,69 @@
+# Daily AI market brief — moved OFF Vercel Cron (2026-08-19). See
+# app/src/lib/insights/cron.server.ts's header for the full incident this
+# fixes: this job used to share a 300-second Vercel Hobby function budget
+# with the agent-thinker batch, and silently missed specific real users on
+# the days that budget ran out. Same "take it off the shared Vercel budget
+# entirely" pattern agent-watchdog.yml already uses, for the same reason —
+# Vercel Hobby caps a project at 2 daily crons and both slots are already
+# spoken for (agent-thinker, snapshot).
+#
+# GITHUB ACTIONS HAS ITS OWN FAILURE MODES — handled, not ignored:
+#   - Scheduled workflows are AUTOMATICALLY DISABLED after 60 days with no
+#     repository activity (a push/commit). Mitigation: this job writes a
+#     "daily-brief" heartbeat (cron_heartbeats) on every real invocation,
+#     wired into the SAME staleness check the snapshot cron runs (Sentry
+#     alert on breach — see lib/health/staleness.server.ts). If GitHub ever
+#     silently disables this workflow, the heartbeat simply stops updating
+#     and the SAME alert fires — no separate mitigation needed, since
+#     "disabled" and "delayed" both look identical from the heartbeat's
+#     point of view: it just stops moving.
+#   - Scheduled runs CAN be delayed under GitHub's own platform load —
+#     GitHub's docs explicitly say cron timing isn't guaranteed. The
+#     staleness threshold for this job (see staleness.server.ts) is
+#     deliberately more generous than the Vercel-cron jobs' own threshold
+#     to absorb a normal delay without a false alarm, while still catching
+#     a genuine multi-day miss.
+#
+# ── ONE-TIME SETUP ──
+# Reuses the SAME two repository secrets agent-watchdog.yml already needs
+# (Settings → Secrets and variables → Actions) — nothing new to add if that
+# workflow is already configured:
+#   • CRON_SECRET    — the SAME value as CRON_SECRET in Vercel.
+#   • AGENT_BASE_URL — prod base URL, no trailing slash, e.g.
+#                      https://venk-cc-first-project.vercel.app
+name: Daily Market Brief
+
+on:
+  schedule:
+    # Once daily, 22:00 UTC — after agent-thinker's own 21:30 UTC Vercel
+    # Cron run, so the two don't contend for the same process's Finnhub
+    # rate-limit window at the same moment. No other dependency between
+    # them — the brief reads real personal holdings/watchlist, not agent
+    # state, so this spacing is about being a considerate neighbor, not a
+    # correctness requirement.
+    - cron: "0 22 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  run-daily-brief:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger production daily brief endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          AGENT_BASE_URL: ${{ secrets.AGENT_BASE_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ] || [ -z "$AGENT_BASE_URL" ]; then
+            echo "::error::Missing CRON_SECRET and/or AGENT_BASE_URL repository secrets."
+            exit 1
+          fi
+          http_code=$(curl -sS -o /tmp/brief.json -w "%{http_code}" \
+            -X POST "$AGENT_BASE_URL/api/cron/agent-brief" \
+            -H "Authorization: Bearer $CRON_SECRET")
+          echo "HTTP $http_code"
+          cat /tmp/brief.json || true
+          echo ""
+          case "$http_code" in
+            2*) echo "Daily brief run OK." ;;
+            *) echo "::error::Daily brief run failed (HTTP $http_code)."; exit 1 ;;
+          esac
