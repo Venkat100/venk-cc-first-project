@@ -1,12 +1,20 @@
-// One-shot capacity-measurement script for the 2026-08-19 incident's
-// follow-up (HANDOFF.md — full writeup there). runDailyBriefs() runs a
-// plain sequential per-user loop (no concurrency at all — it was never
-// touched by the thinker's shuffle+bounded-concurrency fix) and, since
-// 2026-08-19, executes as its OWN Vercel serverless function
-// (/api/cron/agent-brief, triggered by GitHub Actions) — so it is subject
-// to the SAME 300s Vercel Hobby ceiling as agent-thinker, just no longer
-// SHARING that ceiling with 13 agents' worth of Claude calls. Nobody has
-// measured what ITS ceiling actually is. This does.
+// Before/after capacity-measurement script for the 2026-08-19 incident's
+// follow-up (HANDOFF.md — full writeup there). runDailyBriefs() now runs
+// on its OWN GitHub Actions schedule (/api/cron/agent-brief), subject to
+// the SAME 300s Vercel Hobby ceiling as agent-thinker, just no longer
+// SHARING that ceiling with 13 agents' worth of Claude calls — AND, as of
+// this round, uses the SAME shuffle + bounded-concurrency treatment
+// (batchUtils.ts) already proven on agent-thinker, since it turned out to
+// be the tighter capacity constraint of the two (PLAN.md §6g).
+//
+// BEFORE here means "one user at a time" — calling the real, current
+// `runDailyBriefs({onlyUserIds:[id]})` once per user in a loop, which
+// exercises the exact same per-user Claude+Finnhub logic the old plain
+// sequential loop did. Honest caveat: this re-runs the (cheap) holdings/
+// watchlist read on every call instead of once for the whole batch the
+// way the real original loop did — negligible next to the ~12s/user
+// Claude+Finnhub cost this measurement is actually about, but stated
+// plainly rather than claimed away.
 //
 // DELIBERATELY named without a `verify-` prefix — see
 // thinker-concurrency-timing.ts's header for why (one-time measurement,
@@ -61,16 +69,33 @@ async function main() {
   }
   console.log(`  created ${createdUserIds.length} users with real watchlist symbols`);
 
-  console.log(`\n████ Real runDailyBriefs({onlyUserIds}) — sequential, real Claude + Finnhub calls throughout ████`);
-  const start = Date.now();
+  console.log(`\n████ BEFORE: one user at a time (real runDailyBriefs({onlyUserIds:[id]}) looped) ████`);
+  const beforeStart = Date.now();
+  let beforeWritten = 0;
+  for (const uid of createdUserIds) {
+    console.log(`  [${new Date().toISOString().slice(11, 23)}] -> runDailyBriefs({onlyUserIds:[${uid}]})`);
+    const r = await runDailyBriefs({ onlyUserIds: [uid] });
+    beforeWritten += r.briefsWritten;
+    console.log(`  [${new Date().toISOString().slice(11, 23)}] <- briefsWritten=${r.briefsWritten} errors=${r.errors.length}`);
+  }
+  const beforeMs = Date.now() - beforeStart;
+  console.log(`  BEFORE total: ${beforeMs}ms (${(beforeMs / 1000).toFixed(1)}s) across ${createdUserIds.length} users, ${beforeWritten} briefs written`);
+
+  console.log(`\n████ AFTER: real runDailyBriefs (shuffle + bounded concurrency=5), all users in one batch ████`);
+  const afterStart = Date.now();
   const summary = await runDailyBriefs({ onlyUserIds: createdUserIds });
-  const ms = Date.now() - start;
-  console.log(`  total: ${ms}ms (${(ms / 1000).toFixed(1)}s) for ${summary.usersConsidered} users — briefsWritten=${summary.briefsWritten} skipped=${summary.skipped} errors=${summary.errors.length}`);
-  console.log(`  per-user average: ${(ms / summary.usersConsidered / 1000).toFixed(2)}s`);
-  console.log(`  vs. Vercel Hobby's 300s hard ceiling: ${((ms / 1000 / 300) * 100).toFixed(1)}% of budget used`);
+  const afterMs = Date.now() - afterStart;
+  console.log(`  AFTER total: ${afterMs}ms (${(afterMs / 1000).toFixed(1)}s) for ${summary.usersConsidered} users — briefsWritten=${summary.briefsWritten} skipped=${summary.skipped} errors=${summary.errors.length}`);
+
+  const speedup = beforeMs / afterMs;
+  console.log(`\n████ RESULT ████`);
+  console.log(`  BEFORE (one at a time): ${(beforeMs / 1000).toFixed(1)}s  (${(beforeMs / createdUserIds.length / 1000).toFixed(2)}s/user average)`);
+  console.log(`  AFTER  (concurrency=5): ${(afterMs / 1000).toFixed(1)}s  (${(afterMs / summary.usersConsidered / 1000).toFixed(2)}s/user average)`);
+  console.log(`  speedup: ${speedup.toFixed(2)}x`);
+  console.log(`  AFTER vs. Vercel Hobby's 300s hard ceiling: ${((afterMs / 1000 / 300) * 100).toFixed(1)}% of budget used`);
 
   if (summary.errors.length) {
-    console.log(`  NOTE: ${summary.errors.length} per-user error(s) (isolated, did not abort the batch):`);
+    console.log(`  NOTE: ${summary.errors.length} per-user error(s) in the AFTER run (isolated, did not abort the batch):`);
     for (const e of summary.errors) console.log(`    - ${e}`);
   }
 }

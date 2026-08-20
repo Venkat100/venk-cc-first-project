@@ -32,13 +32,27 @@ function ensureInit(): void {
 /** Never include secrets/tokens/full auth payloads in `context` — only
  *  debug-shaped values (userId, route, action). Returns the Sentry event
  *  id (for tests/verification to look the event up by), or undefined when
- *  Sentry isn't configured (no-op case). */
-export function captureServerError(error: unknown, context: Record<string, unknown> = {}): string | undefined {
+ *  Sentry isn't configured (no-op case).
+ *
+ *  `fingerprint` (2026-08-19 — HANDOFF.md, the recurring-alert incident):
+ *  omit it for the normal case (~20 existing call sites, all genuine
+ *  one-off bugs) and Sentry's default stack-trace-first grouping applies
+ *  unchanged. Pass it ONLY for a call site that represents a RECURRING
+ *  condition rather than a one-off exception (currently: staleness.server.ts)
+ *  — without it, `new Error(...)` thrown from the same line every time
+ *  produces an IDENTICAL stack trace every time, so Sentry's default
+ *  grouping collapses every day's detection into events on one issue,
+ *  and a "new issue" alert rule fires once and goes silent for as long as
+ *  the condition persists. An explicit fingerprint bypasses stack-trace
+ *  grouping entirely, so the caller controls exactly what "the same
+ *  problem" means. */
+export function captureServerError(error: unknown, context: Record<string, unknown> = {}, fingerprint?: string[]): string | undefined {
   ensureInit();
   if (!initialized) return undefined;
   let eventId: string | undefined;
   Sentry.withScope((scope) => {
     for (const [k, v] of Object.entries(context)) scope.setExtra(k, v);
+    if (fingerprint) scope.setFingerprint(fingerprint);
     eventId = Sentry.captureException(error);
   });
   return eventId;

@@ -1,8 +1,10 @@
 // AI Insights — server-only. News-driven, history-aware ANALYSIS (NOT advice).
 //
 // Part 1: getStockInsight(symbol) — on demand, cached per symbol per day.
-// Part 2: runDailyBriefs() — one compact Claude call per active user per day,
-//         folded into the existing daily agent-thinker cron.
+// Part 2: runDailyBriefs() — one compact Claude call per active user per day.
+//         Runs on its OWN GitHub Actions schedule as of 2026-08-19 (see
+//         lib/insights/cron.server.ts's header) — no longer folded into
+//         agent-thinker.
 //
 // Reuses the marketData layer (fhCompanyNews / fhMetrics / providerQuotes, all
 // rate-limited + cached) and the Anthropic pattern from lib/agent/anthropic
@@ -17,6 +19,7 @@ import { agentModel } from "@/lib/agent/anthropic.server";
 import { getMeasuredHistory } from "./eventstudy.server";
 import { checkAndRecordRateLimit, RATE_LIMITS } from "@/lib/rateLimit/check.server";
 import { track } from "@/lib/analytics/track.server";
+import { shuffle, mapWithConcurrency } from "@/lib/agent/batchUtils";
 import type { StockInsight, MarketBrief, MeasuredHistory } from "./types";
 
 // Verification counter: how many Claude calls the insights layer has made.
@@ -261,12 +264,54 @@ function pickArticle(items: { url?: string; source?: string }[]): { url: string;
   return found?.url ? { url: found.url, source: found.source } : undefined;
 }
 
+// Bounded concurrency for the per-user brief loop (2026-08-19 — HANDOFF.md,
+// the SAME incident that fixed agent-thinker's loop, applied here because
+// this job turned out to be the TIGHTER capacity constraint of the two: it
+// had ZERO concurrency until now, and PLAN.md §6g's measurement put its
+// real ceiling at ~24 eligible users — closer to reach than agent-thinker's
+// ~80, on a lower eligibility bar (any watchlist add qualifies).
+//
+// NOT assumed to transfer unexamined from THINKER_CONCURRENCY — this job's
+// per-item profile is genuinely different, and worth stating precisely:
+//   - Claude: same reasoning applies (published floor 1,000 req/min for
+//     Sonnet even at the lowest tier) — 5 concurrent brief generations is
+//     nowhere near that regardless of this job's other differences.
+//   - Finnhub is the real difference. agent-thinker prices its universe
+//     ONCE via a single shared prefetch, so concurrency barely touches
+//     Finnhub at all (only a rare per-agent fallback). This job has NO
+//     shared prefetch — EVERY user's brief independently fires up to
+//     MAX_BRIEF_SYMBOLS+2 = 14 `fhCompanyNews` calls via its own
+//     `Promise.all`. Worst case, 5 concurrent brief generations for users
+//     with fully DISJOINT symbol sets want up to 70 simultaneous Finnhub
+//     requests — far more than agent-thinker's worst case. This is still
+//     SAFE, not merely hoped to be: `RateLimiter.acquire()`
+//     (ratelimit.server.ts) QUEUES past its 6-concurrent cap and its
+//     50/60s window rather than ever rejecting, confirmed by reading its
+//     implementation — excess demand adds wait time, not failures, the
+//     same property agent-thinker's justification relies on. And in
+//     practice, `fhCompanyNews` is cached PER SYMBOL for 60 minutes
+//     (durableCached, finnhub.server.ts), globally, not per-user — real
+//     users' portfolios overlap heavily on popular tickers, so the
+//     worst-case disjoint-symbol scenario above is a stress case, not the
+//     typical one; the FIRST user to touch a popular symbol in a run pays
+//     the live-fetch cost, every user after them that run hits cache.
+//   - Our own per-user abuse guard doesn't apply here either, same as
+//     agent-thinker — this is the system's own scheduled job, not a
+//     per-user manual action.
+// Kept at 5, matching agent-thinker, because the actual bottleneck this
+// job's concurrency helps with is Claude call latency (dominant per the
+// PRE-fix 12.37s/user sequential measurement) and the shared limiter's
+// queuing makes a HIGHER Finnhub worst-case safe rather than a reason to
+// go lower — proven, not assumed, by the real re-measurement in
+// PLAN.md §6g (before/after numbers), not by this reasoning alone.
+const BRIEF_CONCURRENCY = 5;
+
 /** Generate + store today's brief for every user with holdings or a watchlist.
- *  Folded into the daily agent-thinker cron. `onlyUserIds` scopes it (tests). */
+ *  Runs on its own GitHub Actions schedule (lib/insights/cron.server.ts).
+ *  `onlyUserIds` scopes it (tests). */
 export async function runDailyBriefs(opts: { onlyUserIds?: string[] } = {}): Promise<BriefSummary> {
   const admin = getServiceClient();
   const day = today();
-  const errors: string[] = [];
 
   let hq = admin.from("holdings").select("user_id, symbol");
   let wq = admin.from("watchlist").select("user_id, symbol");
@@ -274,9 +319,10 @@ export async function runDailyBriefs(opts: { onlyUserIds?: string[] } = {}): Pro
     hq = hq.in("user_id", opts.onlyUserIds);
     wq = wq.in("user_id", opts.onlyUserIds);
   }
+  const readErrors: string[] = [];
   const [{ data: holds, error: hErr }, { data: watch, error: wErr }] = await Promise.all([hq, wq]);
-  if (hErr) errors.push("read holdings: " + hErr.message);
-  if (wErr) errors.push("read watchlist: " + wErr.message);
+  if (hErr) readErrors.push("read holdings: " + hErr.message);
+  if (wErr) readErrors.push("read watchlist: " + wErr.message);
 
   // Union of tracked symbols per user.
   const bySym = new Map<string, Set<string>>();
@@ -288,13 +334,18 @@ export async function runDailyBriefs(opts: { onlyUserIds?: string[] } = {}): Pro
   for (const h of holds ?? []) add(h.user_id, h.symbol);
   for (const w of watch ?? []) add(w.user_id, w.symbol);
 
-  let briefsWritten = 0;
-  let skipped = 0;
-  for (const [userId, set] of bySym) {
+  // Fair-by-construction (2026-08-19, same fix as agent-thinker's — see
+  // this file's header): `bySym`'s iteration order otherwise follows
+  // Postgres's stable-but-arbitrary row order from the holdings/watchlist
+  // reads above (a `Map` preserves insertion order), so under any future
+  // budget pressure the same users would ALWAYS be the ones cut. Shuffling
+  // before processing spreads that cost across a different set each run.
+  const order = shuffle([...bySym.entries()]);
+
+  const results = await mapWithConcurrency(order, BRIEF_CONCURRENCY, async ([userId, set]): Promise<{ userId: string; written: boolean; skipped: boolean; error?: string }> => {
     const symbols = [...set].slice(0, MAX_BRIEF_SYMBOLS);
     if (symbols.length === 0) {
-      skipped++;
-      continue;
+      return { userId, written: false, skipped: true };
     }
     try {
       // Thin tracked list → also fetch the small market-wide fallback set,
@@ -347,11 +398,15 @@ export async function runDailyBriefs(opts: { onlyUserIds?: string[] } = {}): Pro
       const brief: MarketBrief = { ...parsed, items: [...ownItems, ...marketWideItems] };
 
       await writeInsightRow(admin, { user_id: userId, kind: "brief", symbol: null, payload: brief, created_at: day });
-      briefsWritten++;
+      return { userId, written: true, skipped: false };
     } catch (e) {
-      errors.push(`${userId}: ${e instanceof Error ? e.message : "brief failed"}`);
+      return { userId, written: false, skipped: false, error: e instanceof Error ? e.message : "brief failed" };
     }
-  }
+  });
+
+  const briefsWritten = results.filter((r) => r.written).length;
+  const skipped = results.filter((r) => r.skipped).length;
+  const errors = [...readErrors, ...results.filter((r) => r.error).map((r) => `${r.userId}: ${r.error}`)];
 
   return { day, usersConsidered: bySym.size, briefsWritten, skipped, errors };
 }

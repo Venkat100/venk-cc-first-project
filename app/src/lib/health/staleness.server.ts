@@ -75,6 +75,20 @@ export function findStaleJobs(heartbeats: { job_name: string; last_run_at: strin
   return stale;
 }
 
+/** Pure — the Sentry fingerprint for one job's staleness report on one UTC
+ *  calendar day. Separated from checkStaleHeartbeats so the day-boundary
+ *  behavior itself (different days -> different fingerprint; same day ->
+ *  same fingerprint) is cheaply, directly testable without mocking Sentry
+ *  or the DB. See captureServerError's header for why this exists: without
+ *  an explicit fingerprint, Sentry's default stack-trace-first grouping
+ *  collapses every day's detection of the SAME stale job into events on
+ *  ONE issue, and a "new issue" alert rule fires once then goes silent for
+ *  as long as the condition persists. `now` defaults to real time; pass an
+ *  explicit Date only for tests. */
+export function staleFingerprint(jobName: string, now: Date = new Date()): string[] {
+  return ["staleness", jobName, now.toISOString().slice(0, 10)];
+}
+
 /** Reads real heartbeats, finds stale jobs, and reports each one through
  *  Sentry — never throws (a staleness-alerting bug must never fail the
  *  snapshot cron it rides on), matching heartbeat.server.ts's own
@@ -89,12 +103,16 @@ export async function checkStaleHeartbeats(): Promise<StaleJob[]> {
     }
     const stale = findStaleJobs(data ?? []);
     for (const job of stale) {
-      captureServerError(new Error(`[staleness] cron "${job.jobName}" is stale`), {
-        jobName: job.jobName,
-        lastRunAt: job.lastRunAt,
-        ageHours: job.ageHours !== null ? Math.round(job.ageHours * 10) / 10 : null,
-        staleAfterHours: job.staleAfterHours,
-      });
+      captureServerError(
+        new Error(`[staleness] cron "${job.jobName}" is stale`),
+        {
+          jobName: job.jobName,
+          lastRunAt: job.lastRunAt,
+          ageHours: job.ageHours !== null ? Math.round(job.ageHours * 10) / 10 : null,
+          staleAfterHours: job.staleAfterHours,
+        },
+        staleFingerprint(job.jobName),
+      );
     }
     return stale;
   } catch (e) {
