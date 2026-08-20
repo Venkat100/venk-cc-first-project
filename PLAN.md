@@ -224,6 +224,32 @@ Not proposing a fourth automated layer (Playwright) to close this gap now — th
 
 **Related, non-code, Venky's action (2026-08-17):** set a spend limit at Settings → Billing in the Console as a runaway/abuse brake, sized ~4-5x the trailing-30-day actual, *not* as a budget — the limit is a hard stop that halts all API calls for every user until the next calendar month, which would silently stop the agent and insights. Documented 75%/90% threshold alerts are an Enterprise org-level feature, so do not assume an email warning precedes the cap.
 
+## 6g. WATCHLIST — agent-thinker / daily-brief batch capacity ceilings (CTO, 2026-08-19)
+
+Follow-up to the 2026-08-19 incident (HANDOFF.md — full writeup there): concurrency divided the thinker batch's growth rate, it didn't remove it. Both batch crons run inside a Vercel serverless function subject to Hobby's fixed 300s hard ceiling (confirmed via real runtime log AND Vercel's own docs — cannot be raised on Hobby at all). Deriving where each one actually breaks, from real measurements, not guesses — so we act on a threshold we chose, not on users silently missing trades at 3am.
+
+**Confidence, stated up front: both ceilings below are extrapolated from ONE measurement at ONE scale (13 agents / 15 brief-users), not a curve fit across multiple points.** Two things could make the real ceiling lower than stated: (1) per-agent/per-user time may grow as portfolios/watchlists grow (more holdings → more DB reads, a longer Claude prompt, more news fetches) — these measurements used realistic-but-modest seed data (2 watchlist symbols/user; agents traded against the real live universe), not stress-sized ones; (2) small-N pool effects (worker-pool fill/drain overhead) are proportionally larger at N=13-15 than they'll be at N=50-80, which if anything makes the real ceiling a bit HIGHER than the linear extrapolation below — the two effects pull in opposite directions and neither has been isolated. Re-measure (`thinker-concurrency-timing.ts` / `brief-capacity-timing.ts`, both kept in the repo, both deliberately off the `verify-*.ts` suite glob since each costs ~15-30 real Claude+Finnhub calls) whenever either trigger below fires, rather than trusting the extrapolation at the moment of action.
+
+**agent-thinker (concurrency=5, shuffled queue):**
+- Measured: 13 agents (today's real eligible-agent count) → 48.0s wall-clock, 16.0% of the 300s budget. Effective throughput: 3.692s of budget consumed per additional agent (48.0s / 13).
+- **Derived ceiling: ~80 eligible agents** before the batch itself risks a platform timeout (300s / 3.692s ≈ 81.3, rounded down for margin).
+- **Warning trigger — 40 eligible agents (50% of ceiling, ~148s / 49% of budget):** no action required yet; note it in the next HANDOFF entry that touches this area, so it's on record that the margin is closing, not a silent crossing.
+- **Action-required trigger — 55 eligible agents (~69% of ceiling, ~203s / 68% of budget):** must act BEFORE eligible count grows past this, in order of cheapest-first:
+  1. **Raise `THINKER_CONCURRENCY`** (`cron.server.ts`) — safe past Finnhub's 6-concurrent cap, because `RateLimiter.acquire()` queues/waits rather than rejecting when the cap is hit (confirmed by reading `ratelimit.server.ts`), so a higher bound just adds wait time on the rare per-agent fallback-fetch path, never a hard failure. Free, no deploy-plan change, re-measure after raising it.
+  2. **Vercel Pro's 800s ceiling** (already planned for PLAN.md's commercial-use requirement, not being bought FOR this) — 2.67x more budget than Hobby's 300s at the SAME concurrency, buys roughly 2.67x more agents (~213) without any code change once live.
+  3. **Split the batch** (e.g., two GitHub-Actions-triggered shards on a stable partition of user_id, each within its own 300s budget) — most invasive, held in reserve for whenever growth outpaces what raising concurrency + Pro can cover.
+
+**daily-brief (currently ZERO concurrency — a plain sequential loop, never touched by this incident's concurrency fix since it was extracted to run standalone, not parallelized):**
+- Measured: 15 throwaway users (2 real watchlist symbols each) → 185.5s wall-clock, 61.8% of the 300s budget. 12.37s/user average.
+- **Derived ceiling: ~24 eligible users** (300s / 12.37s ≈ 24.25) — this is a REAL measured point close to the ceiling (15 users already at 62% of budget), not a distant extrapolation, so this number carries more confidence than the thinker's.
+- Real current scale, checked live: **5 real users** have a holdings or watchlist row (broader eligibility than "funded agent" — any user who's ever added a symbol qualifies), so today's real usage is ~20.6% of budget.
+- **This is the TIGHTER ceiling of the two, in absolute headcount, and the eligibility bar is lower (add one watchlist symbol vs. fund an agent) — worth more attention as signups grow, even though today's real number (5) is nowhere close.**
+- **Warning trigger — 8 eligible users (~33% of ceiling, ~99s / 33% of budget):** note it, no action yet.
+- **Action-required trigger — 15 eligible users (measured directly above: 62% of budget):** must act before eligible count grows past this. Cheapest-first:
+  1. **Apply the SAME shuffle + bounded-concurrency treatment already built and tested this incident** (`batchUtils.ts`'s `shuffle`/`mapWithConcurrency`, zero new code needed, just wiring `runDailyBriefs`'s loop through them the way `runThinkerForAllAgents` already is) — the obvious first lever precisely because it's already proven, not theoretical. Not applied pre-emptively in this round because it wasn't asked for, but it's the cheapest possible response once the trigger fires.
+  2. Vercel Pro's 800s ceiling — same 2.67x multiplier as above, ~64 users at the SAME sequential loop.
+  3. Split the batch, same reservation as above.
+
 ## 6b. PRE-LAUNCH CHECKLIST — deferred to the very end (Venky's call, 2026-08-10)
 
 These two are **not code** and are deliberately parked until the build is essentially complete. Venky will have the email set up by then. **Neither may be skipped before opening public signup / charging money.**
