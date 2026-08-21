@@ -31,6 +31,7 @@ A paper-trading platform: users trade real tickers at live prices with virtual m
 - Prefer small, verifiable changes. After meaningful changes, ensure the app builds and runs.
 - Keep secrets out of the repo (`.env` in `.gitignore`, use `.env.example`).
 - Write TypeScript types for all data shapes; no untyped market data flowing through the app.
+- Before introducing a new tolerance, threshold, or cross-cutting pattern (rate limits, retries, concurrency bounds, magic numbers), grep sibling files in the same domain for an existing one first. This project has repeatedly built a correct pattern once and failed to find/reuse it elsewhere (the sector helper never wired into Markets, the thinker's concurrency fix not applied to the brief, `closeToLive` sitting unused one file over from a hand-rolled tolerance) — the fix is searching before writing, not a growing list of conventions to remember.
 
 ## Current phase
 See the top of `ROADMAP.md`. As of now: Phase 1 (frontend design in Lovable) → heading into Phase 2 (GitHub) and Phase 3 (auth).

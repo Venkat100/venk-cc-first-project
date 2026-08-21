@@ -51,6 +51,20 @@ export type MarginState = {
   interestRate: number;
   maintenancePct: number;
   warningBufferPct: number;
+  /** When `marginStatus` was last (re-)evaluated — 2026-08-21, the "label
+   *  it if you don't recompute it live" half of the stale-computed-state
+   *  rule (HANDOFF.md — same incident class as the underfunded banner).
+   *  `marginStatus` itself is a STORED column, written only by
+   *  runMarginMonitor() (the daily snapshot cron + the watchdog every 30
+   *  min during market hours) — unlike equity/buyingPower/
+   *  maintenanceRequirement above, which ARE recomputed live on every call.
+   *  Rather than a new column (a real fix would need one to be precise
+   *  per-user), this reuses the ALREADY-tracked cron_heartbeats rows for
+   *  the two jobs that run the monitor: whichever ran more recently is
+   *  genuinely the last time this user's status was (re-)confirmed, since
+   *  the monitor evaluates every margin-enabled user on every invocation.
+   *  `null` only if neither job has ever recorded a heartbeat. */
+  marginStatusCheckedAt: string | null;
 };
 
 export type MarginStateResponse = { ok: true; state: MarginState } | { ok: false; error: string };
@@ -79,6 +93,19 @@ export const getMarginStateFn = createServerFn({ method: "POST" })
       const buyingPower = enabled ? round2(Math.max(0, MARGIN_MAX_LEVERAGE * equity - positionsValue)) : cash;
       const maintenanceRequirement = round2(positionsValue * MARGIN_MAINTENANCE_PCT);
 
+      // Non-fatal: a heartbeat-read failure must never break margin state
+      // display, so this degrades to `null` (UI omits the "as of" label)
+      // rather than erroring the whole page.
+      let marginStatusCheckedAt: string | null = null;
+      try {
+        const { data: heartbeats } = await admin.from("cron_heartbeats").select("job_name, last_run_at").in("job_name", ["snapshot", "agent-watchdog"]);
+        for (const h of heartbeats ?? []) {
+          if (!marginStatusCheckedAt || h.last_run_at > marginStatusCheckedAt) marginStatusCheckedAt = h.last_run_at;
+        }
+      } catch {
+        /* leave null */
+      }
+
       return {
         ok: true,
         state: {
@@ -93,6 +120,7 @@ export const getMarginStateFn = createServerFn({ method: "POST" })
           interestRate: MARGIN_INTEREST_RATE,
           maintenancePct: MARGIN_MAINTENANCE_PCT,
           warningBufferPct: MARGIN_WARNING_BUFFER_PCT,
+          marginStatusCheckedAt,
         },
       };
     } catch (e) {

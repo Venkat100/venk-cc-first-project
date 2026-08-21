@@ -120,7 +120,7 @@ function MarginPage() {
       </div>
 
       <UnlockGate feature="margin">
-      <StatusBanner status={s.marginStatus} enabled={s.marginEnabled} maintenancePct={s.maintenancePct} warningBufferPct={s.warningBufferPct} />
+      <StatusBanner status={s.marginStatus} enabled={s.marginEnabled} maintenancePct={s.maintenancePct} warningBufferPct={s.warningBufferPct} checkedAt={s.marginStatusCheckedAt} />
 
       <MarginDisclaimer />
 
@@ -285,8 +285,22 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-function StatusBanner({ status, enabled, maintenancePct, warningBufferPct }: { status: "ok" | "warning" | "call"; enabled: boolean; maintenancePct: number; warningBufferPct: number }) {
+// 2026-08-21: `status` is a STORED verdict (profiles.margin_status),
+// written only when runMarginMonitor() runs (daily snapshot cron + the
+// watchdog every 30 min during market hours) — unlike the equity/
+// maintenance numbers shown elsewhere on this page, which recompute live
+// on every load. Same rule this session applied to the underfunded
+// banner: something derived from a periodic run must either be
+// recomputed live or labelled with when it was computed — never
+// presented bare as current. A full live recomputation was deliberately
+// NOT done here (see HANDOFF.md/PLAN.md's backlog entry: the real
+// enforcement action, forced liquidation, is inherently periodic, so a
+// client-computed "live" label could diverge from what actually happens
+// and mislead in the OTHER direction). This is the cheap half of the
+// rule: show when the stored verdict was last (re-)confirmed.
+function StatusBanner({ status, enabled, maintenancePct, warningBufferPct, checkedAt }: { status: "ok" | "warning" | "call"; enabled: boolean; maintenancePct: number; warningBufferPct: number; checkedAt: string | null }) {
   if (!enabled) return null; // the "margin is off" card right below covers this case
+  const asOf = checkedAt ? <span className="mt-1 block text-xs text-muted-foreground">As of {formatInstant(checkedAt)}</span> : null;
   if (status === "call") {
     return (
       <div className="flex items-start gap-3 rounded-lg border border-[color:var(--color-loss)]/50 bg-[color:var(--color-loss)]/10 px-4 py-3.5">
@@ -294,6 +308,7 @@ function StatusBanner({ status, enabled, maintenancePct, warningBufferPct }: { s
         <div>
           <p className="text-sm font-semibold text-[color:var(--color-loss)]">Margin call</p>
           <p className="mt-0.5 text-sm text-foreground">Your equity is below the maintenance requirement. Positions may be sold automatically to restore it. Repay some of your loan or add cash to avoid further sales.</p>
+          {asOf}
         </div>
       </div>
     );
@@ -305,6 +320,7 @@ function StatusBanner({ status, enabled, maintenancePct, warningBufferPct }: { s
         <div>
           <p className="text-sm font-semibold text-[color:var(--color-warning,#d97706)]">Approaching a margin call</p>
           <p className="mt-0.5 text-sm text-foreground">Your equity is within {(warningBufferPct * 100).toFixed(0)}% of the {maintenancePct * 100}% maintenance requirement. If it drops further, positions may be sold automatically. Consider repaying some of your loan or adding cash now.</p>
+          {asOf}
         </div>
       </div>
     );
@@ -312,7 +328,10 @@ function StatusBanner({ status, enabled, maintenancePct, warningBufferPct }: { s
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-3">
       <ShieldCheck className="h-5 w-5 shrink-0 text-[color:var(--color-gain)]" />
-      <p className="text-sm text-foreground">Your margin account is in good standing — equity is comfortably above the maintenance requirement.</p>
+      <div>
+        <p className="text-sm text-foreground">Your margin account is in good standing — equity is comfortably above the maintenance requirement.</p>
+        {asOf}
+      </div>
     </div>
   );
 }

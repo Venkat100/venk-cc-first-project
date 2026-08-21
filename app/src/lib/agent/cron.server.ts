@@ -102,21 +102,28 @@ export type ThinkerBatchSummary = {
 };
 
 // Bounded concurrency for the per-agent thinker loop (2026-08-19 incident —
-// see this file's header). Justified against all three real ceilings that
-// apply, not assumed:
+// see this file's header; raised 5→8 on 2026-08-21 after a real measured
+// comparison — see PLAN.md §6g). Justified against all three real ceilings
+// that apply, not assumed:
 //   - Claude: even the lowest published tier (platform.claude.com/docs/en/
 //     api/rate-limits, checked 2026-08-19) is 1,000 requests/minute for the
-//     Sonnet family. 5 concurrent agent calls is <0.5% of that floor —
+//     Sonnet family. 8 concurrent agent calls is <1% of that floor —
 //     effectively unconstrained at this scale.
 //   - Finnhub, via our OWN global limiter (lib/marketData/ratelimit.server.ts
 //     -- new RateLimiter(50, 6) in finnhub.server.ts): 50 starts/60s window,
 //     6 concurrent in flight, process-wide. The universe scan is ONE shared
 //     prefetch, not per-agent, so concurrency here only affects the rare
 //     per-agent "held symbol missing from the scan" fallback fetch. Worst
-//     case — every one of 5 concurrent agents needing that fallback at once
-//     — is 5 concurrent Finnhub requests, still under the limiter's own
-//     6-concurrent cap, leaving 1 slot of headroom for whatever else in the
-//     process (watchdog, insights) might be running at the same moment.
+//     case — every one of 8 concurrent agents needing that fallback at once
+//     — is 8 concurrent Finnhub requests, which now EXCEEDS the limiter's
+//     6-concurrent cap by 2 (at concurrency=5 this stayed under the cap
+//     with headroom to spare — stated explicitly since it's the one real
+//     difference from 5, not glossed over). Not a failure mode:
+//     RateLimiter.acquire() queues past its cap rather than ever rejecting
+//     (confirmed by reading its implementation), so the worst case is 2 of
+//     8 fallback fetches waiting briefly for a slot, never an error — and
+//     this worst case itself is rare, since most held symbols ARE covered
+//     by the shared prefetch already.
 //   - Our own per-user abuse guard (lib/rateLimit/check.server.ts's
 //     RATE_LIMITS.agentRun, 3/5min, 20/day): does NOT apply here at all —
 //     it's called only from the manual "Run agent now" button
@@ -124,12 +131,13 @@ export type ThinkerBatchSummary = {
 //     cron path, by design (the system's own scheduled action isn't a
 //     per-user abuse case). Not a constraint, but worth stating precisely
 //     rather than leaving which limiter applies ambiguous.
-// 5 is therefore chosen for real, measured wall-clock benefit (roughly a
-// 5x reduction versus fully sequential, see HANDOFF.md's before/after
-// timing) while sitting comfortably under the one ceiling that's actually
-// close enough to matter (Finnhub's concurrency cap), not for headroom
-// that was never at risk (Claude).
-const THINKER_CONCURRENCY = 5;
+// 8 is chosen for real, measured wall-clock benefit — 1.85x faster than 5
+// with ZERO errors in a real run (thinker-concurrency-timing.ts, PLAN.md
+// §6g) — raised now, deliberately, rather than left in reserve until a
+// capacity trigger fires and it has to be done under pressure. Cost is
+// identical to concurrency=5 (same total Claude calls either way, just
+// parallelized differently) — this is a free improvement, not a tradeoff.
+const THINKER_CONCURRENCY = 8;
 
 // `onlyUserId` scopes the batch to one agent (on-demand / verification); omitted
 // in production so the cron runs every eligible agent (BOTH modes — the thinker
