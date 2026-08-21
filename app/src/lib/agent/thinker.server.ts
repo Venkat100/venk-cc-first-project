@@ -15,6 +15,7 @@ import { scoreCandidates, type Candidate, type UniverseData } from "./quant.serv
 import { claudeReason, agentModel, type ClaudeReasoning } from "./anthropic.server";
 import { planRebalance, DRIFT_BAND, COOLDOWN_DAYS, MIN_HOLDING_DAYS, MIN_TRADE_DOLLARS, type PlanTarget, type PlanHolding } from "./rebalance";
 import { GUARDRAILS, round2, executePlan, type Guardrails, type ThinkerExecution } from "./execute.server";
+import { suggestedMinFunding } from "./guardrails";
 import { writeProposal } from "./proposals.server";
 import type { AgentMode, AgentProposalTarget, AgentProposalTrade, RiskLevel } from "@/lib/supabase/types";
 
@@ -297,9 +298,9 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
   // level's own cash buffer) to give each of its minHoldings positions at
   // least one real (non-dust) MIN_TRADE_DOLLARS-sized slice, rounded up to a
   // clean $5 for presentation.
-  const suggestedMinFunding = plan.underfunded ? Math.ceil((MIN_TRADE_DOLLARS * g.minHoldings) / (1 - g.cashBuffer) / 5) * 5 : undefined;
+  const suggestedMinFundingAmt = plan.underfunded ? suggestedMinFunding(risk) : undefined;
   const summary = plan.underfunded
-    ? `Cannot construct a ${risk} portfolio at this funding level — every target position would be smaller than the $${MIN_TRADE_DOLLARS} minimum trade size. Consider funding at least $${suggestedMinFunding} for this risk level.`
+    ? `Cannot construct a ${risk} portfolio at this funding level — every target position would be smaller than the $${MIN_TRADE_DOLLARS} minimum trade size. Consider funding at least $${suggestedMinFundingAmt} for this risk level.`
     : executed.length === 0
       ? `Portfolio within drift bands — no trades needed.${cooldownSkipped.length ? ` (${cooldownSkipped.length} name(s) on re-entry cooldown.)` : ""}${plan.heldByMinPeriod.length ? ` (${plan.heldByMinPeriod.length} name(s) protected by the minimum holding period.)` : ""}`
       : `${reasoning.commentary} — Adjusted ${executed.length} position(s); held ${plan.held.length} within the ±${(DRIFT_BAND * 100).toFixed(0)}pp drift band.`;
@@ -318,7 +319,7 @@ export async function runThinker(userId: string, opts: { disableAi?: boolean; pr
       cooldown_skipped: cooldownSkipped,
       held_by_min_period: plan.heldByMinPeriod,
       underfunded: plan.underfunded,
-      suggested_min_funding: suggestedMinFunding ?? null,
+      suggested_min_funding: suggestedMinFundingAmt ?? null,
       agent_cash_before: round2(agentCashBefore),
       agent_cash_after: round2(agentCashAfter),
     },

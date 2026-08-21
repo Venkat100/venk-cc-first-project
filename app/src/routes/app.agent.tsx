@@ -13,6 +13,8 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { getAgentConfig, updateAgentConfig, fundAgent, runAgentThinker, runAgentWatchdog, approveAgentProposal, rejectAgentProposal } from "@/lib/agent/api";
 import { getAgentHoldings, getAgentDecisions, getAgentSnapshots, getPendingProposal } from "@/lib/agent/queries";
 import { AgentActivityStatusLine } from "@/components/agent/AgentActivityStatusLine";
+import { AgentUnderfundedBanner } from "@/components/agent/AgentUnderfundedBanner";
+import { suggestedMinFunding } from "@/lib/agent/guardrails";
 import { useQuotes, quoteOf } from "@/lib/marketData/useQuotes";
 import { getCandles } from "@/lib/marketData";
 import { useAuth } from "@/lib/auth/auth-context";
@@ -20,7 +22,7 @@ import { fmtUSD, fmtPct, fmtQty } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 import type { RiskLevel, AgentMode, AgentDecision } from "@/lib/supabase/types";
 import { toast } from "sonner";
-import { Bot, ShieldAlert, AlertTriangle, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye, Scissors, PauseCircle, ClipboardCheck, Check, X } from "lucide-react";
+import { Bot, ShieldAlert, Wallet, LineChart, ListTree, ArrowDownToLine, ArrowUpFromLine, ShieldCheck, ShoppingCart, RefreshCw, Eye, Scissors, PauseCircle, ClipboardCheck, Check, X } from "lucide-react";
 
 export const Route = createFileRoute("/app/agent")({
   head: () => ({ meta: [{ title: "AI Agent · My PaperTrader" }] }),
@@ -77,15 +79,24 @@ function Agent() {
   const retAbs = totalValue - allocated;
   const retPct = allocated > 0 ? (retAbs / allocated) * 100 : 0;
 
-  // Underfunded signal (issue #38b) — the most recent 'rebalance' decision is
-  // always the last thing a thinker run logs (see thinker.server.ts), so it's
-  // the freshest read on whether the agent could construct a portfolio at its
-  // current funding level. A banner here, not just a decision-log line, is
-  // the point: the whole bug this closes was that "can't afford anything" and
-  // "healthy and at target" looked identical unless a user went digging.
-  const latestRebalance = (decisionsQ.data ?? []).find((d) => d.action === "rebalance");
-  const underfundedSignals = latestRebalance?.signals as { underfunded?: boolean; suggested_min_funding?: number } | null | undefined;
-  const isUnderfunded = underfundedSignals?.underfunded === true;
+  // Underfunded signal (issue #38b, FIXED 2026-08-21 — see HANDOFF.md's
+  // incident writeup). This used to read `underfunded` off the most recent
+  // 'rebalance' DECISION LOG entry — a snapshot of what the thinker found on
+  // its LAST run, not the account's current state. A user who funded their
+  // agent after that run saw the stale "too small to invest" banner for up
+  // to 24h, until the next scheduled run overwrote it — exactly the same
+  // stale-computed-state-shown-as-live shape as the brief's "Today's" bug.
+  // Fixed at the source: `suggestedMinFunding` is a PURE function of risk
+  // level only (no live market data needed — see guardrails.ts's header),
+  // so it's recomputed live on every render against `totalValue` (already
+  // computed above from CURRENT agent_cash + live holdings prices), instead
+  // of trusting anything the last thinker run happened to log. Gated on
+  // `allocated > 0` (same "has this agent ever been engaged with" signal
+  // already used for the activity-status section below) so a brand-new,
+  // never-funded agent doesn't show an alarming banner before the user has
+  // done anything at all.
+  const suggestedMin = config ? suggestedMinFunding(config.risk_level) : 0;
+  const isUnderfunded = allocated > 0 && totalValue < suggestedMin;
 
   const updateMut = useMutation({
     mutationFn: updateAgentConfig,
@@ -180,8 +191,17 @@ function Agent() {
     onSuccess: async (r, amt) => {
       await Promise.all([refreshProfile(), qc.invalidateQueries({ queryKey: ["agentConfig"] })]);
       setFundAction(null);
+      // Nudge toward the existing "Run agent now" button — NOT an automatic
+      // run — specifically when THIS action just crossed the underfunded
+      // threshold (was too small, now isn't). A user who just fixed
+      // "too small to invest" reasonably expects to be told what to do
+      // next, not left to notice the button on their own; but funding a
+      // top-up that was already well-funded doesn't need this every time.
+      const justBecameFunded = amt > 0 && isUnderfunded && r.agentCash + holdingsValue >= suggestedMin;
       toast.success(amt >= 0 ? `Funded ${fmtUSD(amt)} to the agent` : `Withdrew ${fmtUSD(-amt)} to your main account`, {
-        description: `Agent cash now ${fmtUSD(r.agentCash)} · Main cash ${fmtUSD(r.cashBalance)}`,
+        description: justBecameFunded
+          ? `Agent cash now ${fmtUSD(r.agentCash)} — enough to invest. Click "Run agent now" below, or it'll run on its next scheduled cycle.`
+          : `Agent cash now ${fmtUSD(r.agentCash)} · Main cash ${fmtUSD(r.cashBalance)}`,
       });
     },
     onError: (e: Error) => {
@@ -224,16 +244,10 @@ function Agent() {
 
       {/* Underfunded — a distinct, more visible signal than the decision log
          alone, since "can't afford anything" and "healthy and at target"
-         used to render identically. */}
-      {isUnderfunded && (
-        <div className="flex items-start gap-3 rounded-lg border border-[color:var(--color-warning,#b45309)]/40 bg-[color:var(--color-warning,#b45309)]/10 px-4 py-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--color-warning,#d97706)]" />
-          <p className="text-sm text-foreground">
-            <span className="font-semibold">This account is too small to invest.</span> Every target position would fall below the minimum trade size for a {config?.risk_level ?? ""} portfolio.
-            {underfundedSignals?.suggested_min_funding ? ` Consider funding at least ${fmtUSD(underfundedSignals.suggested_min_funding)}.` : ""}
-          </p>
-        </div>
-      )}
+         used to render identically. Extracted into AgentUnderfundedBanner
+         so the copy/rendering is unit-testable without mounting this whole
+         route — see that component's header. */}
+      <AgentUnderfundedBanner isUnderfunded={isUnderfunded} riskLevel={config.risk_level} suggestedMin={suggestedMin} />
 
       {/* Agent activity status (AGENT-AUDIT.md Part 8) — always visible once
          the agent has ever been funded, so absence of activity is never

@@ -134,7 +134,11 @@ const THINKER_CONCURRENCY = 5;
 // `onlyUserId` scopes the batch to one agent (on-demand / verification); omitted
 // in production so the cron runs every eligible agent (BOTH modes — the thinker
 // auto-trades autonomous agents and proposes for approve-mode agents).
-export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUserIds?: string[]; prefetch?: UniverseData } = {}): Promise<ThinkerBatchSummary> {
+// `concurrency` overrides THINKER_CONCURRENCY — test-support only (real
+// production calls never pass it), so thinker-concurrency-timing.ts can
+// measure multiple bounds against the SAME real agents without needing a
+// second code path.
+export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUserIds?: string[]; prefetch?: UniverseData; concurrency?: number } = {}): Promise<ThinkerBatchSummary> {
   const admin = getServiceClient();
   let q = admin.from("agent_config").select("user_id").eq("enabled", true).gt("agent_cash", 0);
   if (opts.onlyUserId) q = q.eq("user_id", opts.onlyUserId);
@@ -153,7 +157,7 @@ export async function runThinkerForAllAgents(opts: { onlyUserId?: string; onlyUs
   // set of users each time, not systematically on the same two people.
   const order = shuffle(cfgs ?? []);
 
-  const results = await mapWithConcurrency(order, THINKER_CONCURRENCY, async (c): Promise<ThinkerBatchSummary["results"][number]> => {
+  const results = await mapWithConcurrency(order, opts.concurrency ?? THINKER_CONCURRENCY, async (c): Promise<ThinkerBatchSummary["results"][number]> => {
     try {
       const r = await runThinker(c.user_id, { prefetch });
       // issue #40: this was the ONLY gap — the manual "Run agent now" button

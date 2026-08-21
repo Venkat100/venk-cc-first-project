@@ -12,13 +12,12 @@ import type { RiskLevel } from "@/lib/supabase/types";
 
 type Admin = ReturnType<typeof getServiceClient>;
 
-export type Guardrails = { cashBuffer: number; maxPosition: number; minHoldings: number; maxHoldings: number; shortlist: number };
-
-export const GUARDRAILS: Record<RiskLevel, Guardrails> = {
-  conservative: { cashBuffer: 0.25, maxPosition: 0.25, minHoldings: 5, maxHoldings: 7, shortlist: 8 },
-  balanced: { cashBuffer: 0.15, maxPosition: 0.3, minHoldings: 4, maxHoldings: 6, shortlist: 8 },
-  aggressive: { cashBuffer: 0.08, maxPosition: 0.35, minHoldings: 3, maxHoldings: 5, shortlist: 7 },
-};
+// GUARDRAILS moved to guardrails.ts (2026-08-21) — it's now bundle-safe and
+// shared with client code (app.agent.tsx), which needed the SAME numbers to
+// compute a live underfunded verdict instead of reading a stale decision-log
+// flag. Re-exported here so every existing import of GUARDRAILS from THIS
+// file (thinker.server.ts) keeps working unchanged.
+export { GUARDRAILS, type Guardrails } from "./guardrails";
 
 export const round2 = (n: number) => Math.round(n * 100) / 100;
 
