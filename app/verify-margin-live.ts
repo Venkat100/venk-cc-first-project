@@ -59,6 +59,21 @@ function round2(n: number) {
 function closeTo(a: number, b: number, eps = 0.01) {
   return Math.abs(a - b) <= eps;
 }
+// Same convention as verify-hardening-valuation.ts's closeToLive (2026-08-21
+// — found while sweeping for the same defect class as verify-options-trade-
+// live.ts's `filled > 1`): a flat dollar tolerance on a live-quote-derived
+// comparison encodes an assumed position SIZE, not a real correctness bound
+// — a real market symbol can tick between two independent quote fetches,
+// and that drift scales with the size of the price-sensitive quantity, not
+// a constant. 5bps of that quantity's own value (min 2¢) comfortably covers
+// realistic sub-second tick noise regardless of how large the position is.
+// Used inline below (not as a shared 2-arg helper like valuation.ts's,
+// since the tolerance here must scale with positionsValueAfter — the
+// price-sensitive quantity — while the comparison itself is against
+// p0.cash, which has no live-quote dependency at all).
+function liveTolerance(referenceValue: number) {
+  return Math.max(0.02, Math.abs(referenceValue) * 0.0005);
+}
 function buyingPowerJs(cash: number, loan: number, marginEnabled: boolean, positionsValue: number) {
   if (!marginEnabled) return cash;
   return Math.max(0, MARGIN_MAX_LEVERAGE * (cash + positionsValue - loan) - positionsValue);
@@ -281,7 +296,11 @@ async function main() {
       const positionsValueAfter = await step("getPositionsValue after buy", 20000, () => getPositionsValue(uid));
       const equityAfter = round2(after.cash + positionsValueAfter - after.marginLoan);
       console.log(`  positions_value≈${money(positionsValueAfter)}, equity = cash+positions_value−loan = ${money(after.cash)}+${money(positionsValueAfter)}−${money(after.marginLoan)} = ${money(equityAfter)} (should still ≈ starting equity ${money(p0.cash)} — leverage doesn't change equity)`);
-      assert(`equity unchanged by borrowing (within a few cents of starting equity ${money(p0.cash)} — small drift = real price ticks)`, Math.abs(equityAfter - p0.cash) < 200, `${equityAfter}`);
+      // Tolerance scaled by positionsValueAfter (the PRICE-SENSITIVE
+      // quantity — the position bought is ~1.5x p0.cash on margin), not by
+      // p0.cash itself (plain cash, no live-quote dependency at all).
+      const equityTolerance = liveTolerance(positionsValueAfter);
+      assert(`equity unchanged by borrowing (within live-quote drift of starting equity ${money(p0.cash)} — leverage doesn't change equity, only real price ticks between the buy and the follow-up quote can)`, closeTo(equityAfter, p0.cash, equityTolerance), `${equityAfter} vs ${p0.cash} (tolerance ${money(equityTolerance)})`);
       const borrowEvents = (await marginEvents(uid)).filter((e) => e.kind === "borrow");
       assert("'borrow' event logged with correct amount", borrowEvents.length === 1 && closeTo(Number(borrowEvents[0].amount), borrowed), JSON.stringify(borrowEvents));
     }

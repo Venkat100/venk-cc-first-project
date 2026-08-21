@@ -89,7 +89,11 @@ async function position(userId: string, contractId: string) {
 // ── The harness: reproduces executeOptionTradeFn's handler EXACTLY, calling
 // the same real functions in the same order, given an already-verified JWT. ──
 type TradeInput = { accessToken: string; contractId: string; side: "buy_to_open" | "sell_to_close"; contracts: number };
-type TradeOutcome = { ok: true; result: Record<string, unknown> } | { ok: false; error: string };
+// `expectedPremium`: the SAME independently-computed value passed to the RPC
+// as `p_premium` below — returned so callers can assert the fill actually
+// equals it, rather than a hardcoded dollar-amount floor (see the §5
+// tamper-proofing assertion this exists for).
+type TradeOutcome = { ok: true; result: Record<string, unknown>; expectedPremium: number } | { ok: false; error: string };
 
 async function runTrade(raw: TradeInput & Record<string, unknown>): Promise<TradeOutcome> {
   // Same Zod object the real server function uses — strips any extra field
@@ -120,7 +124,7 @@ async function runTrade(raw: TradeInput & Record<string, unknown>): Promise<Trad
     p_premium: priced.premium,
   });
   if (error) return { ok: false, error: error.message };
-  return { ok: true, result: rpc as Record<string, unknown> };
+  return { ok: true, result: rpc as Record<string, unknown>, expectedPremium: priced.premium };
 }
 
 // ── 1. Pick a real, near-ATM, non-expired NVDA call ─────────────────────────
@@ -231,8 +235,16 @@ console.log("\n████ 5. Client cannot set the premium ████");
   assert("tamper trade succeeded", tamperTrade.ok, tamperTrade.ok ? "" : tamperTrade.error);
   if (tamperTrade.ok) {
     const filled = Number(tamperTrade.result.premium);
-    assert("executed premium is NOT the doctored 0.01 — it's the real server-computed value", filled !== 0.01 && filled > 1, `filled=${filled}`);
-    console.log(`  doctored premium sent: $0.01 → actually filled at: ${money(filled)}`);
+    // What this is actually proving: the fill equals the INDEPENDENTLY-
+    // computed server-side premium (same `priceParsedContract` call that
+    // fed the RPC's own `p_premium`), not merely "not 0.01 and > $1" — a
+    // hardcoded dollar floor that has nothing to do with tamper-proofing
+    // and fails on a real contract that legitimately prices under $1 (as
+    // happened live: NVDA spot $217.56, premium $0.87). Equality to the
+    // known-correct value is both a stronger proof and immune to the real
+    // premium's actual level.
+    assert("executed premium equals the independently-computed server value, NOT the doctored 0.01", filled !== 0.01 && closeTo(filled, tamperTrade.expectedPremium, 1e-9), `filled=${filled} expected=${tamperTrade.expectedPremium}`);
+    console.log(`  doctored premium sent: $0.01 → actually filled at: ${money(filled)} (server-independently-computed: ${money(tamperTrade.expectedPremium)})`);
     // Clean up this extra position immediately (sell it back) so it doesn't interfere with later checks.
     await runTrade({ accessToken: tokenA, contractId: target.contractId, side: "sell_to_close", contracts: 1 });
   }
